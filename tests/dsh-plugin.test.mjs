@@ -194,7 +194,7 @@ let emptyDir;
 let plugin;
 
 before(async () => {
-  workDir = mkdtempSync(join(tmpdir(), 'dsh-super-bot-test-'));
+  workDir = mkdtempSync(join(tmpdir(), 'ds-superbot-test-'));
   emptyDir = join(workDir, 'no-routing');
   mkdirSync(emptyDir, { recursive: true });
   plugin = await import(PLUGIN.href);
@@ -663,7 +663,7 @@ test('registered command names never shadow a skill name (client-side token clai
 
 test('the shipped host half keeps its native-mechanism shape', () => {
   const source = readFileSync(PLUGIN, 'utf8');
-  for (const banned of ['agentPresets.register', 'superbot_config', 'webServer', '/api/dsh-super-bot']) {
+  for (const banned of ['agentPresets.register', 'superbot_config', 'webServer', '/api/ds-superbot']) {
     assert.ok(!source.includes(banned), `index.js must not reference ${banned}`);
   }
   for (const required of ['export const Config', 'settings.describe', 'agentTeams', 'superbot.config.json']) {
@@ -987,7 +987,7 @@ function sampleFacts(overrides) {
  */
 test('the client registers a right-sidebar board, its title, a header button and the settings section', async () => {
   const { id, factory } = await loadClientFactory();
-  assert.equal(id, 'dsh-super-bot');
+  assert.equal(id, 'ds-superbot');
 
   const harness = createRenderHarness();
   const instance = factory((name) => (name === 'react' ? harness.stub : {}));
@@ -1001,6 +1001,8 @@ test('the client registers a right-sidebar board, its title, a header button and
     'sidebar.right.pane.tab',
     'sidebar.right.pane.tab.title',
     'conversation.session.header.utilities',
+    'sidebar.right.pane.tab',
+    'sidebar.right.pane.tab.title',
   ]);
   assert.deepEqual(
     registered.filter((entry) => entry.options.name === 'main' || entry.options.name === 'sidebar.panellist'),
@@ -1009,17 +1011,24 @@ test('the client registers a right-sidebar board, its title, a header button and
   );
 
   assert.equal(registered[0].options.id, 'superbot', 'the settings section keeps its id');
-  assert.equal(registered[1].options.key, 'dsh-super-bot', 'the body is keyed by the tab type id');
-  assert.equal(registered[2].options.key, 'dsh-super-bot', 'the chip title uses the same key');
+  assert.equal(registered[1].options.key, 'ds-superbot', 'the body is keyed by the tab type id');
+  assert.equal(registered[2].options.key, 'ds-superbot', 'the chip title uses the same key');
   assert.equal(registered[3].options.id, 'superbot-board');
   assert.ok(registered[3].options.order < 0, 'the header button sits left of the overflow menu');
+  assert.equal(registered[4].options.key, 'dsh-steward', 'the pre-rename tab body still resolves saved layouts');
+  assert.equal(registered[5].options.key, 'dsh-steward', 'the pre-rename chip title uses the same key');
 
-  assert.equal(tabTypes.length, 1);
-  assert.equal(tabTypes[0].id, 'dsh-super-bot');
+  assert.equal(tabTypes.length, 2);
+  assert.equal(tabTypes[0].id, 'ds-superbot');
   assert.equal(tabTypes[0].kind, 'superbot', 'openTab() names the kind');
   assert.match(tabTypes[0].title('sidebar://superbot'), /团队/);
   assert.equal(tabTypes[0].guide.length, 1, 'the guide page offers a way in');
   assert.equal(tabTypes[0].guide[0].id, 'superbot-board');
+
+  assert.equal(tabTypes[1].id, 'dsh-steward', 'the pre-rename tab type keeps old layouts working');
+  assert.equal(tabTypes[1].kind, 'steward', 'the legacy kind is untouched');
+  assert.equal(tabTypes[1].guide, undefined, 'the legacy identity adds no second guide entry');
+  assert.ok(tabTypes[1].title('sidebar://steward').length > 0, 'the legacy chip title renders');
 
   // The empty panel explains itself instead of throwing.
   const renderEmpty = panelRender(registered, 'session-empty', {});
@@ -1543,7 +1552,7 @@ test('the graph remembers its filter across mounts', async () => {
       .find((node) => harness.textOf(node).indexOf('隐藏已完成') >= 0);
     hide.props.onClick();
     host = await harness.settle(panelRender(registered, 'session-prefs', props));
-    const stored = JSON.parse(store.get('dsh-super-bot.panel.filters'));
+    const stored = JSON.parse(store.get('ds-superbot.panel.filters'));
     assert.equal(stored.view, 'all', 'the all view is persisted');
     assert.equal(stored.hideDone, true, 'the hide-done toggle is persisted');
     assert.ok(harness.collect(host, harness.byClass('stwd-filter-on')).map(harness.textOf).includes('隐藏已完成'), 'the active toggle is marked');
@@ -1576,6 +1585,56 @@ test('the graph remembers its filter across mounts', async () => {
     assert.equal(topOf(restored), startTop + 32, 'the dragged y survives a remount');
   } finally {
     globalThis.window = previousWindow;
+  }
+});
+
+/**
+ * Preferences written by an earlier build of this panel (the pre-rename key
+ * names) still apply: the panel reads the old key, renders with it, and keeps a
+ * copy under its current key so following writes do not lose the choice.
+ */
+test('panel preferences written before the rename still apply and are promoted', async () => {
+  const { factory } = await loadClientFactory();
+  const harness = createRenderHarness();
+  const instance = factory((name) => (name === 'react' ? harness.stub : {}));
+  const { ctx, registered } = createClientContext();
+  instance.apply(ctx);
+
+  const store = new Map();
+  store.set('dsh-steward.panel.filters', JSON.stringify({ view: 'all', hideDone: true }));
+  const storage = {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => { store.set(key, String(value)); },
+    removeItem: (key) => { store.delete(key); },
+  };
+  const previousWindow = globalThis.window;
+  globalThis.window = { localStorage: storage };
+  try {
+    const props = {
+      now: () => 1700000000000,
+      loadRun: async () => ({ status: 'empty', dir: '', artifacts: [] }),
+      useProjection: (key) => (key === 'subagentCatalog' ? [
+        { id: 'child-done', mode: 'one-shot', label: 'reviewer · 终审', createdAt: 1 },
+        { id: 'child-run', mode: 'one-shot', label: 'pm · 写规格', createdAt: 2 },
+      ] : undefined),
+      useSessions: (selector) => selector({
+        byId: { 'child-done': { projectionValues: { subagentTiming: { settledMs: 90000, lastTurnCompleted: true } } } },
+        projectionsBySession: {},
+      }),
+      useSessionStatus: (selector) => selector(new Map([
+        ['child-done', { running: false }],
+        ['child-run', { running: true }],
+      ])),
+      openSession: () => {},
+      openFile: () => {},
+    };
+    const host = await harness.settle(panelRender(registered, 'session-legacy-key', props));
+    assert.equal(harness.collect(host, harness.byClass('stwd-gnode')).length, 1, 'the pre-rename hide-done choice applies');
+    assert.ok(store.has('ds-superbot.panel.filters'), 'the pre-rename value is promoted to the current key');
+    assert.equal(JSON.parse(store.get('ds-superbot.panel.filters')).hideDone, true, 'the promoted value keeps its content');
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
   }
 });
 
@@ -1643,7 +1702,7 @@ test('hide-pending hides pending cards without reflow and persists across remoun
     assert.equal(pxOf(cards[0], 'left'), keptLeft, 'hiding a pending card does not move the ones that remain');
     assert.equal(pxOf(cards[0], 'top'), keptTop);
     assert.ok(harness.collect(host, harness.byClass('stwd-leadnode')).length === 1, 'the Lead stays visible');
-    const stored = JSON.parse(store.get('dsh-super-bot.panel.filters'));
+    const stored = JSON.parse(store.get('ds-superbot.panel.filters'));
     assert.equal(stored.view, 'all', 'the all view is persisted');
     assert.equal(stored.hidePending, true, 'the hide-pending toggle is persisted');
     assert.ok(harness.collect(host, harness.byClass('stwd-filter-on')).map(harness.textOf).includes('隐藏待开始'), 'the active toggle is marked');
@@ -1800,7 +1859,7 @@ test('layout presets tidy the board and ⟲ restores the last chosen arrangement
     let cards = cardsOf(host).map(boxMetrics);
     assert.ok(cards.some((box) => box.top + box.height < lead.top + 1), 'fishbone places some cards above the Lead');
     assert.ok(cards.some((box) => box.top > lead.top + lead.height - 1), 'fishbone places some cards below the Lead');
-    const storedPrefs = JSON.parse(store.get('dsh-super-bot.panel.filters'));
+    const storedPrefs = JSON.parse(store.get('ds-superbot.panel.filters'));
     assert.equal(storedPrefs.layout, 'fishbone', 'the chosen preset is persisted');
 
     const fishboneCard = cardOf(host, '导出接口');
@@ -1904,7 +1963,7 @@ test('the canvas remembers its zoom across remounts for the same session', async
     assert.equal(harness.textOf(harness.collect(host, harness.byClass('stwd-graph-zoom'))[0]), '112%');
     assert.match(savedTransform, /scale\(1\.12\)/);
     assert.match(savedTransform, /translate\(/);
-    const stored = JSON.parse(store.get('dsh-super-bot.panel.camera'));
+    const stored = JSON.parse(store.get('ds-superbot.panel.camera'));
     assert.equal(stored['session-zoom-a'].zoom, 1.12, 'zoom is written per session');
 
     toolByLabel(harness, host, '鱼骨').props.onClick();
@@ -2157,7 +2216,7 @@ test('the graph viewport can be dragged taller without burying artifacts', async
     assert.ok(clamped <= 560, 'a very long drag still clamps to the hard cap');
     assert.ok(clamped >= startHeight + 80, 'the clamped height is at least as tall as the earlier drag');
     assert.equal(harness.collect(host, harness.byClass('stwd-artifacts')).length, 1, 'artifacts remain below a resized graph');
-    const stored = JSON.parse(store.get('dsh-super-bot.panel.filters'));
+    const stored = JSON.parse(store.get('ds-superbot.panel.filters'));
     assert.equal(stored.graphHeight, clamped, 'the preferred height is written to panel prefs');
 
     harness.reset();
@@ -2806,7 +2865,7 @@ test('a newly dispatched card appears near the dragged Lead on the canvas', asyn
   const previousWindow = globalThis.window;
   globalThis.window = { localStorage: storage };
   try {
-    storage.setItem('dsh-super-bot.panel.positions', JSON.stringify({
+    storage.setItem('ds-superbot.panel.positions', JSON.stringify({
       'session-spawn-near': {
         [t.LEAD_NODE_ID]: { x: 800, y: 600 },
         'child-old': { x: 800 + t.NODE_W + t.NODE_GAP_Y, y: 600 },

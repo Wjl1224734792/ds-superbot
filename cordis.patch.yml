@@ -23,4 +23,4 @@
 # first source of truth.
 - insert:
     - id: superbot
-      name: dsh-super-bot
+      name: ds-superbot

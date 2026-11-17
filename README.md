@@ -7,7 +7,7 @@ DS Super Bot 是给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-h
 | 项目 | 值 |
 |---|---|
 | 版本 | 0.1.0 |
-| 包名 | `dsh-super-bot` |
+| 项目 / 包名 | `ds-superbot` |
 | 许可 | MIT |
 | 运行时依赖 | 无（只用 Node 内置模块；`@deepseek-ai/schemastery` 是可选的 peer 依赖） |
 | DSH 版本 | `>=0.2.1-rc.2 <0.4.0-0` |
@@ -123,6 +123,8 @@ DSH 里 preset 就是**用户可选的会话模式**，没有「内部 preset」
 1. 会话标题栏的 **Super Bot 图标**（`conversation.session.header.utilities`）；
 2. **右侧栏引导页**（guide）里的「Super Bot 团队」入口；
 3. **自动打开**：该会话第一次出现 Super Bot 派发（label 形如 `backend-dev · T1 导出接口`）时自动打开一次；用户手动关掉后不再抢回。
+
+**升级兼容**：重命名前保存的右侧栏布局仍能打开面板（旧的标签页身份被注册为兼容别名）；旧的过滤 / 布局 / 缩放偏好也会在首次读取时迁移到新键，不丢现场。
 
 **面板只回答一件事：哪个智能体、用什么模型、在做什么、到哪了。** 自上而下三块：
 

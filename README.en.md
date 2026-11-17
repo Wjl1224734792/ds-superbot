@@ -7,7 +7,7 @@ The goal is not "write the code in one shot" but to keep the project **understan
 | Item | Value |
 |---|---|
 | Version | 0.1.0 |
-| Package | `dsh-super-bot` |
+| Project / package | `ds-superbot` |
 | License | MIT |
 | Runtime dependencies | none (Node built-ins only; `@deepseek-ai/schemastery` is an optional peer) |
 | DSH version | `>=0.2.1-rc.2 <0.4.0-0` |
@@ -123,6 +123,8 @@ The panel lives in the session's **right sidebar**. DSH stores the sidebar layou
 1. the **Super Bot icon** in the session header (`conversation.session.header.utilities`);
 2. the "Super Bot team" entry on the **right-sidebar guide** page;
 3. **automatically** on the session's first Super Bot dispatch (labels look like `backend-dev · T1 export endpoint`); once the user closes it, it does not come back.
+
+**Upgrade compatibility**: a right-sidebar layout saved before the rename still opens this panel (the old tab identity is registered as a compatibility alias), and filter / layout / zoom preferences stored under the old keys are migrated on first read.
 
 **The panel answers exactly one question: which agent, with which model, doing what, and how far along.** Top to bottom:
 

@@ -14,7 +14,7 @@ DS Super Bot 是一个**单包两半**的 DSH 插件：Host 半（`index.js`）�
 ```text
 package.json  ── dsh.bundle.patch ──▶ cordis.patch.yml ──▶ 一行 Host（id: superbot）
       │                                   │
-      │ dsh.client                        └─ name: dsh-super-bot → index.js
+      │ dsh.client                        └─ name: ds-superbot → index.js
       ▼
 client.js（Web 端模块，由 DSH 模块加载器加载）
 ```
@@ -22,7 +22,7 @@ client.js（Web 端模块，由 DSH 模块加载器加载）
 | 文件 | 角色 |
 |---|---|
 | `index.js` | 导出 `Config`、`inject`、`apply(ctx, config)`；注册工具、命令、技能 |
-| `client.js` | 通过 `window.__ModuleLoader__.load({ id: 'dsh-super-bot', factory })` 注册槽位 |
+| `client.js` | 通过 `window.__ModuleLoader__.load({ id: 'ds-superbot', factory })` 注册槽位 |
 | `cordis.patch.yml` | bundle 补丁，插入 Host 行；行 id 必须等于 `index.js` 的 `CONFIG_NS`（`superbot`） |
 | `package.json` | `dsh.bundle` / `dsh.client` / `exports` / `files`；`dsh.client.inject` 声明依赖的客户端设置包 |
 
@@ -49,7 +49,7 @@ client.js（Web 端模块，由 DSH 模块加载器加载）
 | 槽位 / 服务 | 用法 |
 |---|---|
 | `settings.section` | 「设置 → Super Bot」分区：逐角色模型与思考强度表格（`ctx.configForms.get('superbot')`） |
-| `sidebar.right.pane.tab` | 右侧栏面板主体（`id: dsh-super-bot`） |
+| `sidebar.right.pane.tab` | 右侧栏面板主体（`id: ds-superbot`；旧布局用的 `dsh-steward` 身份注册为兼容别名，同一个组件） |
 | `sidebar.right.pane.tab.title` | 面板标题栏 |
 | `conversation.session.header.utilities` | 会话标题栏的 Super Bot 图标（`right.openTab('superbot')`） |
 | `sidebar.right.pane.tab` 的 guide | 右侧栏引导页里的「Super Bot 团队」入口 |
@@ -142,7 +142,7 @@ DSH 会话 ── 原生投影 ──▶ client.js ──▶ 右侧栏面板
 | `<project>/superbot.config.json` | 人或 agent（版本化） | 项目级配置：`modelRouting`、`docTier`、`execution.mode` 等 |
 | `<project>/.superbot/docs-state.json` | `docs-ready.mjs` | 文档就绪收据（哈希 + 评审结论） |
 | `<project>/tmp/superbot/<run>/` | 子代理产出 | 运行产物：`run.json`、`03-plan.json`、报告与证据 |
-| 浏览器 localStorage | 面板自己 | `dsh-super-bot.panel.filters` / `.positions` / `.camera`（纯显示状态） |
+| 浏览器 localStorage | 面板自己 | `ds-superbot.panel.filters` / `.positions` / `.camera`（纯显示状态）；旧键 `dsh-steward.panel.*` 只读回填一次 |
 
 ## 10. 安全与边界
 

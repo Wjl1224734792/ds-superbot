@@ -1,5 +1,5 @@
 /**
- * dsh-super-bot — Host half, built on DSH-native extension points.
+ * ds-superbot — Host half, built on DSH-native extension points.
  *
  *  - Roles are **dispatch-time charters**, not Agent Presets. A registered
  *    preset is by definition a user-selectable session mode, and a specialist
@@ -118,7 +118,7 @@ function resolveSchemastery() {
     }
   }
   throw new Error(
-    '[dsh-super-bot] cannot resolve @deepseek-ai/schemastery. Install the plugin as a package (declared peer dependency) '
+    '[ds-superbot] cannot resolve @deepseek-ai/schemastery. Install the plugin as a package (declared peer dependency) '
     + 'or keep the linked checkout inside a dsh profile whose node_modules contains @deepseek-ai/schemastery.',
   );
 }
@@ -852,7 +852,7 @@ function registerSkills(ctx) {
 
 // --- Plugin ----------------------------------------------------------------------
 
-export const name = 'dsh-super-bot';
+export const name = 'ds-superbot';
 export const inject = ['tools'];
 
 export function apply(ctx, config) {

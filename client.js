@@ -1,5 +1,5 @@
 window.__ModuleLoader__.load({
-  id: 'dsh-super-bot',
+  id: 'ds-superbot',
   factory(require) {
     const React = require('react');
     const h = React.createElement;
@@ -8,8 +8,16 @@ window.__ModuleLoader__.load({
     /** Native DSH settings namespace owned by this plugin (the Loader row id). */
     const NS = 'superbot';
     /** Right-Sidebar tab type: `id` keys the body/title slots, `kind` is what openTab() names. */
-    const TAB_ID = 'dsh-super-bot';
+    const TAB_ID = 'ds-superbot';
     const TAB_KIND = 'superbot';
+    /**
+     * Tab identity this panel used before the standalone rename. A per-session
+     * right-Sidebar layout saved by an older build still names this kind, so the
+     * same body is registered under the old identity too: an existing panel stays
+     * visible instead of degrading to a tab with no type.
+     */
+    const LEGACY_TAB_ID = 'dsh-steward';
+    const LEGACY_TAB_KIND = 'steward';
     const FIELDS = ['provider', 'model', 'effort'];
     /** Workspace-relative roots a Super Bot run can live at (skill contract, in this order). */
     const RUN_ROOTS = ['tmp/superbot', '.superbot'];
@@ -731,9 +739,39 @@ window.__ModuleLoader__.load({
     // toggles in the all view. The choice survives a reload; older `filter: hide-done`
     // values migrate.
 
-    const FILTER_KEY = 'dsh-super-bot.panel.filters';
-    const POSITION_KEY = 'dsh-super-bot.panel.positions';
-    const CAMERA_KEY = 'dsh-super-bot.panel.camera';
+    const FILTER_KEY = 'ds-superbot.panel.filters';
+    const POSITION_KEY = 'ds-superbot.panel.positions';
+    const CAMERA_KEY = 'ds-superbot.panel.camera';
+    /** Keys an earlier build of this panel wrote, oldest first; read through on first use. */
+    const LEGACY_PANEL_KEYS = {
+      [FILTER_KEY]: ['dsh-steward.panel.filters', 'dsh-super-bot.panel.filters'],
+      [POSITION_KEY]: ['dsh-steward.panel.positions', 'dsh-super-bot.panel.positions'],
+      [CAMERA_KEY]: ['dsh-steward.panel.camera', 'dsh-super-bot.panel.camera'],
+    };
+
+    /**
+     * Read one stored panel preference, falling back to the keys an older build
+     * wrote and promoting the value to the current key.
+     * @param storage browser localStorage.
+     * @param key current preference key.
+     * @returns the raw JSON string, or null when nothing is stored.
+     */
+    function readStoredPref(storage, key) {
+      const raw = storage.getItem(key);
+      if (typeof raw === 'string' && raw !== '') return raw;
+      const legacyKeys = LEGACY_PANEL_KEYS[key] || [];
+      for (const legacy of legacyKeys) {
+        const found = storage.getItem(legacy);
+        if (typeof found !== 'string' || found === '') continue;
+        try {
+          storage.setItem(key, found);
+        } catch {
+          // read-through is enough when the write is refused
+        }
+        return found;
+      }
+      return null;
+    }
     const LAYOUT_MODES = ['map', 'fishbone', 'tree'];
     const LAYOUT_DEFAULT = 'map';
     const LAYOUT_PAD = 24;
@@ -815,7 +853,7 @@ window.__ModuleLoader__.load({
       try {
         const storage = typeof window !== 'undefined' && window && window.localStorage ? window.localStorage : null;
         if (!storage || typeof storage.getItem !== 'function') return fallback;
-        const raw = storage.getItem(FILTER_KEY);
+        const raw = readStoredPref(storage, FILTER_KEY);
         if (typeof raw !== 'string' || raw === '') return fallback;
         return normalizePanelPrefs(JSON.parse(raw));
       } catch {
@@ -865,7 +903,7 @@ window.__ModuleLoader__.load({
       try {
         const storage = storageOf();
         if (!storage || typeof storage.getItem !== 'function') return { all: {}, key, bag: {} };
-        const raw = storage.getItem(POSITION_KEY);
+        const raw = readStoredPref(storage, POSITION_KEY);
         if (typeof raw !== 'string' || raw === '') return { all: {}, key, bag: {} };
         const parsed = JSON.parse(raw);
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { all: {}, key, bag: {} };
@@ -912,7 +950,7 @@ window.__ModuleLoader__.load({
       try {
         const storage = storageOf();
         if (!storage || typeof storage.getItem !== 'function') return { all: {}, key, bag: cleanCamera(null) };
-        const raw = storage.getItem(CAMERA_KEY);
+        const raw = readStoredPref(storage, CAMERA_KEY);
         if (typeof raw !== 'string' || raw === '') return { all: {}, key, bag: cleanCamera(null) };
         const parsed = JSON.parse(raw);
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { all: {}, key, bag: cleanCamera(null) };
@@ -3592,6 +3630,28 @@ window.__ModuleLoader__.load({
             locale: NS,
             inject: () => ({ text: textOf(), openPanel: () => { openPanel(sctx); } }),
           }, HeaderButton)), 'superbot: header button');
+
+          // Compatibility with per-session sidebar layouts saved before the rename:
+          // those tabs name the old kind, so the same type, body and chip title are
+          // registered under the old identity as well. No guide entry is attached, so
+          // the add-tab page keeps offering exactly one Super Bot entry.
+          sctx.effect(() => sctx.sidebarRightTabs.register({
+            id: LEGACY_TAB_ID,
+            kind: LEGACY_TAB_KIND,
+            title: () => textOf().tabTitle,
+          }), 'superbot: legacy board tab type');
+
+          sctx.effect(() => sctx.slots.inject('sidebar.right.pane.tab', () => sctx.slots.register({
+            name: 'sidebar.right.pane.tab',
+            key: LEGACY_TAB_ID,
+            locale: NS,
+            inject: (sessionId) => makePanelFace(sctx, sessionId, textOf(), lang()),
+          }, SuperBotPanel)), 'superbot: legacy board body');
+
+          sctx.effect(() => sctx.slots.inject('sidebar.right.pane.tab.title', () => sctx.slots.register({
+            name: 'sidebar.right.pane.tab.title',
+            key: LEGACY_TAB_ID,
+          }, (props) => h(TabTitle, { text: textOf() }))), 'superbot: legacy board title');
 
           // Auto-open: the first Super Bot dispatch in a Session opens the board once,
           // so the user watches the run live without asking for it. Closing the tab

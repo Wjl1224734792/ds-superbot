@@ -63,7 +63,7 @@ npm test                    # 同上
 - 只用原生槽位：`settings.section`、`sidebar.right.pane.tab`、`sidebar.right.pane.tab.title`、`conversation.session.header.utilities`。
 - 样式必须作用域化（`.stwd-` 前缀）并只用宿主主题 token；测试会断言「不泄漏全局样式」。
 - 面板数据只能来自原生投影（`subagentCatalog` / `modelSelection` / `tokenUsage` / `subagentTiming` / `sessionStats` / `agentTeam` / `todos` / 会话 UI 状态），不要为了图省事去读 `03-plan.json`。
-- 显示状态（过滤、布局、缩放）持久化在 `localStorage` 的 `dsh-super-bot.panel.*` 键下，按会话区分。
+- 显示状态（过滤、布局、缩放）持久化在 `localStorage` 的 `ds-superbot.panel.*` 键下，按会话区分。
 
 ## 7. 脚本约定（`scripts/`）
 
