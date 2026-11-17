@@ -1,0 +1,19 @@
+# Node
+node_modules/
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# Super Bot / superbot 运行与收据目录（属于被治理的项目，不进本仓库）
+tmp/
+.superbot/
+
+# 编辑器与系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# 本地备份
+*.bak

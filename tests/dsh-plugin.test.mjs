@@ -1,0 +1,2850 @@
+/**
+ * DSH 侧 Super Bot 插件的宿主契约测试（直接导入包内 index.js / client.js）。
+ *
+ * 覆盖 DSH 原生机制：
+ *  - host-only：两个工具（`superbot_dispatch` / `superbot_board`）+ `/superbot-roster` 名册命令 + 13 个技能，没有 Config、没有浏览器半
+ *  - docTier=3 时 `superbot_dispatch` 校验文档收据（`.superbot/docs-state.json`），未过门禁拒绝派开发
+ *  - 角色是派单时注入的章程，**不注册 Agent Preset**（模式选择器必须保持干净）
+ *  - 模型路由只来自项目 `superbot.config.json` 的 `modelRouting.<role>`，缺失则继承主代理
+ *  - 子代理固定以内置 `standard` 组合启动；缺失/损坏时拒绝派发
+ *
+ * 不启动宿主：用假 ctx 驱动 apply()。
+ */
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { after, before, test } from 'node:test';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const PLUGIN = new URL('../index.js', import.meta.url);
+const ROLES = new URL('../roles/', import.meta.url);
+const ROLE_IDS = ['pm', 'architect', 'backend-dev', 'frontend-dev', 'qa-engineer', 'browser-tester', 'reviewer'];
+/** Child composition every dispatch pins; must match index.js CHILD_PRESET. */
+const CHILD_PRESET = 'standard';
+
+/**
+ * The role charter exactly as index.js builds it: frontmatter and the build
+ * banner stripped, trimmed.
+ * @param {string} roleId role id.
+ * @returns {string} charter text.
+ */
+function roleBody(roleId) {
+  const raw = readFileSync(new URL(`${roleId}.md`, ROLES), 'utf8').replace(/\r\n/g, '\n');
+  return raw.replace(/^---\n[\s\S]*?\n---\n?/, '').replace(/^\s*<!--[\s\S]*?-->\s*/, '').trim();
+}
+
+/** Fixture plan: two work items with a dependency, one acceptance criterion. */
+const PLAN = {
+  acceptanceCriteria: [{ id: 'AC1', text: '导出接口返回 200', coveredBy: ['T1'] }],
+  tasks: [
+    { id: 'T1', title: '实现导出接口', role: 'backend-dev', files: ['src/export.js'], newFiles: [], dependsOn: [], doneWhen: '导出接口返回 200 且单测全绿' },
+    { id: 'T2', title: '补导出单测', role: 'qa-engineer', files: ['test/export.test.js'], newFiles: [], dependsOn: ['T1'], doneWhen: '单测覆盖 AC1 且全绿' },
+  ],
+};
+
+/**
+ * Write a plan fixture into `<dir>/03-plan.json`.
+ * @param {string} dir run directory.
+ * @param {object} plan plan body.
+ * @returns {string} absolute plan path.
+ */
+function writePlan(dir, plan = PLAN) {
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, '03-plan.json');
+  writeFileSync(file, JSON.stringify(plan, null, 2));
+  return file;
+}
+
+const llm = {
+  resolveModelInfo: async (provider, model) => {
+    if (provider !== 'p1' || model !== 'm-high') throw new Error(`unknown model ${provider}/${model}`);
+    return { provider, id: model, name: model, reasoning: { efforts: [{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }], defaultEffort: 'low' } };
+  },
+};
+
+const logger = { info() {}, warn() {}, error() {} };
+
+/** Live config references backed by mutable state, like the real volatile fields. */
+function liveConfig(state) {
+  const route = (read) => ({
+    provider: { get: () => read().provider },
+    model: { get: () => read().model },
+    effort: { get: () => read().effort },
+  });
+  return {
+    defaults: route(() => state.config.defaults),
+    roles: Object.fromEntries(ROLE_IDS.map((id) => [id, route(() => state.config.roles[id])])),
+  };
+}
+
+function emptyConfig() {
+  return { defaults: { provider: '', model: '', effort: '' }, roles: Object.fromEntries(ROLE_IDS.map((id) => [id, { provider: '', model: '', effort: '' }])) };
+}
+
+function createBucket(overrides = {}) {
+  const state = { skills: [], tools: [], commands: [], activations: [], board: { tasks: [], seq: 1 }, config: emptyConfig() };
+  const services = {
+    skills: {
+      register(skill) { state.skills.push(skill); return () => {}; },
+    },
+    tools: {
+      register(definition) { state.tools.push(definition); return () => {}; },
+    },
+    llm,
+    settings: {
+      documentPath: join(tmpdir(), 'dsh-profile', 'cordis.patch.yml'),
+      describe() {
+        return [{ ns: 'superbot', revision: 1, writable: true, value: structuredClone(state.config) }];
+      },
+      async update(ns, patch) {
+        assert.equal(ns, 'superbot', 'writes must target the native superbot namespace');
+        for (const [roleId, selection] of Object.entries(patch.roles ?? {})) state.config.roles[roleId] = { ...selection };
+        if (patch.defaults !== undefined) state.config.defaults = { ...patch.defaults };
+      },
+    },
+    agentTeams: {
+      membership: (agent) => ({ role: 'lead', name: agent?.id ?? 'lead' }),
+      tryMembership: (agent) => ({ role: 'lead', name: agent?.id ?? 'lead' }),
+      listTasks: () => state.board.tasks
+        .filter((task) => task.status !== 'deleted')
+        .map((task) => ({
+          ...task,
+          blockedBy: [...task.blockedBy],
+          writeScopes: [...task.writeScopes],
+          ready: task.blockedBy.every((id) => state.board.tasks.find((entry) => entry.id === id)?.status === 'completed'),
+        })),
+      createTask: (agent, spec) => {
+        const task = {
+          id: `task-${state.board.seq++}`,
+          revision: 1,
+          subject: spec.subject,
+          description: spec.description,
+          status: 'pending',
+          blockedBy: [...(spec.blockedBy ?? [])],
+          writeScopes: [...(spec.writeScopes ?? [])],
+          writeScopeWarnings: [],
+        };
+        state.board.tasks.push(task);
+        return task;
+      },
+      updateTask: (agent, spec) => {
+        const task = state.board.tasks.find((entry) => entry.id === spec.taskId);
+        if (task === undefined) throw new Error(`no such task ${spec.taskId}`);
+        if (task.revision !== spec.expectedRevision) throw new Error(`stale revision for ${spec.taskId}`);
+        if (spec.action === 'edit') {
+          if (spec.subject !== undefined) task.subject = spec.subject;
+          if (spec.description !== undefined) task.description = spec.description;
+          if (spec.writeScopes !== undefined) task.writeScopes = [...spec.writeScopes];
+        } else if (spec.action === 'set_dependencies') {
+          task.blockedBy = [...(spec.blockedBy ?? [])];
+        }
+        task.revision += 1;
+        return task;
+      },
+    },
+    subagents: {
+      getProvider: (name) => (name === 'spawn'
+        ? { name, capabilities: { agentOptions: true, agentPreset: true }, inheritsParentContext: false, prepareContinuable() {} }
+        : undefined),
+      list: () => ['spawn'],
+      startActivation: async (spec) => {
+        state.activations.push(spec);
+        return { childId: 'child-1' };
+      },
+    },
+    // The plugin only resolves the shipped child composition; it registers none.
+    agentPresets: {
+      async register(definition) {
+        state.presets = [...(state.presets ?? []), definition];
+        return async () => {};
+      },
+      async resolve(id) {
+        return id === CHILD_PRESET ? { id } : null;
+      },
+    },
+    commands: {
+      register(definition) { state.commands.push(definition); return () => {}; },
+    },
+  };
+  for (const [name, value] of Object.entries(overrides.services ?? {})) services[name] = value;
+
+  const scoped = {
+    get: (name) => services[name],
+    ...services,
+    effect(callback) {
+      const disposer = callback();
+      return disposer ?? (() => {});
+    },
+    logger,
+  };
+  const ctx = {
+    ...scoped,
+    inject(names, callback) {
+      for (const name of names) assert.ok(services[name] !== undefined, `test fake is missing service ${name}`);
+      callback(scoped);
+    },
+  };
+  return { ctx, state, services, config: liveConfig(state) };
+}
+
+let workDir;
+let emptyDir;
+let plugin;
+
+before(async () => {
+  workDir = mkdtempSync(join(tmpdir(), 'dsh-super-bot-test-'));
+  emptyDir = join(workDir, 'no-routing');
+  mkdirSync(emptyDir, { recursive: true });
+  plugin = await import(PLUGIN.href);
+});
+
+after(() => {
+  rmSync(workDir, { recursive: true, force: true });
+});
+
+async function boot(overrides) {
+  const bucket = createBucket(overrides);
+  plugin.apply(bucket.ctx, bucket.config);
+  await new Promise((resolve) => setImmediate(resolve));
+  return bucket;
+}
+
+function execFor() {
+  return { agent: { id: 'session-parent' }, signal: new AbortController().signal };
+}
+
+test('apply registers the two tools, one command and the bundled skills — nothing else', async () => {
+  const bucket = await boot();
+  assert.deepEqual(bucket.state.tools.map((tool) => tool.name).sort(), ['superbot_board', 'superbot_dispatch']);
+  assert.deepEqual(bucket.state.commands.map((command) => command.name), ['superbot-roster']);
+  assert.deepEqual(bucket.state.skills.map((skill) => skill.name).sort(), [
+    'agent-settings',
+    'docs-feature',
+    'docs-governance',
+    'docs-new',
+    'docs-review',
+    'docs-rules',
+    'docs-takeover',
+    'inline',
+    'superbot',
+    'systematic-debugging',
+    'tdd',
+    'using-superbot',
+    'verification-before-completion',
+  ]);
+  for (const skill of bucket.state.skills) assert.ok(skill.content.length > 100, `${skill.name} should carry a body`);
+
+  // The native Config schema backs the Super Bot panel; the project file still wins at dispatch.
+  assert.equal(typeof plugin.Config, 'function');
+  const parsed = plugin.Config({});
+  assert.equal(typeof parsed.roles.reviewer.provider.get, 'function');
+  assert.equal(parsed.roles.reviewer.provider.get(), '');
+  assert.ok('pm' in parsed.roles);
+  assert.equal(bucket.state.presets?.length ?? 0, 0, 'the plugin must not register agent presets');
+});
+
+test('the main skill points at the split-out inline, docs-rules and the four documentation entries', async () => {
+  const bucket = await boot();
+  const main = bucket.state.skills.find((skill) => skill.name === 'superbot');
+  assert.match(main.content, /加载 `inline` 技能/);
+  assert.match(main.content, /`docs-new`/);
+  assert.match(main.content, /`docs-rules`/);
+  // The extracted sections moved out of the main body.
+  assert.doesNotMatch(main.content, /^## 执行模式（/m);
+  assert.doesNotMatch(main.content, /^## 文档流水线（/m);
+  const inline = bucket.state.skills.find((skill) => skill.name === 'inline');
+  assert.match(inline.content, /^## 执行模式（/m);
+  assert.match(inline.content, /inline 的硬动作|硬动作/);
+  // docs-rules is the rules library, not an entry: it keeps the pipeline sections
+  // and says so in its own body.
+  const rules = bucket.state.skills.find((skill) => skill.name === 'docs-rules');
+  assert.match(rules.content, /^## T3 文档按需升级（/m);
+  assert.match(rules.content, /^## 文档流水线（/m);
+  assert.match(rules.content, /不是入口/);
+  // The four entries point at the readiness gate instead of repeating the pipeline.
+  for (const [name, needle] of [
+    ['docs-new', /docs-ready\.mjs/],
+    ['docs-takeover', /docs-ready\.mjs/],
+    ['docs-feature', /docs-ready\.mjs/],
+    ['docs-review', /docs-ready\.mjs/],
+  ]) {
+    const skill = bucket.state.skills.find((entry) => entry.name === name);
+    assert.match(skill.content, needle, `${name} must route through the readiness gate`);
+  }
+});
+
+test('every role charter is a dispatch payload, not a mode', async () => {
+  for (const id of ROLE_IDS) {
+    const charter = roleBody(id);
+    assert.ok(charter.length > 500, `${id}: charter should carry the role body`);
+    assert.doesNotMatch(charter, /^---/, `${id}: frontmatter must be stripped from the charter`);
+    assert.doesNotMatch(charter, /由 host\/dsh\/build\.mjs/, `${id}: the build banner must be stripped from the charter`);
+    assert.doesNotMatch(charter, /context7|宿主 MCP/, `${id}: role charter must not carry another harness's MCP prose`);
+  }
+
+  const bucket = await boot();
+  const tool = bucket.state.tools.find((entry) => entry.name === 'superbot_dispatch');
+  for (const role of ROLE_IDS) {
+    const exec = execFor();
+    const value = await tool.execute({ role, description: `${role} task`, prompt: '只回复 OK' }, exec);
+    assert.equal(value.childPreset, CHILD_PRESET, `${role} must run the shipped composition`);
+    const spec = bucket.state.activations.at(-1);
+    // DSH >= 0.2.1-rc.2 removed the nested `request` object: the task fields
+    // are the activation spec itself and the backend dereferences spec.parent.
+    assert.equal(spec.request, undefined, `${role}: the activation spec must not nest a request object`);
+    assert.deepEqual(spec.parent, exec.agent, `${role}: the child must be owned by the calling agent`);
+    const text = spec.prompt[0].text;
+    assert.ok(text.startsWith(roleBody(role)), `${role}: the dispatch must inject that role's charter`);
+    assert.ok(text.endsWith('只回复 OK'), `${role}: the task must stay last`);
+    assert.equal(spec.agentPreset, CHILD_PRESET);
+  }
+});
+
+test('the runtime normalizes CRLF role charters (Windows checkout state)', async () => {
+  // A Windows checkout (`core.autocrlf=true`) rewrites the packaged role files
+  // to CRLF. The injected charter must not carry the \r, and must still match
+  // the LF baseline the host contract compares against.
+  const crlfPkg = join(workDir, 'crlf-pkg');
+  cpSync(fileURLToPath(new URL('../', import.meta.url)), crlfPkg, { recursive: true });
+  for (const id of ROLE_IDS) {
+    const file = join(crlfPkg, 'roles', `${id}.md`);
+    const lf = readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
+    writeFileSync(file, lf.replace(/\n/g, '\r\n'), 'utf8');
+  }
+
+  const crlfPlugin = await import(pathToFileURL(join(crlfPkg, 'index.js')).href);
+  const bucket = createBucket();
+  crlfPlugin.apply(bucket.ctx, bucket.config);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const tool = bucket.state.tools.find((entry) => entry.name === 'superbot_dispatch');
+  await tool.execute({ role: 'backend-dev', description: 'CRLF 检出态冒烟', prompt: '只回复 OK' }, execFor());
+  const text = bucket.state.activations.at(-1).prompt[0].text;
+  assert.ok(!text.includes('\r'), '注入的章程不得带入 CRLF 的 \\r');
+  assert.ok(text.startsWith(roleBody('backend-dev')), 'CRLF 检出态下的章程必须与 LF 基准一致');
+});
+
+test('dispatch inherits the parent route when the project configures none', async () => {
+  const bucket = await boot();
+  const tool = bucket.state.tools.find((entry) => entry.name === 'superbot_dispatch');
+  const value = await tool.execute({ role: 'reviewer', description: '冒烟', prompt: '只回复 OK', cwd: emptyDir }, execFor());
+  assert.equal(value.source, 'inherit');
+  assert.equal(value.provider, '');
+  assert.equal(bucket.state.activations.at(-1).agentOptions, undefined);
+});
+
+test('the panel route applies when the project has no entry, and the project still wins', async () => {
+  const bucket = await boot();
+  const tool = bucket.state.tools.find((entry) => entry.name === 'superbot_dispatch');
+
+  bucket.state.config.roles.reviewer = { provider: 'p1', model: 'm-high', effort: 'high' };
+  const viaRole = await tool.execute({ role: 'reviewer', description: '冒烟', prompt: '只回复 OK', cwd: emptyDir }, execFor());
+  assert.equal(viaRole.source, 'role');
+  assert.deepEqual(bucket.state.activations.at(-1).agentOptions, { provider: 'p1', model: 'm-high', reasoningEffort: 'high' });
+
+  bucket.state.config.roles.reviewer = { provider: '', model: '', effort: '' };
+  bucket.state.config.defaults = { provider: 'p1', model: 'm-high', effort: 'low' };
+  const viaDefaults = await tool.execute({ role: 'pm', description: '规格', prompt: '只回复 OK', cwd: emptyDir }, execFor());
+  assert.equal(viaDefaults.source, 'defaults');
+
+  const projectDir = join(workDir, 'panel-vs-project');
+  mkdirSync(projectDir, { recursive: true });
+  writeFileSync(join(projectDir, 'superbot.config.json'), JSON.stringify({ modelRouting: { 'qa-engineer': { model: 'p1/m-high', effort: 'high' } } }));
+  const viaProject = await tool.execute({ role: 'qa-engineer', description: 'QA', prompt: 'x', cwd: projectDir }, execFor());
+  assert.equal(viaProject.source, 'project');
+  assert.equal(viaProject.effort, 'high');
+});
+
+test('dispatch applies modelRouting from the project superbot.config.json', async () => {
+  const bucket = await boot();
+  const projectDir = join(workDir, 'demo-project');
+  mkdirSync(projectDir, { recursive: true });
+  writeFileSync(join(projectDir, 'superbot.config.json'), JSON.stringify({
+    docTier: 1,
+    modelRouting: { 'qa-engineer': { model: 'p1/m-high', effort: 'high' } },
+  }, null, 2));
+
+  const tool = bucket.state.tools.find((entry) => entry.name === 'superbot_dispatch');
+  const value = await tool.execute({ role: 'qa-engineer', description: 'QA', prompt: '跑门禁。', cwd: projectDir }, execFor());
+  assert.equal(value.source, 'project');
+  assert.equal(value.provider, 'p1');
+  assert.equal(value.model, 'm-high');
+  assert.equal(value.effort, 'high');
+  assert.deepEqual(bucket.state.activations.at(-1).agentOptions, { provider: 'p1', model: 'm-high', reasoningEffort: 'high' });
+
+  // A role without its own entry still inherits.
+  const inherited = await tool.execute({ role: 'pm', description: '规格', prompt: '只回复 OK', cwd: projectDir }, execFor());
+  assert.equal(inherited.source, 'inherit');
+
+  // An unsupported effort fails loudly instead of dispatching a bad route.
+  writeFileSync(join(projectDir, 'superbot.config.json'), JSON.stringify({
+    modelRouting: { 'qa-engineer': { model: 'p1/m-high', effort: 'turbo' } },
+  }));
+  await assert.rejects(
+    () => tool.execute({ role: 'qa-engineer', description: 'QA', prompt: 'x', cwd: projectDir }, execFor()),
+    /does not support reasoning effort/,
+  );
+});
+
+test('a malformed modelRouting entry degrades to inherit instead of half-applying', async () => {
+  const bucket = await boot();
+  const projectDir = join(workDir, 'bad-project');
+  mkdirSync(projectDir, { recursive: true });
+  writeFileSync(join(projectDir, 'superbot.config.json'), JSON.stringify({ modelRouting: { 'qa-engineer': { model: 'no-slash' } } }));
+
+  const tool = bucket.state.tools.find((entry) => entry.name === 'superbot_dispatch');
+  const value = await tool.execute({ role: 'qa-engineer', description: 'QA', prompt: '跑门禁。', cwd: projectDir }, execFor());
+  assert.equal(value.source, 'inherit');
+  assert.equal(bucket.state.activations.at(-1).agentOptions, undefined);
+});
+
+// --- documentation gate (docTier=3) ------------------------------------------------
+
+const DOCS_READY = new URL('../scripts/docs-ready.mjs', import.meta.url);
+const DOC_REVIEW_REL = 'docs/07-治理/评审记录/评审记录-20261116-契约.md';
+
+const DOC_API = `# API 接口契约
+
+## 基础约定
+
+- BaseURL：/api
+- 认证：Bearer token，权限主体一律从凭据解析，不信任请求体
+- 统一信封：{ code, data, message }
+- 分页：page / pageSize，默认 20，最大 200
+
+## 错误码号段
+
+| 号段 | 含义 |
+|---|---|
+| 4001 | 参数校验失败 |
+| 4002 | 权限不足 |
+| 4003 | 资源不存在 |
+
+## 端点清单
+
+| 方法 | 路径 | 入参 | 出参 | 错误码 | 权限 |
+|---|---|---|---|---|---|
+| GET | /api/items | q、page | list | 4001 | read |
+| POST | /api/items | body | item | 4001、4002 | write |
+| DELETE | /api/items/:id | id | null | 4003 | write |
+
+## 变更纪律
+
+改端点必须同批更新本文档与版本修订记录；错误码只增不删，废弃号段保留并标注。
+`;
+
+const DOC_MODEL = `# 数据模型
+
+## ER 总览
+
+- items：主表，含 tenant_id 行级隔离字段
+- item_logs：审计表，只追加
+
+## DDL
+
+| 表 | 字段 | 类型 | 约束 |
+|---|---|---|---|
+| items | id | uuid | pk |
+| items | tenant_id | uuid | 非空，行级隔离 |
+| items | code | varchar(64) | 非空 |
+| items | deleted_at | timestamptz | 软删，进唯一约束 |
+| item_logs | id | bigserial | pk |
+| item_logs | item_id | uuid | 逻辑关联，不建物理外键 |
+
+## 口径注释
+
+唯一约束含 deleted_at：unique (tenant_id, code, deleted_at)。
+审计表只追加不更新，PII 字段落库前脱敏，查询走索引并 EXPLAIN 验证。
+`;
+
+const DOC_REVIEW = `# 评审记录：契约冻结
+
+## 结论（先行）
+
+可进入开发。
+
+<!-- docs-review:begin -->
+{"status":"approved","blocking":0,"scope":"feature","reviewedAt":"2026-11-16T22:40:00+08:00"}
+<!-- docs-review:end -->
+`;
+
+function docsReady(...args) {
+  return spawnSync(process.execPath, [fileURLToPath(DOCS_READY), ...args], { encoding: 'utf8' });
+}
+
+function writeDoc(root, rel, text) {
+  const abs = join(root, rel);
+  mkdirSync(dirname(abs), { recursive: true });
+  writeFileSync(abs, text, 'utf8');
+}
+
+/**
+ * Build a docTier=3 project whose documentation receipt is green (or not).
+ * @param {string} name directory name under the test work dir.
+ * @param {{approve?: boolean}} [options] issue the receipt or leave it pending.
+ */
+function stageDocsProject(name, { approve = true } = {}) {
+  const root = join(workDir, name);
+  mkdirSync(root, { recursive: true });
+  writeFileSync(join(root, 'superbot.config.json'), JSON.stringify({ docTier: 3 }, null, 2));
+  const init = docsReady(root, 'init', '--scope', 'feature', '--require', '03-契约', '--write');
+  assert.equal(init.status, 0, init.stderr);
+  writeDoc(root, 'docs/03-契约/API接口.md', DOC_API);
+  writeDoc(root, 'docs/03-契约/数据模型.md', DOC_MODEL);
+  writeDoc(root, 'docs/07-治理/评审状态.md', '# 评审状态\n\n| 阶段 | 结论 | 日期 | 评审记录 |\n|---|---|---|---|\n| 契约 | 通过 | 2026-11-16 | 评审记录-20261116-契约.md |\n');
+  writeDoc(root, DOC_REVIEW_REL, DOC_REVIEW);
+  if (approve) {
+    const res = docsReady(root, 'approve', '--review', DOC_REVIEW_REL);
+    assert.equal(res.status, 0, `${res.stdout}${res.stderr}`);
+  }
+  return root;
+}
+
+test('docTier=3 blocks implementers until a documentation receipt exists', async () => {
+  const bucket = await boot();
+  const tool = bucket.state.tools.find((entry) => entry.name === 'superbot_dispatch');
+  const root = join(workDir, 'docs-gate-none');
+  mkdirSync(root, { recursive: true });
+  writeFileSync(join(root, 'superbot.config.json'), JSON.stringify({ docTier: 3 }));
+
+  await assert.rejects(
+    () => tool.execute({ role: 'backend-dev', description: '实施', prompt: '写代码', cwd: root }, execFor()),
+    /docs gate blocked/,
+  );
+  await assert.rejects(
+    () => tool.execute({ role: 'frontend-dev', description: '实施', prompt: '写代码', cwd: root }, execFor()),
+    /docs gate blocked/,
+  );
+  // Document authors and reviewers must stay dispatchable, otherwise nobody can
+  // ever satisfy the gate.
+  const architect = await tool.execute({ role: 'architect', description: '方案', prompt: '出方案', cwd: root }, execFor());
+  assert.equal(architect.role, 'architect');
+});
+
+test('docTier=3 lets implementers through once the receipt is green', async () => {
+  const bucket = await boot();
+  const tool = bucket.state.tools.find((entry) => entry.name === 'superbot_dispatch');
+  const root = stageDocsProject('docs-gate-green');
+
+  const value = await tool.execute({ role: 'backend-dev', description: '实施', prompt: '写代码', cwd: root }, execFor());
+  assert.equal(value.role, 'backend-dev');
+  assert.equal(bucket.state.activations.length, 1);
+});
+
+test('editing a rule-bearing document turns the receipt stale and blocks again', async () => {
+  const bucket = await boot();
+  const tool = bucket.state.tools.find((entry) => entry.name === 'superbot_dispatch');
+  const root = stageDocsProject('docs-gate-stale');
+  writeDoc(root, 'docs/03-契约/API接口.md', `${DOC_API}\n新增一条口径变更。\n`);
+
+  await assert.rejects(
+    () => tool.execute({ role: 'backend-dev', description: '实施', prompt: '写代码', cwd: root }, execFor()),
+    /E-STATE-STALE/,
+  );
+});
+
+test('bookkeeping-only edits keep the receipt valid for implementers', async () => {
+  const bucket = await boot();
+  const tool = bucket.state.tools.find((entry) => entry.name === 'superbot_dispatch');
+  const root = stageDocsProject('docs-gate-bookkeeping');
+  writeDoc(root, 'docs/07-治理/执行步骤.md', '# 执行步骤\n\n| 项 | 状态 |\n|---|---|\n| T1 契约 | 完成 |\n');
+
+  const value = await tool.execute({ role: 'backend-dev', description: '实施', prompt: '写代码', cwd: root }, execFor());
+  assert.equal(value.role, 'backend-dev');
+});
+
+test('a hand-edited receipt without an approved review stays blocked', async () => {
+  const bucket = await boot();
+  const tool = bucket.state.tools.find((entry) => entry.name === 'superbot_dispatch');
+  const root = stageDocsProject('docs-gate-forged', { approve: false });
+
+  // Forge the flags but not the hash: the gate compares the receipt with the tree.
+  const stateFile = join(root, '.superbot/docs-state.json');
+  const state = JSON.parse(readFileSync(stateFile, 'utf8'));
+  state.ok = true;
+  state.review = { status: 'approved', record: DOC_REVIEW_REL, at: '2026-11-16T00:00:00Z' };
+  writeFileSync(stateFile, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+
+  await assert.rejects(
+    () => tool.execute({ role: 'backend-dev', description: '实施', prompt: '写代码', cwd: root }, execFor()),
+    /docs gate blocked/,
+  );
+});
+
+test('docTier below 3 keeps the old dispatch behaviour', async () => {
+  const bucket = await boot();
+  const tool = bucket.state.tools.find((entry) => entry.name === 'superbot_dispatch');
+  const root = join(workDir, 'docs-gate-off');
+  mkdirSync(root, { recursive: true });
+  writeFileSync(join(root, 'superbot.config.json'), JSON.stringify({ docTier: 1 }));
+
+  const value = await tool.execute({ role: 'backend-dev', description: '实施', prompt: '写代码', cwd: root }, execFor());
+  assert.equal(value.role, 'backend-dev');
+});
+
+test('dispatch fails loudly when the child composition or preset support is missing', async () => {
+  const exec = execFor();
+
+  const broken = await boot({
+    services: {
+      agentPresets: {
+        async register() { return async () => {}; },
+        async resolve(id) { return { id, broken: 'persona failed' }; },
+      },
+    },
+  });
+  const brokenTool = broken.state.tools.find((entry) => entry.name === 'superbot_dispatch');
+  await assert.rejects(() => brokenTool.execute({ role: 'pm', description: 'x', prompt: 'y' }, exec), /failed to activate/);
+  assert.equal(broken.state.activations.length, 0, 'a broken composition must not start a child');
+
+  const missing = await boot({
+    services: {
+      agentPresets: {
+        async register() { return async () => {}; },
+        async resolve() { return null; },
+      },
+    },
+  });
+  const missingTool = missing.state.tools.find((entry) => entry.name === 'superbot_dispatch');
+  await assert.rejects(() => missingTool.execute({ role: 'pm', description: 'x', prompt: 'y' }, exec), /is not registered/);
+
+  const legacy = await boot({
+    services: {
+      subagents: {
+        getProvider: (name) => ({ name, capabilities: { agentOptions: true, agentPreset: false }, inheritsParentContext: false }),
+        list: () => ['spawn'],
+        startActivation: async () => ({ childId: 'child-legacy' }),
+      },
+    },
+  });
+  const legacyTool = legacy.state.tools.find((entry) => entry.name === 'superbot_dispatch');
+  await assert.rejects(
+    () => legacyTool.execute({ role: 'pm', description: 'x', prompt: 'y' }, exec),
+    /does not support independent agent preset selection/,
+  );
+  assert.equal(legacy.state.activations.length, 0);
+
+  const bucket = await boot();
+  const tool = bucket.state.tools.find((entry) => entry.name === 'superbot_dispatch');
+  await assert.rejects(() => tool.execute({ role: 'ghost', description: 'x', prompt: 'y' }, exec), /unknown superbot role/);
+});
+
+test('/superbot-roster reports the roster and the routing rule without publishing modes', async () => {
+  const bucket = await boot();
+  const command = bucket.state.commands.find((entry) => entry.name === 'superbot-roster');
+  const result = command.handler({ rawInput: 'roles' });
+  assert.equal(result.kind, 'success');
+  assert.match(result.text, /architect（架构师）/);
+  assert.match(result.text, /组合 `standard`/);
+  assert.match(result.text, /superbot\.config\.json/);
+  assert.match(result.text, /superbot_dispatch/);
+  assert.match(result.text, /不注册 Agent Preset/);
+  assert.doesNotMatch(result.text, /superbot-architect/);
+});
+
+test('registered command names never shadow a skill name (client-side token claim)', async () => {
+  const bucket = await boot();
+  // 数据源必须是包内真文件：命令名取自 index.js 的运行时注册，
+  // 技能名取自 skills/manifest.json —— 这样能同时防住「加了技能忘了登记」。
+  const commandNames = bucket.state.commands.map((command) => command.name);
+  const skillManifest = JSON.parse(readFileSync(new URL('../skills/manifest.json', import.meta.url), 'utf8'));
+  const skillNames = skillManifest.skills.map((skill) => skill.name);
+  const collision = commandNames.filter((name) => skillNames.includes(name));
+  assert.deepEqual(
+    collision,
+    [],
+    '命令名与技能名同名时，client 侧会把同名 token claim 给 command，该行永远不会变成 prompt，'
+    + `技能正文注入不了（遮蔽根因）。冲突命令名：[${collision.join(', ')}]；技能名集合：[${skillNames.join(', ')}]。`
+    + '修法是给命令改名（先例：/superbot → /superbot-roster），不要动技能名；改完重跑 node --test tests/。',
+  );
+});
+
+test('the shipped host half keeps its native-mechanism shape', () => {
+  const source = readFileSync(PLUGIN, 'utf8');
+  for (const banned of ['agentPresets.register', 'superbot_config', 'webServer', '/api/dsh-super-bot']) {
+    assert.ok(!source.includes(banned), `index.js must not reference ${banned}`);
+  }
+  for (const required of ['export const Config', 'settings.describe', 'agentTeams', 'superbot.config.json']) {
+    assert.ok(source.includes(required), `index.js must keep ${required}`);
+  }
+});
+
+test('superbot_board sync turns the plan into gates and work items', async () => {
+  const bucket = await boot();
+  const planPath = writePlan(join(workDir, 'run-m'));
+  const tool = bucket.state.tools.find((entry) => entry.name === 'superbot_board');
+  const result = await tool.execute({ action: 'sync', plan: planPath, level: 'M' }, execFor());
+  assert.equal(result.action, 'sync');
+
+  const tasks = bucket.state.board.tasks;
+  assert.equal(tasks.length, 5, 'G1 + two work items + G2 + G3');
+  const g1 = tasks.find((task) => task.subject.startsWith('G1'));
+  const g2 = tasks.find((task) => task.subject.startsWith('G2'));
+  const g3 = tasks.find((task) => task.subject.startsWith('G3'));
+  const t1 = tasks.find((task) => task.subject.startsWith('T1 · backend-dev'));
+  const t2 = tasks.find((task) => task.subject.startsWith('T2 · qa-engineer'));
+  for (const task of [g1, g2, g3, t1, t2]) assert.ok(task, 'every board task exists');
+
+  // Work items carry the plan brief, file scopes and the plan gate as a blocker.
+  assert.match(t1.subject, /实现导出接口/);
+  assert.deepEqual(t1.writeScopes, ['src/export.js']);
+  assert.deepEqual(t1.blockedBy, [g1.id]);
+  assert.match(t1.description, /superbot:plan=T1/);
+  assert.match(t1.description, /reports\/t1-backend-dev\.md/);
+  assert.match(t1.description, /AC1 导出接口返回 200/);
+
+  // Dependencies follow the plan DAG, then the gates close over every work item.
+  assert.deepEqual([...t2.blockedBy].sort(), [g1.id, t1.id].sort());
+  assert.deepEqual([...g2.blockedBy].sort(), [t1.id, t2.id].sort());
+  assert.deepEqual(g3.blockedBy, [g2.id]);
+
+  assert.match(result.text, /共享任务板/);
+  assert.match(result.text, /门禁：G1 ⏸ \/ G2 ⏸ \/ G3 ⏸/);
+  assert.match(result.text, /T2 · qa-engineer/);
+});
+
+test('superbot_board sync is idempotent and level S creates no gates', async () => {
+  const bucket = await boot();
+  const planPath = writePlan(join(workDir, 'run-idem'));
+  const tool = bucket.state.tools.find((entry) => entry.name === 'superbot_board');
+  await tool.execute({ action: 'sync', plan: planPath, level: 'S' }, execFor());
+  const afterFirst = bucket.state.board.tasks.length;
+  assert.equal(afterFirst, 2, 'level S boards only the work items');
+  assert.equal(bucket.state.board.tasks.some((task) => task.subject.startsWith('G')), false);
+
+  await tool.execute({ action: 'sync', plan: planPath, level: 'S' }, execFor());
+  assert.equal(bucket.state.board.tasks.length, afterFirst, 'a second sync must not duplicate tasks');
+
+  // Re-syncing at M adds the gates over the same work items.
+  await tool.execute({ action: 'sync', plan: planPath, level: 'M' }, execFor());
+  const subjects = bucket.state.board.tasks.map((task) => task.subject);
+  assert.equal(new Set(subjects).size, subjects.length, 'subjects stay unique across levels');
+  assert.equal(bucket.state.board.tasks.length, 5, 'two work items + G1..G3');
+
+  // A changed plan updates the existing work item instead of creating another.
+  const edited = structuredClone(PLAN);
+  edited.tasks[0].title = '实现导出接口（含 CSV）';
+  const editedPlan = writePlan(join(workDir, 'run-idem'), edited);
+  await tool.execute({ action: 'sync', plan: editedPlan, level: 'M' }, execFor());
+  const t1s = bucket.state.board.tasks.filter((task) => task.subject.startsWith('T1 ·'));
+  assert.equal(t1s.length, 1);
+  assert.match(t1s[0].subject, /含 CSV/);
+});
+
+test('superbot_board status mirrors the board and reports readiness', async () => {
+  const bucket = await boot();
+  const planPath = writePlan(join(workDir, 'run-status'));
+  const tool = bucket.state.tools.find((entry) => entry.name === 'superbot_board');
+  await tool.execute({ action: 'sync', plan: planPath, level: 'M' }, execFor());
+  const status = await tool.execute({ action: 'status', plan: planPath, level: 'M' }, execFor());
+  assert.match(status.text, /进度：0\/2 工作单完成/);
+  assert.match(status.text, /\| 任务 \| 状态 \| 负责人 \| 依赖 \|/);
+  assert.match(status.text, /⛔ 被阻塞/, 'work items are blocked by G1');
+  assert.match(status.text, /状态口径/);
+});
+
+test('superbot_board brief composes charter, plan task and board id', async () => {
+  const bucket = await boot();
+  const planPath = writePlan(join(workDir, 'run-brief'));
+  const tool = bucket.state.tools.find((entry) => entry.name === 'superbot_board');
+  await tool.execute({ action: 'sync', plan: planPath, level: 'M' }, execFor());
+  const brief = await tool.execute({ action: 'brief', plan: planPath, role: 'backend-dev', task: 'T1' }, execFor());
+  assert.ok(brief.text.startsWith(roleBody('backend-dev')), 'the brief opens with the role charter');
+  assert.match(brief.text, /任务板：task-\d+/);
+  assert.match(brief.text, /superbot:plan=T1/);
+  assert.match(brief.text, /完成协议/);
+
+  await assert.rejects(
+    () => tool.execute({ action: 'brief', plan: planPath, role: 'backend-dev', task: 'T9' }, execFor()),
+    /计划里没有任务/,
+  );
+});
+
+test('superbot_board fails loudly when the host has no Agent Teams', async () => {
+  const bucket = await boot({ services: { agentTeams: undefined } });
+  const planPath = writePlan(join(workDir, 'run-solo'));
+  const tool = bucket.state.tools.find((entry) => entry.name === 'superbot_board');
+  await assert.rejects(
+    () => tool.execute({ action: 'sync', plan: planPath, level: 'M' }, execFor()),
+    /Agent Teams 未启用/,
+  );
+  await assert.rejects(
+    () => tool.execute({ action: 'sync' }, execFor()),
+    /需要 plan 参数/,
+  );
+});
+
+/**
+ * Load the generated client bundle once. The bundle is an ES module, so a second
+ * dynamic import of the same URL would be answered from the module cache and its
+ * `__ModuleLoader__.load` call would never run again.
+ * @returns {Promise<{ id: string, factory: Function }>} loader id and factory.
+ */
+let clientBundle = null;
+async function loadClientFactory() {
+  if (clientBundle !== null) return clientBundle;
+  const source = readFileSync(new URL('../client.js', import.meta.url), 'utf8');
+  let loaded = null;
+  const previousWindow = globalThis.window;
+  globalThis.window = { __ModuleLoader__: { load: (definition) => { loaded = definition; } } };
+  try {
+    await import(`data:text/javascript,${encodeURIComponent(source)}`);
+  } finally {
+    globalThis.window = previousWindow;
+  }
+  assert.ok(loaded, 'the bundle must call window.__ModuleLoader__.load');
+  clientBundle = { id: loaded.id, factory: loaded.factory };
+  return clientBundle;
+}
+
+/**
+ * A stateful React stand-in for render tests: state cells survive passes, effects
+ * run inline, and every component is expanded down to host elements. Enough to
+ * drive a view switch through a real `onClick` prop and see the next render.
+ */
+function createRenderHarness(options) {
+  const stateless = Boolean(options && options.stateless);
+  // Hooks are keyed by component identity (name + occurrence in the pass), the way
+  // React keeps a hook list per component instance — a global counter would mix
+  // cells up as soon as a view switch changes the tree shape.
+  const cells = new Map();
+  const ownerStack = [];
+  let owners = new Map();
+  let hooks = new Map();
+  const enterOwner = (label) => {
+    const seen = owners.get(label) || 0;
+    owners.set(label, seen + 1);
+    return label + '#' + seen;
+  };
+  const stub = {
+    createElement: (type, props, ...children) => {
+      const merged = { ...(props || {}) };
+      if (children.length === 1) merged.children = children[0];
+      else if (children.length > 1) merged.children = children;
+      return { type, props: merged, children };
+    },
+    useState: (init) => {
+      const initial = typeof init === 'function' ? init() : init;
+      if (stateless) return [initial, () => {}];
+      const owner = ownerStack.length > 0 ? ownerStack[ownerStack.length - 1] : 'root';
+      const index = hooks.get(owner) || 0;
+      hooks.set(owner, index + 1);
+      const key = owner + '|' + index;
+      if (!cells.has(key)) cells.set(key, { value: initial });
+      const cell = cells.get(key);
+      return [cell.value, (next) => { cell.value = typeof next === 'function' ? next(cell.value) : next; }];
+    },
+    useEffect: (effect) => { effect(); },
+    useMemo: (factory) => factory(),
+    useRef: (init) => ({ current: init }),
+    useCallback: (fn) => fn,
+    Component: class {
+      constructor(props) { this.props = props; this.state = {}; }
+    },
+  };
+
+  const expandComponent = (label, render) => {
+    ownerStack.push(enterOwner(label));
+    try {
+      return render();
+    } finally {
+      ownerStack.pop();
+    }
+  };
+
+  const expand = (element, out = []) => {
+    if (element === null || element === undefined) return out;
+    if (typeof element !== 'object') return out;
+    if (Array.isArray(element)) {
+      for (const item of element) expand(item, out);
+      return out;
+    }
+    const type = element.type;
+    if (type === 'style') return out;
+    if (typeof type === 'function') {
+      const label = type.name || type.displayName || 'anonymous';
+      if (type.prototype instanceof stub.Component) {
+        return expandComponent(label, () => expand(new type(element.props).render(), out));
+      }
+      return expandComponent(label, () => expand(type(element.props), out));
+    }
+    const children = [];
+    for (const child of element.children || []) {
+      if (child === null || child === undefined) continue;
+      if (typeof child === 'object') {
+        for (const node of expand(child, [])) children.push(node);
+      } else {
+        children.push(child);
+      }
+    }
+    out.push({ type, props: element.props || {}, children });
+    return out;
+  };
+
+  const collect = (nodes, predicate, found = []) => {
+    for (const node of nodes) {
+      if (predicate(node)) found.push(node);
+      collect(node.children.filter((child) => typeof child === 'object'), predicate, found);
+    }
+    return found;
+  };
+  const labelOf = (node) => node.children.filter((child) => typeof child !== 'object').join('');
+  const textOf = (node) => node.children.map((child) => (typeof child === 'object' ? textOf(child) : String(child))).join('');
+  const byClass = (name) => (node) => typeof node.props.className === 'string' && node.props.className.split(/\s+/).indexOf(name) >= 0;
+  const reset = () => { cells.clear(); };
+
+  /** Render to host elements across passes so effect-driven state settles. */
+  const settle = async (make) => {
+    let host = [];
+    for (let pass = 0; pass < 4; pass += 1) {
+      owners = new Map();
+      hooks = new Map();
+      ownerStack.length = 0;
+      host = expand(make());
+      if (pass < 3) await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    return host;
+  };
+
+  return { stub, expand, collect, labelOf, textOf, byClass, reset, settle };
+}
+
+/**
+ * A client Context stand-in: captures slot registrations and right-Sidebar tab
+ * types, and answers the optional `ctx.inject([...], run)` the plugin uses so a
+ * profile without the right Sidebar still keeps the settings section.
+ * @param options - services to override.
+ * @returns the context plus what the plugin registered.
+ */
+function createClientContext(options) {
+  const settings = options && options.settings;
+  const registered = [];
+  const tabTypes = [];
+  const ctx = {
+    slots: {
+      inject: (name, callback) => callback(),
+      register: (definition, component) => {
+        registered.push({ options: definition, component });
+        return () => {};
+      },
+    },
+    locale: { getLocale: () => ({ id: (options && options.locale) || 'zh-CN' }) },
+    remote: (options && options.remote) || { session: { modelCatalog: async () => ({ ok: true, value: { groups: [] } }) } },
+    configForms: settings || { get: () => ({ getSnapshot: () => ({ status: 'loading' }), subscribe: () => () => {}, mutate: async () => true }) },
+    uiWorkspace: { openSession: () => {} },
+    sidebarRightTabs: {
+      register: (definition) => {
+        tabTypes.push(definition);
+        return () => {};
+      },
+    },
+    sidebarRight: (options && options.sidebarRight) || {
+      mounted: { getSnapshot: () => undefined, subscribe: () => () => {} },
+      openTab: () => {},
+      openResource: () => {},
+    },
+    sessions: (options && options.sessions) || {
+      list: { getSnapshot: () => ({ projectionsBySession: {} }), subscribe: () => () => {} },
+    },
+    effect: (callback) => { callback(); },
+  };
+  if (!options || options.useInject !== false) ctx.inject = (names, run) => run(ctx);
+  return { ctx, registered, tabTypes };
+}
+
+/** The registered board body plus the injected face for one Session. */
+function panelEntry(registered) {
+  const entry = registered.find((item) => item.options.name === 'sidebar.right.pane.tab');
+  assert.ok(entry, 'the board body must register into sidebar.right.pane.tab');
+  return entry;
+}
+
+/** Render the board for one Session with the given scope services. */
+function panelRender(registered, sessionId, props) {
+  const entry = panelEntry(registered);
+  const face = typeof entry.options.inject === 'function' ? entry.options.inject(sessionId) : {};
+  return () => entry.component({ ...face, sessionId, ...(props || {}) });
+}
+
+/** Job-shaped facts the board would read off disk. */
+function sampleFacts(overrides) {
+  return {
+    status: 'ready',
+    dir: 'tmp/superbot/1113-1518-demo',
+    run: { status: 'running', updatedAt: '2026-11-13T07:20:00.000Z' },
+    plan: null,
+    artifacts: [{ path: 'tmp/superbot/1113-1518-demo/final-report.md', name: 'final-report.md', size: 2048 }],
+    ...(overrides || {}),
+  };
+}
+
+/**
+ * The board is a per-Session right-Sidebar tab: the tab type, its body and chip
+ * title, a header button, and a settings section for models. The old full page and
+ * its left-nav entry must stay gone — the panel is opened per Session, not as a page.
+ */
+test('the client registers a right-sidebar board, its title, a header button and the settings section', async () => {
+  const { id, factory } = await loadClientFactory();
+  assert.equal(id, 'dsh-super-bot');
+
+  const harness = createRenderHarness();
+  const instance = factory((name) => (name === 'react' ? harness.stub : {}));
+  assert.deepEqual(instance.inject, ['slots', 'locale', 'remote', 'remote.session', 'configForms', 'uiWorkspace']);
+
+  const { ctx, registered, tabTypes } = createClientContext();
+  instance.apply(ctx);
+
+  assert.deepEqual(registered.map((entry) => entry.options.name), [
+    'settings.section',
+    'sidebar.right.pane.tab',
+    'sidebar.right.pane.tab.title',
+    'conversation.session.header.utilities',
+  ]);
+  assert.deepEqual(
+    registered.filter((entry) => entry.options.name === 'main' || entry.options.name === 'sidebar.panellist'),
+    [],
+    'there is no full page and no left-nav entry any more',
+  );
+
+  assert.equal(registered[0].options.id, 'superbot', 'the settings section keeps its id');
+  assert.equal(registered[1].options.key, 'dsh-super-bot', 'the body is keyed by the tab type id');
+  assert.equal(registered[2].options.key, 'dsh-super-bot', 'the chip title uses the same key');
+  assert.equal(registered[3].options.id, 'superbot-board');
+  assert.ok(registered[3].options.order < 0, 'the header button sits left of the overflow menu');
+
+  assert.equal(tabTypes.length, 1);
+  assert.equal(tabTypes[0].id, 'dsh-super-bot');
+  assert.equal(tabTypes[0].kind, 'superbot', 'openTab() names the kind');
+  assert.match(tabTypes[0].title('sidebar://superbot'), /团队/);
+  assert.equal(tabTypes[0].guide.length, 1, 'the guide page offers a way in');
+  assert.equal(tabTypes[0].guide[0].id, 'superbot-board');
+
+  // The empty panel explains itself instead of throwing.
+  const renderEmpty = panelRender(registered, 'session-empty', {});
+  const emptyHost = await harness.settle(renderEmpty);
+  const emptyText = emptyHost.map((node) => harness.textOf(node)).join('\n');
+  assert.match(emptyText, /Super Bot 团队/);
+  assert.match(emptyText, /还没有派发智能体/);
+  assert.match(emptyText, /原生任务列表为空/);
+  assert.match(emptyText, /产物/);
+
+  // The header button renders as a real control and calls the injected opener.
+  const buttonEntry = registered[3];
+  let opened = 0;
+  const buttonHost = harness.expand(buttonEntry.component({ text: { openPanel: '打开 Super Bot 团队面板' }, openPanel: () => { opened += 1; } }));
+  const buttons = harness.collect(buttonHost, harness.byClass('stwd-headbtn'));
+  assert.equal(buttons.length, 1);
+  assert.equal(buttons[0].props['aria-label'], '打开 Super Bot 团队面板');
+  buttons[0].props.onClick();
+  assert.equal(opened, 1);
+
+  // The English dictionary covers the same surfaces.
+  const enHarness = createRenderHarness();
+  const enInstance = factory((name) => (name === 'react' ? enHarness.stub : {}));
+  const en = createClientContext({ locale: 'en-US' });
+  enInstance.apply(en.ctx);
+  const enHost = await enHarness.settle(panelRender(en.registered, 'session-empty', {}));
+  const enText = enHost.map((node) => enHarness.textOf(node)).join('\n');
+  assert.match(enText, /Super Bot team/);
+  assert.match(enText, /No agent dispatched/);
+  assert.match(enText, /native task list is empty/);
+});
+
+/**
+ * The first Super Bot dispatch in a Session opens the board once and only once: a
+ * plain `subagent` call must not steal the panel, and closing it afterwards has to
+ * stick for that Session.
+ */
+test('the panel opens itself once when a Super Bot dispatch appears', async () => {
+  const { factory } = await loadClientFactory();
+  const harness = createRenderHarness();
+  const instance = factory((name) => (name === 'react' ? harness.stub : {}));
+
+  const opened = [];
+  const listeners = new Set();
+  let snapshot = {
+    projectionsBySession: {
+      'session-a': { values: { subagentCatalog: [{ id: 'child-1', mode: 'one-shot', label: '查一下文档' }] } },
+    },
+  };
+  const { ctx } = createClientContext({
+    sidebarRight: {
+      mounted: { getSnapshot: () => 'session-a', subscribe: () => () => {} },
+      openTab: (kind) => opened.push(kind),
+      openResource: () => {},
+    },
+    sessions: {
+      list: {
+        getSnapshot: () => snapshot,
+        subscribe: (listener) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+      },
+    },
+  });
+  instance.apply(ctx);
+  assert.deepEqual(opened, [], 'a plain subagent call never opens the board');
+
+  snapshot = {
+    projectionsBySession: {
+      'session-a': { values: { subagentCatalog: [{ id: 'child-2', mode: 'one-shot', label: 'backend-dev · T1 导出接口' }] } },
+    },
+  };
+  for (const listener of listeners) listener();
+  assert.deepEqual(opened, ['superbot'], 'a Super Bot dispatch opens the board');
+
+  for (const listener of listeners) listener();
+  assert.deepEqual(opened, ['superbot'], 'it does not fight the user for the panel afterwards');
+});
+
+/**
+ * A host half that predates the role-prefixed label, or a plain `subagent` call
+ * inside a Super Bot run, still opens the board: the run directory on disk is the
+ * evidence, probed once per Session.
+ */
+test('the panel also opens when a run directory exists but the dispatch label carries no role', async () => {
+  const { factory } = await loadClientFactory();
+  const harness = createRenderHarness();
+  const instance = factory((name) => (name === 'react' ? harness.stub : {}));
+
+  const opened = [];
+  const workspaceFiles = {
+    list: async (sessionId, path) => (path === 'tmp/superbot'
+      ? { ok: true, value: { path, entries: [{ name: '1113-1518-demo', type: 'directory' }], truncated: false } }
+      : { ok: false, error: { message: 'workspace-file/not-found', code: 'workspace-file/not-found' } }),
+    read: async () => ({ ok: false, error: { message: 'workspace-file/not-found', code: 'workspace-file/not-found' } }),
+  };
+  const snapshot = {
+    projectionsBySession: {
+      'session-probe': { values: { subagentCatalog: [{ id: 'child-1', mode: 'one-shot', label: '查一下文档' }] } },
+    },
+  };
+  const { ctx } = createClientContext({
+    remote: { session: { modelCatalog: async () => ({ ok: true, value: { groups: [] } }) }, workspaceFiles },
+    sidebarRight: {
+      mounted: { getSnapshot: () => 'session-probe', subscribe: () => () => {} },
+      openTab: (kind) => opened.push(kind),
+      openResource: () => {},
+    },
+    sessions: { list: { getSnapshot: () => snapshot, subscribe: () => () => {} } },
+  });
+  instance.apply(ctx);
+  assert.deepEqual(opened, [], 'the probe is asynchronous');
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.deepEqual(opened, ['superbot'], 'a run directory opens the board');
+});
+
+/**
+ * The graph is the point of the panel: one node per dispatched agent, connected to
+ * the Lead on a free-drag mind-map canvas, and clickable into the child session.
+ */
+test('the panel draws one agent card per dispatch on a DAG canvas', async () => {
+  const { factory } = await loadClientFactory();
+  const harness = createRenderHarness();
+  const instance = factory((name) => (name === 'react' ? harness.stub : {}));
+  const { ctx, registered } = createClientContext();
+  instance.apply(ctx);
+
+  const NOW = 1700000000000;
+  const values = {
+    subagentCatalog: [
+      { id: 'child-run', mode: 'one-shot', label: 'backend-dev · T1 导出接口', createdAt: 1000 },
+      { id: 'child-run2', mode: 'continuable', label: 'backend-dev · T2 导出按钮', createdAt: 1500 },
+      { id: 'child-wait', mode: 'continuable', label: 'qa-engineer · T4 复跑门禁', createdAt: 2000 },
+      { id: 'child-done', mode: 'one-shot', label: 'reviewer · T5 终审', createdAt: 3000 },
+    ],
+    agentTeam: {
+      enabled: true,
+      tasks: [
+        { id: 'b1', subject: 'T1 · 实现导出接口', status: 'completed' },
+        { id: 'b2', subject: 'T2 · 实现导出按钮', status: 'completed' },
+        { id: 'b3', subject: 'T3 · QA 门禁', status: 'in_progress' },
+        { id: 'b4', subject: 'T4 · 终审', status: 'pending', ready: false },
+      ],
+    },
+  };
+  const leadValues = {
+    modelSelection: { lastUsed: { provider: 'deepseek', model: 'deepseek-v4.1', reasoningEffort: 'high' }, next: null },
+    tokenUsage: { uncachedInputTokens: 1000, outputTokens: 300 },
+    sessionStats: { turns: 4, steps: 11 },
+  };
+  const summaries = {
+    'child-run': {
+      title: 'T1 导出接口',
+      projectionValues: {
+        subagentTiming: { settledMs: 60000, active: { since: NOW - 222000, through: NOW } },
+        tokenUsage: { uncachedInputTokens: 5000, outputTokens: 1400, cacheReadTokens: 2000, cacheWriteTokens: 0 },
+        modelSelection: { lastUsed: { provider: 'deepseek', model: 'deepseek-v4.1', reasoningEffort: 'high' }, next: null },
+      },
+    },
+    'child-run2': {
+      title: 'T2 导出按钮',
+      projectionValues: {
+        subagentTiming: { settledMs: 45000, active: { since: NOW - 45000, through: NOW } },
+        tokenUsage: { uncachedInputTokens: 2000, outputTokens: 600 },
+        modelSelection: { lastUsed: { provider: 'deepseek', model: 'deepseek-chat' }, next: null },
+      },
+    },
+    'child-wait': {
+      title: 'T4 复跑门禁',
+      projectionValues: {
+        subagentTiming: { settledMs: 30000 },
+        tokenUsage: { uncachedInputTokens: 1000, outputTokens: 200 },
+        modelSelection: { lastUsed: { provider: 'deepseek', model: 'deepseek-chat' }, next: null },
+      },
+    },
+    'child-done': {
+      title: 'T5 终审',
+      projectionValues: {
+        subagentTiming: { settledMs: 90000, lastTurnCompleted: true },
+        tokenUsage: { uncachedInputTokens: 3000, outputTokens: 700 },
+        modelSelection: { lastUsed: { provider: 'deepseek', model: 'deepseek-v4.1', reasoningEffort: 'high' }, next: null },
+      },
+    },
+  };
+  const status = new Map([
+    ['child-run', { running: true }],
+    ['child-run2', { running: true }],
+    ['child-wait', { running: true, pendingInteraction: { kind: 'question' } }],
+    ['child-done', { running: false }],
+  ]);
+  const opened = [];
+  const props = {
+    now: () => NOW,
+    loadRun: async () => ({ status: 'empty', dir: '', artifacts: [] }),
+    useProjection: (key) => (key === 'subagentCatalog' ? values.subagentCatalog
+      : key === 'agentTeam' ? values.agentTeam
+        : key === 'modelSelection' ? leadValues.modelSelection
+          : key === 'tokenUsage' ? leadValues.tokenUsage
+            : key === 'sessionStats' ? leadValues.sessionStats
+              : undefined),
+    useSessions: (selector) => selector({
+      byId: { ...summaries, 'session-graph': { displayTitle: '给导出模块补接口与测试' } },
+      projectionsBySession: {},
+    }),
+    useSessionStatus: (selector) => selector(status),
+    openSession: (id, mode) => opened.push([id, mode]),
+    openFile: () => {},
+  };
+  const render = panelRender(registered, 'session-graph', props);
+
+  // 1) The DAG canvas is the default view: Lead plus one card per agent, no stage hubs.
+  let host = await harness.settle(render);
+  assert.equal(harness.collect(host, harness.byClass('stwd-gnode')).length, 4, 'one node per dispatched agent');
+  assert.equal(harness.collect(host, harness.byClass('stwd-leadnode')).length, 1, 'the Lead sits on the same canvas');
+  assert.equal(harness.collect(host, harness.byClass('stwd-hub')).length, 0, 'stage hubs are not structural nodes');
+  const links = harness.collect(host, harness.byClass('stwd-link'));
+  assert.equal(links.length, 4, 'one line from the Lead to each dispatched agent');
+  assert.ok(links.every((node) => node.props['data-from'] === '__lead__'), 'every line starts at the Lead');
+  assert.ok(links.every((node) => node.props['marker-end'] == null), 'lines have no arrows');
+  assert.equal(harness.collect(host, (node) => node.type === 'marker').length, 0, 'the canvas has no arrow markers');
+  assert.equal(links.filter((node) => String(node.props.className).indexOf('stwd-link-wait') >= 0).length, 1, 'the waiting QA has one incoming line from the Lead');
+  assert.ok(links.some((node) => String(node.props.className).indexOf('stwd-link-running') >= 0), 'running agents get a solid live line');
+  assert.ok(links.some((node) => String(node.props.className).indexOf('stwd-link-done') >= 0), 'done agents get a settled line');
+  const isStraight = (node) => node && /\sL/.test(String(node.props.d)) && !/\sC/.test(String(node.props.d));
+  const isCurve = (node) => node && node.props['data-route'] === 'curve' && /\sC/.test(String(node.props.d)) && !/\sQ/.test(String(node.props.d));
+  const staysBetweenEnds = (node) => {
+    const nums = String(node.props.d).match(/-?\d+(?:\.\d+)?/g).map(Number);
+    const xs = nums.filter((_, i) => i % 2 === 0);
+    const ys = nums.filter((_, i) => i % 2 === 1);
+    const x0 = xs[0], x1 = xs[xs.length - 1], y0 = ys[0], y1 = ys[ys.length - 1];
+    const xLo = Math.min(x0, x1) - 1, xHi = Math.max(x0, x1) + 1;
+    const yLo = Math.min(y0, y1) - 1, yHi = Math.max(y0, y1) + 1;
+    return xs.every((x) => x >= xLo && x <= xHi) && ys.every((y) => y >= yLo && y <= yHi);
+  };
+  for (const node of links) {
+    const route = node.props['data-route'];
+    assert.ok(route === 'straight' || route === 'curve', 'every branch is a mind-map stem or curve');
+    if (route === 'straight') assert.ok(isStraight(node), 'an aligned card gets a straight stem');
+    if (route === 'curve') assert.ok(isCurve(node), 'an offset card gets a smooth cubic');
+    assert.ok(staysBetweenEnds(node), 'a mind-map curve stays between the Lead and the card');
+  }
+  assert.equal(harness.collect(host, harness.byClass('stwd-face')).length, 5, 'Lead and every specialist have a face');
+  const panelText = host.map((node) => harness.textOf(node)).join('\n');
+  assert.ok(panelText.indexOf('给导出模块补接口与测试') >= 0, 'the Lead shows its own task title');
+  assert.match(panelText, /总时长/, 'the toolbar shows the duration total');
+  assert.match(panelText, /总用量/, 'the toolbar shows the usage total');
+
+  // 2) A node names the role, the actual model, the task and the live numbers.
+  const mains = harness.collect(host, harness.byClass('stwd-gnode-main'));
+  const runMain = mains.find((node) => String(node.props['aria-label']).indexOf('backend-dev') >= 0);
+  assert.ok(runMain, 'the backend node is rendered');
+  assert.match(String(runMain.props['aria-label']), /后端工程师/);
+  assert.match(String(runMain.props['aria-label']), /deepseek-v4\.1 @ high/);
+  assert.match(String(runMain.props['aria-label']), /运行中/);
+  assert.match(String(runMain.props['aria-label']), /T1 导出接口/);
+  assert.match(harness.textOf(runMain), /T1 导出接口/);
+  assert.match(harness.textOf(runMain), /4m 42s/, 'the live elapsed time is rendered');
+  assert.match(harness.textOf(runMain), /8\.4k/, 'the summed tokens are rendered');
+  const waitMain = mains.find((node) => String(node.props['aria-label']).indexOf('qa-engineer') >= 0);
+  assert.match(String(waitMain.props['aria-label']), /等待输入/);
+
+  // Same-role siblings stay grouped; the default map puts children on more than one side of the Lead.
+  const boxOf = (needle) => harness.collect(host, harness.byClass('stwd-gnode'))
+    .find((node) => harness.textOf(node).indexOf(needle) >= 0);
+  const topOf = (node) => Number(String(node.props.style.top).replace('px', ''));
+  const leftOfNode = (node) => Number(String(node.props.style.left).replace('px', ''));
+  const metricsOf = (node) => {
+    const left = leftOfNode(node);
+    const top = topOf(node);
+    const width = Number(String(node.props.style.width).replace('px', ''));
+    const height = Number(String(node.props.style.height).replace('px', ''));
+    return { left, top, width, height, cx: left + width / 2, cy: top + height / 2 };
+  };
+  const t1 = metricsOf(boxOf('T1 导出接口'));
+  const t2 = metricsOf(boxOf('T2 导出按钮'));
+  const qa = metricsOf(boxOf('T4 复跑门禁'));
+  const review = metricsOf(boxOf('T5 终审'));
+  const lead = metricsOf(harness.collect(host, harness.byClass('stwd-leadnode'))[0]);
+  assert.ok((t1.cx - lead.cx) * (t2.cx - lead.cx) > 0, 'same-role siblings stay on the same side of the Lead');
+  const siblingDist = Math.hypot(t1.cx - t2.cx, t1.cy - t2.cy);
+  const t1ToQa = Math.hypot(t1.cx - qa.cx, t1.cy - qa.cy);
+  assert.ok(siblingDist < t1ToQa, 'same-role siblings sit closer to each other than to another role');
+  const sides = [t1, t2, qa, review].map((box) => (box.cx < lead.cx ? 'left' : 'right'));
+  assert.ok(sides.includes('left') && sides.includes('right'), 'the default map places children on more than one side of the Lead');
+
+  // 3) The native task list becomes one bar — counts only, never the tasks.
+  assert.match(panelText, /2\/4/, 'the bar counts the native tasks');
+  assert.match(panelText, /Agent Teams 任务板/, 'the source is named');
+  assert.equal(harness.collect(host, harness.byClass('stwd-tseg')).length, 4, 'one segment per native task');
+  for (const subject of ['T1 · 实现导出接口', 'T3 · QA 门禁']) {
+    assert.equal(panelText.indexOf(subject) < 0, true, `task text must not leak into the panel: ${subject}`);
+  }
+
+  // 4) Clicking a node opens its child session; the detail chip opens the facts on the card.
+  runMain.props.onClick();
+  assert.deepEqual(opened[0], ['child-run', 'one-shot'], 'a node opens its child session');
+  const runBox = boxOf('T1 导出接口');
+  const more = harness.collect([runBox], harness.byClass('stwd-gnode-more'))[0];
+  assert.ok(more, 'the card has a detail control');
+  assert.equal(harness.textOf(more), '详情', 'the detail control is a labeled button');
+  assert.equal(more.props['aria-expanded'], 'false');
+  more.props.onClick();
+  host = await harness.settle(render);
+  const openBox = boxOf('T1 导出接口');
+  const detail = harness.collect([openBox], harness.byClass('stwd-gdetail'))[0];
+  assert.ok(detail, 'the detail block appears on the card');
+  assert.equal(harness.collect(host, harness.byClass('stwd-gdetail')).length, 1, 'details are not duplicated below the graph');
+  const moreOn = harness.collect([openBox], harness.byClass('stwd-gnode-more'))[0];
+  assert.equal(moreOn.props['aria-expanded'], 'true', 'the open detail chip is marked expanded');
+  const detailText = harness.textOf(detail);
+  assert.match(detailText, /deepseek-v4\.1/, 'the detail names the model');
+  assert.match(detailText, /deepseek/, 'the detail names the provider');
+  assert.match(detailText, /high/, 'the detail names the reasoning effort');
+  assert.match(detailText, /一次性/, 'the detail names the child mode');
+  assert.match(detailText, /缓存读 2000/, 'the detail breaks the usage buckets down');
+  const detailButton = harness.collect([detail], (node) => node.type === 'button' && harness.textOf(node) === '打开会话')[0];
+  assert.ok(detailButton, 'the detail offers the open action');
+  const before = opened.length;
+  detailButton.props.onClick();
+  assert.equal(opened.length, before + 1);
+
+  // 5) Filters: hide the completed card, then keep only the active ones.
+  host = await harness.settle(render);
+  const filterOf = (needle) => harness.collect(host, harness.byClass('stwd-filter'))
+    .find((node) => harness.textOf(node).indexOf(needle) >= 0);
+  filterOf('隐藏已完成').props.onClick();
+  host = await harness.settle(render);
+  assert.equal(harness.collect(host, harness.byClass('stwd-gnode')).length, 3, 'the completed card is hidden');
+  assert.ok(harness.textOf(host[0]).indexOf('已隐藏 1 个') >= 0, 'the panel says how many are hidden');
+  filterOf('只看活跃').props.onClick();
+  host = await harness.settle(render);
+  const activeLabels = harness.collect(host, harness.byClass('stwd-gnode-main')).map((node) => String(node.props['aria-label']));
+  assert.equal(activeLabels.length, 3, 'only running and waiting cards survive the active filter');
+  assert.ok(activeLabels.every((label) => !/已完成/.test(label)), 'no completed card slips through');
+  filterOf('全部').props.onClick();
+  host = await harness.settle(render);
+  assert.equal(harness.collect(host, harness.byClass('stwd-gnode')).length, 4, 'the full roster comes back');
+
+  // 6) Hide-idle leaves this roster alone; hide-done does not reflow the rest.
+  const keptCard = boxOf('T1 导出接口');
+  const keptLeft = leftOfNode(keptCard);
+  const keptTop = topOf(keptCard);
+  filterOf('隐藏空闲').props.onClick();
+  host = await harness.settle(render);
+  assert.equal(harness.collect(host, harness.byClass('stwd-gnode')).length, 4, 'hide-idle does not hide running, waiting or done cards');
+  filterOf('隐藏空闲').props.onClick();
+  filterOf('隐藏已完成').props.onClick();
+  host = await harness.settle(render);
+  const still = harness.collect(host, harness.byClass('stwd-gnode'))
+    .find((node) => harness.textOf(node).indexOf('T1 导出接口') >= 0);
+  assert.equal(leftOfNode(still), keptLeft, 'hiding a card does not move the ones that remain');
+  assert.equal(topOf(still), keptTop);
+  const keptLinks = harness.collect(host, harness.byClass('stwd-link'));
+  assert.equal(keptLinks.length, 3, 'hiding a node keeps a line from the Lead to each remaining agent');
+  assert.ok(keptLinks.every((node) => node.props['data-from'] === '__lead__'), 'remaining lines still start at the Lead');
+  filterOf('隐藏已完成').props.onClick();
+  host = await harness.settle(render);
+  assert.equal(harness.collect(host, harness.byClass('stwd-gnode')).length, 4, 'turning the toggles off restores the roster');
+
+  // 7) Dragging a card moves it (and swallows the click); the relayout tool snaps back.
+  const view = harness.collect(host, harness.byClass('stwd-graph-view'))[0];
+  const card = harness.collect(host, harness.byClass('stwd-gnode'))
+    .find((node) => harness.textOf(node).indexOf('T1 导出接口') >= 0);
+  const leftOf = (node) => Number(String(node.props.style.left).replace('px', ''));
+  const topOfCard = (node) => Number(String(node.props.style.top).replace('px', ''));
+  const startLeft = leftOf(card);
+  const startTop = topOfCard(card);
+  const widthOfCard = Number(String(card.props.style.width).replace('px', ''));
+  const heightOfCard = Number(String(card.props.style.height).replace('px', ''));
+  const startX = startLeft + widthOfCard / 2;
+  const startY = startTop + heightOfCard / 2;
+  view.props.onPointerDown({ button: 0, clientX: startX, clientY: startY, pointerId: 1, target: null });
+  view.props.onPointerMove({ clientX: startX + 60, clientY: startY + 40, pointerId: 1, target: null });
+  const swallowed = { prevented: false, stopped: false };
+  view.props.onClickCapture({
+    preventDefault: () => { swallowed.prevented = true; },
+    stopPropagation: () => { swallowed.stopped = true; },
+  });
+  assert.ok(swallowed.prevented && swallowed.stopped, 'the click that follows a drag is swallowed');
+  view.props.onPointerUp({ pointerId: 1, target: null });
+  host = await harness.settle(render);
+  const moved = harness.collect(host, harness.byClass('stwd-gnode'))
+    .find((node) => harness.textOf(node).indexOf('T1 导出接口') >= 0);
+  assert.equal(leftOf(moved), startLeft + 60, 'the dragged card keeps its new x');
+  assert.equal(topOfCard(moved), startTop + 40, 'the dragged card keeps its new y');
+  assert.equal(opened.length, before + 1, 'a drag must not open the child session');
+  const relayoutTool = harness.collect(host, harness.byClass('stwd-graph-tool'))
+    .find((node) => String(node.props['aria-label']).indexOf('重新布局') >= 0);
+  relayoutTool.props.onClick();
+  host = await harness.settle(render);
+  const snapped = harness.collect(host, harness.byClass('stwd-gnode'))
+    .find((node) => harness.textOf(node).indexOf('T1 导出接口') >= 0);
+  assert.equal(leftOf(snapped), startLeft, 're-layout restores the computed position');
+  assert.equal(topOfCard(snapped), startTop);
+});
+
+test('offset cards get a smooth mind-map curve that stays between the two ends', async () => {
+  const { factory } = await loadClientFactory();
+  const harness = createRenderHarness();
+  const instance = factory((name) => (name === 'react' ? harness.stub : {}));
+  const { ctx, registered } = createClientContext();
+  instance.apply(ctx);
+
+  const store = new Map();
+  const storage = {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => { store.set(key, String(value)); },
+    removeItem: (key) => { store.delete(key); },
+  };
+  const previousWindow = globalThis.window;
+  globalThis.window = { localStorage: storage };
+  try {
+  const NOW = 1700000000000;
+  const props = {
+    now: () => NOW,
+    loadRun: async () => ({ status: 'empty', dir: '', artifacts: [] }),
+    useProjection: (key) => (key === 'subagentCatalog' ? [
+      { id: 'child-run', mode: 'one-shot', label: 'backend-dev · 导出接口', createdAt: 1 },
+      { id: 'child-wait', mode: 'continuable', label: 'frontend-dev · 导出按钮', createdAt: 2 },
+    ] : key === 'agentTeam' ? { enabled: false, tasks: [] }
+      : key === 'modelSelection' ? { lastUsed: { provider: 'deepseek', model: 'deepseek-chat' }, next: null }
+        : key === 'tokenUsage' ? { uncachedInputTokens: 10, outputTokens: 4 }
+          : key === 'sessionStats' ? { turns: 1, steps: 2 }
+            : undefined),
+    useSessions: (selector) => selector({
+      byId: {
+        'session-aisle': { displayTitle: '主代理任务' },
+        'child-run': {
+          title: '导出接口',
+          projectionValues: {
+            subagentTiming: { settledMs: 20000, lastTurnCompleted: true },
+            tokenUsage: { uncachedInputTokens: 100, outputTokens: 20 },
+            modelSelection: { lastUsed: { provider: 'deepseek', model: 'deepseek-chat' }, next: null },
+          },
+        },
+        'child-wait': {
+          title: '导出按钮',
+          projectionValues: {
+            subagentTiming: { settledMs: 10000 },
+            tokenUsage: { uncachedInputTokens: 80, outputTokens: 10 },
+            modelSelection: { lastUsed: { provider: 'deepseek', model: 'deepseek-chat' }, next: null },
+          },
+        },
+      },
+      projectionsBySession: {},
+    }),
+    useSessionStatus: (selector) => selector(new Map([
+      ['child-run', { running: true }],
+      ['child-wait', { running: true, pendingInteraction: { kind: 'question' } }],
+    ])),
+    openSession: () => {},
+    openFile: () => {},
+  };
+  const render = panelRender(registered, 'session-aisle', props);
+  let host = await harness.settle(render);
+  const links = harness.collect(host, harness.byClass('stwd-link'));
+  assert.equal(links.length, 2, 'one mind-map branch to each child');
+  assert.ok(links.every((node) => node.props['data-from'] === '__lead__'), 'every line starts at the Lead');
+  assert.ok(links.every((node) => node.props['data-route'] === 'curve'), 'siblings beside the Lead get smooth curves');
+  assert.ok(links.every((node) => /\sC/.test(String(node.props.d)) && !/\sQ/.test(String(node.props.d))), 'the branches are cubics, not elbows');
+  assert.ok(links.every((node) => node.props['marker-end'] == null), 'the lines have no arrows');
+  const wait = links.find((node) => node.props['data-to'] === 'child-wait');
+  assert.ok(String(wait.props.className).indexOf('stwd-link-wait') >= 0, 'the waiting line uses the wait style');
+  for (const node of links) {
+    const nums = String(node.props.d).match(/-?\d+(?:\.\d+)?/g).map(Number);
+    const xs = nums.filter((_, i) => i % 2 === 0);
+    const ys = nums.filter((_, i) => i % 2 === 1);
+    const xLo = Math.min(xs[0], xs[xs.length - 1]) - 1;
+    const xHi = Math.max(xs[0], xs[xs.length - 1]) + 1;
+    const yLo = Math.min(ys[0], ys[ys.length - 1]) - 1;
+    const yHi = Math.max(ys[0], ys[ys.length - 1]) + 1;
+    assert.ok(xs.every((x) => x >= xLo && x <= xHi) && ys.every((y) => y >= yLo && y <= yHi), 'a mind-map curve stays between its two ends');
+  }
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
+/**
+ * The filter choice is remembered: the panel writes it to local storage and reads it
+ * back on the next mount, so hiding the finished agents survives a reload.
+ */
+test('the graph remembers its filter across mounts', async () => {
+  const { factory } = await loadClientFactory();
+  const harness = createRenderHarness();
+  const instance = factory((name) => (name === 'react' ? harness.stub : {}));
+  const { ctx, registered } = createClientContext();
+  instance.apply(ctx);
+
+  const store = new Map();
+  const storage = {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => { store.set(key, String(value)); },
+    removeItem: (key) => { store.delete(key); },
+  };
+  const previousWindow = globalThis.window;
+  globalThis.window = { localStorage: storage };
+  try {
+    const props = {
+      now: () => 1700000000000,
+      loadRun: async () => ({ status: 'empty', dir: '', artifacts: [] }),
+      useProjection: (key) => (key === 'subagentCatalog' ? [
+        { id: 'child-done', mode: 'one-shot', label: 'reviewer · 终审', createdAt: 1 },
+        { id: 'child-run', mode: 'one-shot', label: 'pm · 写规格', createdAt: 2 },
+      ] : undefined),
+      useSessions: (selector) => selector({
+        byId: { 'child-done': { projectionValues: { subagentTiming: { settledMs: 90000, lastTurnCompleted: true } } } },
+        projectionsBySession: {},
+      }),
+      useSessionStatus: (selector) => selector(new Map([
+        ['child-done', { running: false }],
+        ['child-run', { running: true }],
+      ])),
+      openSession: () => {},
+      openFile: () => {},
+    };
+    let host = await harness.settle(panelRender(registered, 'session-prefs', props));
+    const hide = harness.collect(host, harness.byClass('stwd-filter'))
+      .find((node) => harness.textOf(node).indexOf('隐藏已完成') >= 0);
+    hide.props.onClick();
+    host = await harness.settle(panelRender(registered, 'session-prefs', props));
+    const stored = JSON.parse(store.get('dsh-super-bot.panel.filters'));
+    assert.equal(stored.view, 'all', 'the all view is persisted');
+    assert.equal(stored.hideDone, true, 'the hide-done toggle is persisted');
+    assert.ok(harness.collect(host, harness.byClass('stwd-filter-on')).map(harness.textOf).includes('隐藏已完成'), 'the active toggle is marked');
+
+    // A fresh mount starts from the stored choice without any click.
+    harness.reset();
+    host = await harness.settle(panelRender(registered, 'session-prefs', props));
+    assert.equal(harness.collect(host, harness.byClass('stwd-gnode')).length, 1, 'the stored filter applies on mount');
+
+    // Dragging a card is remembered for this Session after a remount.
+    const view = harness.collect(host, harness.byClass('stwd-graph-view'))[0];
+    const card = harness.collect(host, harness.byClass('stwd-gnode'))[0];
+    const leftOf = (node) => Number(String(node.props.style.left).replace('px', ''));
+    const topOf = (node) => Number(String(node.props.style.top).replace('px', ''));
+    const startLeft = leftOf(card);
+    const startTop = topOf(card);
+    const startX = startLeft + Number(String(card.props.style.width).replace('px', '')) / 2;
+    const startY = startTop + Number(String(card.props.style.height).replace('px', '')) / 2;
+    view.props.onPointerDown({ button: 0, clientX: startX, clientY: startY, pointerId: 2, target: null });
+    view.props.onPointerMove({ clientX: startX + 48, clientY: startY + 32, pointerId: 2, target: null });
+    view.props.onPointerUp({ pointerId: 2, target: null });
+    host = await harness.settle(panelRender(registered, 'session-prefs', props));
+    const moved = harness.collect(host, harness.byClass('stwd-gnode'))[0];
+    assert.equal(leftOf(moved), startLeft + 48, 'the dragged x is kept before remount');
+    assert.equal(topOf(moved), startTop + 32, 'the dragged y is kept before remount');
+    harness.reset();
+    host = await harness.settle(panelRender(registered, 'session-prefs', props));
+    const restored = harness.collect(host, harness.byClass('stwd-gnode'))[0];
+    assert.equal(leftOf(restored), startLeft + 48, 'the dragged x survives a remount');
+    assert.equal(topOf(restored), startTop + 32, 'the dragged y survives a remount');
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
+
+function isolatedStorage() {
+  const store = new Map();
+  const storage = {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => { store.set(key, String(value)); },
+    removeItem: (key) => { store.delete(key); },
+  };
+  return { store, storage };
+}
+
+/**
+ * Hide-pending is an independent all-view toggle: it hides not-started cards
+ * without moving the ones that remain, and the choice survives a remount.
+ */
+test('hide-pending hides pending cards without reflow and persists across remounts', async () => {
+  const { factory } = await loadClientFactory();
+  const harness = createRenderHarness();
+  const instance = factory((name) => (name === 'react' ? harness.stub : {}));
+  const { ctx, registered } = createClientContext();
+  instance.apply(ctx);
+
+  const { store, storage } = isolatedStorage();
+  const previousWindow = globalThis.window;
+  globalThis.window = { localStorage: storage };
+  try {
+    const props = {
+      now: () => 1700000000000,
+      loadRun: async () => ({ status: 'empty', dir: '', artifacts: [] }),
+      useProjection: (key) => (key === 'subagentCatalog' ? [
+        { id: 'child-pend', mode: 'one-shot', label: 'pm · 待开始规格', createdAt: 1 },
+        { id: 'child-run', mode: 'one-shot', label: 'backend-dev · 写接口', createdAt: 2 },
+      ] : undefined),
+      useSessions: (selector) => selector({
+        byId: {},
+        projectionsBySession: {},
+      }),
+      useSessionStatus: (selector) => selector(new Map([
+        ['child-pend', { running: false }],
+        ['child-run', { running: true }],
+      ])),
+      openSession: () => {},
+      openFile: () => {},
+    };
+    const render = () => panelRender(registered, 'session-hide-pending', props);
+    let host = await harness.settle(render());
+    assert.equal(harness.collect(host, harness.byClass('stwd-gnode')).length, 2, 'pending and running cards both start visible');
+    const kept = harness.collect(host, harness.byClass('stwd-gnode'))
+      .find((node) => harness.textOf(node).indexOf('写接口') >= 0);
+    assert.ok(kept, 'the running card is on the board');
+    const keptLeft = pxOf(kept, 'left');
+    const keptTop = pxOf(kept, 'top');
+    const hide = harness.collect(host, harness.byClass('stwd-filter'))
+      .find((node) => harness.textOf(node).indexOf('隐藏待开始') >= 0);
+    assert.ok(hide, 'the hide-pending toggle is present');
+    assert.equal(hide.props.disabled, false, 'the toggle is available in the all view');
+    hide.props.onClick();
+    host = await harness.settle(render());
+    const cards = harness.collect(host, harness.byClass('stwd-gnode'));
+    assert.equal(cards.length, 1, 'the pending card is hidden');
+    assert.ok(harness.textOf(cards[0]).indexOf('写接口') >= 0, 'the running card remains');
+    assert.ok(harness.textOf(host[0]).indexOf('待开始规格') < 0, 'the pending task is gone from the board');
+    assert.equal(pxOf(cards[0], 'left'), keptLeft, 'hiding a pending card does not move the ones that remain');
+    assert.equal(pxOf(cards[0], 'top'), keptTop);
+    assert.ok(harness.collect(host, harness.byClass('stwd-leadnode')).length === 1, 'the Lead stays visible');
+    const stored = JSON.parse(store.get('dsh-super-bot.panel.filters'));
+    assert.equal(stored.view, 'all', 'the all view is persisted');
+    assert.equal(stored.hidePending, true, 'the hide-pending toggle is persisted');
+    assert.ok(harness.collect(host, harness.byClass('stwd-filter-on')).map(harness.textOf).includes('隐藏待开始'), 'the active toggle is marked');
+
+    harness.reset();
+    host = await harness.settle(render());
+    assert.equal(harness.collect(host, harness.byClass('stwd-gnode')).length, 1, 'the stored hide-pending filter applies on mount');
+    const remounted = harness.collect(host, harness.byClass('stwd-gnode'))[0];
+    assert.equal(pxOf(remounted, 'left'), keptLeft, 'remaining cards keep their place after remount');
+    assert.equal(pxOf(remounted, 'top'), keptTop);
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
+
+function pxOf(node, key) {
+  return Number(String(node.props.style[key]).replace('px', ''));
+}
+
+function boxMetrics(node) {
+  const left = pxOf(node, 'left');
+  const top = pxOf(node, 'top');
+  const width = pxOf(node, 'width');
+  const height = pxOf(node, 'height');
+  return { left, top, width, height, cx: left + width / 2, cy: top + height / 2 };
+}
+
+function stageCamera(stage) {
+  const match = String(stage.props.style.transform).match(/translate\((-?\d+(?:\.\d+)?)px,\s*(-?\d+(?:\.\d+)?)px\) scale\((-?\d+(?:\.\d+)?)\)/);
+  return {
+    x: match ? Number(match[1]) : 0,
+    y: match ? Number(match[2]) : 0,
+    zoom: match ? Number(match[3]) : 1,
+  };
+}
+
+function leadScreenCenter(harness, host) {
+  const lead = boxMetrics(harness.collect(host, harness.byClass('stwd-leadnode'))[0]);
+  const camera = stageCamera(harness.collect(host, harness.byClass('stwd-graph-stage'))[0]);
+  return {
+    x: lead.cx * camera.zoom + camera.x,
+    y: lead.cy * camera.zoom + camera.y,
+    zoom: camera.zoom,
+  };
+}
+
+/** Convert a stage-space box into viewport pointer coordinates. */
+function pointerAt(harness, host, box, dx = 0, dy = 0) {
+  const camera = stageCamera(harness.collect(host, harness.byClass('stwd-graph-stage'))[0]);
+  return {
+    clientX: (box.cx * camera.zoom + camera.x) + dx,
+    clientY: (box.cy * camera.zoom + camera.y) + dy,
+  };
+}
+
+function toolByLabel(harness, host, needle) {
+  return harness.collect(host, harness.byClass('stwd-graph-tool'))
+    .find((node) => String(node.props['aria-label']).indexOf(needle) >= 0);
+}
+
+/**
+ * The default map places the Lead in the visual middle, with children radiating
+ * outward rather than sitting exclusively below it.
+ */
+test('the default map layout centers the Lead and radiates children outward', async () => {
+  const { factory } = await loadClientFactory();
+  const harness = createRenderHarness();
+  const instance = factory((name) => (name === 'react' ? harness.stub : {}));
+  const { ctx, registered } = createClientContext();
+  instance.apply(ctx);
+
+  const { storage } = isolatedStorage();
+  const previousWindow = globalThis.window;
+  globalThis.window = { localStorage: storage };
+  try {
+    const props = {
+      now: () => 1700000000000,
+      loadRun: async () => ({ status: 'empty', dir: '', artifacts: [] }),
+      useProjection: (key) => (key === 'subagentCatalog' ? [
+        { id: 'child-pm', mode: 'one-shot', label: 'pm · 写规格', createdAt: 1 },
+        { id: 'child-arch', mode: 'one-shot', label: 'architect · 出方案', createdAt: 2 },
+        { id: 'child-be', mode: 'one-shot', label: 'backend-dev · 导出接口', createdAt: 3 },
+        { id: 'child-qa', mode: 'continuable', label: 'qa-engineer · 复跑门禁', createdAt: 4 },
+      ] : undefined),
+      useSessions: (selector) => selector({ byId: {}, projectionsBySession: {} }),
+      useSessionStatus: (selector) => selector(new Map()),
+      openSession: () => {},
+      openFile: () => {},
+    };
+    const host = await harness.settle(panelRender(registered, 'session-map', props));
+    const lead = boxMetrics(harness.collect(host, harness.byClass('stwd-leadnode'))[0]);
+    const cards = harness.collect(host, harness.byClass('stwd-gnode')).map(boxMetrics);
+    const all = [lead].concat(cards);
+    const minX = Math.min(...all.map((box) => box.left));
+    const minY = Math.min(...all.map((box) => box.top));
+    const maxX = Math.max(...all.map((box) => box.left + box.width));
+    const maxY = Math.max(...all.map((box) => box.top + box.height));
+    const midX = (minX + maxX) / 2;
+    const midY = (minY + maxY) / 2;
+    assert.ok(Math.abs(lead.cx - midX) < (maxX - minX) * 0.3, 'the Lead is roughly centered horizontally');
+    assert.ok(Math.abs(lead.cy - midY) < (maxY - minY) * 0.3, 'the Lead is roughly centered vertically');
+    assert.ok(cards.some((box) => box.cx < lead.cx - 20) && cards.some((box) => box.cx > lead.cx + 20), 'children sit on more than one side of the Lead');
+    assert.ok(!cards.every((box) => box.top >= lead.top + lead.height - 1), 'children are not stacked exclusively below the Lead');
+    const mapTool = toolByLabel(harness, host, '辐射');
+    assert.equal(mapTool && mapTool.props['aria-pressed'], 'true', 'the map preset is the default');
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
+/**
+ * Layout presets are one-click tidy, not modes that lock the board: fishbone
+ * puts ribs above and below the Lead, the tree puts the Lead above every
+ * child, a drag still works afterwards, and ⟲ restores the last preset.
+ */
+test('layout presets tidy the board and ⟲ restores the last chosen arrangement', async () => {
+  const { factory } = await loadClientFactory();
+  const harness = createRenderHarness();
+  const instance = factory((name) => (name === 'react' ? harness.stub : {}));
+  const { ctx, registered } = createClientContext();
+  instance.apply(ctx);
+
+  const { store, storage } = isolatedStorage();
+  const previousWindow = globalThis.window;
+  globalThis.window = { localStorage: storage };
+  try {
+    const props = {
+      now: () => 1700000000000,
+      loadRun: async () => ({ status: 'empty', dir: '', artifacts: [] }),
+      useProjection: (key) => (key === 'subagentCatalog' ? [
+        { id: 'child-be', mode: 'one-shot', label: 'backend-dev · 导出接口', createdAt: 1 },
+        { id: 'child-fe', mode: 'one-shot', label: 'frontend-dev · 导出按钮', createdAt: 2 },
+        { id: 'child-qa', mode: 'continuable', label: 'qa-engineer · 复跑门禁', createdAt: 3 },
+        { id: 'child-rv', mode: 'one-shot', label: 'reviewer · 终审', createdAt: 4 },
+      ] : undefined),
+      useSessions: (selector) => selector({ byId: {}, projectionsBySession: {} }),
+      useSessionStatus: (selector) => selector(new Map()),
+      openSession: () => {},
+      openFile: () => {},
+    };
+    const render = panelRender(registered, 'session-presets', props);
+    let host = await harness.settle(render);
+    const leadOf = (tree) => boxMetrics(harness.collect(tree, harness.byClass('stwd-leadnode'))[0]);
+    const cardsOf = (tree) => harness.collect(tree, harness.byClass('stwd-gnode'));
+    const cardOf = (tree, needle) => cardsOf(tree).find((node) => harness.textOf(node).indexOf(needle) >= 0);
+
+    toolByLabel(harness, host, '鱼骨').props.onClick();
+    host = await harness.settle(render);
+    assert.equal(toolByLabel(harness, host, '鱼骨').props['aria-pressed'], 'true', 'the fishbone preset is marked');
+    let lead = leadOf(host);
+    let cards = cardsOf(host).map(boxMetrics);
+    assert.ok(cards.some((box) => box.top + box.height < lead.top + 1), 'fishbone places some cards above the Lead');
+    assert.ok(cards.some((box) => box.top > lead.top + lead.height - 1), 'fishbone places some cards below the Lead');
+    const storedPrefs = JSON.parse(store.get('dsh-super-bot.panel.filters'));
+    assert.equal(storedPrefs.layout, 'fishbone', 'the chosen preset is persisted');
+
+    const fishboneCard = cardOf(host, '导出接口');
+    const fishbonePos = boxMetrics(fishboneCard);
+    const view = harness.collect(host, harness.byClass('stwd-graph-view'))[0];
+    const fishStart = pointerAt(harness, host, fishbonePos);
+    view.props.onPointerDown({ button: 0, clientX: fishStart.clientX, clientY: fishStart.clientY, pointerId: 3, target: null });
+    view.props.onPointerMove({ clientX: fishStart.clientX + 50, clientY: fishStart.clientY + 30, pointerId: 3, target: null });
+    view.props.onPointerUp({ pointerId: 3, target: null });
+    host = await harness.settle(render);
+    const dragged = boxMetrics(cardOf(host, '导出接口'));
+    assert.equal(dragged.left, fishbonePos.left + 50, 'cards stay freely draggable after a preset');
+    assert.equal(dragged.top, fishbonePos.top + 30);
+
+    toolByLabel(harness, host, '重新布局').props.onClick();
+    host = await harness.settle(render);
+    const restored = boxMetrics(cardOf(host, '导出接口'));
+    assert.equal(restored.left, fishbonePos.left, '⟲ restores the last preset, not the drag');
+    assert.equal(restored.top, fishbonePos.top);
+
+    toolByLabel(harness, host, '树状').props.onClick();
+    host = await harness.settle(render);
+    assert.equal(toolByLabel(harness, host, '树状').props['aria-pressed'], 'true', 'the tree preset is marked');
+    lead = leadOf(host);
+    cards = cardsOf(host).map(boxMetrics);
+    assert.ok(cards.every((box) => box.top >= lead.top + lead.height - 1), 'the tree places the Lead above every sub-agent');
+    const treeCard = boxMetrics(cardOf(host, '导出接口'));
+    const treeView = harness.collect(host, harness.byClass('stwd-graph-view'))[0];
+    const treeStart = pointerAt(harness, host, treeCard);
+    treeView.props.onPointerDown({ button: 0, clientX: treeStart.clientX, clientY: treeStart.clientY, pointerId: 4, target: null });
+    treeView.props.onPointerMove({ clientX: treeStart.clientX + 40, clientY: treeStart.clientY + 20, pointerId: 4, target: null });
+    treeView.props.onPointerUp({ pointerId: 4, target: null });
+    host = await harness.settle(render);
+    const treeDragged = boxMetrics(cardOf(host, '导出接口'));
+    assert.equal(treeDragged.left, treeCard.left + 40, 'dragging still works after the tree preset');
+    assert.equal(treeDragged.top, treeCard.top + 20);
+    toolByLabel(harness, host, '重新布局').props.onClick();
+    host = await harness.settle(render);
+    const treeRestored = boxMetrics(cardOf(host, '导出接口'));
+    assert.equal(treeRestored.left, treeCard.left, '⟲ reapplies the tree preset after a drag');
+    assert.equal(treeRestored.top, treeCard.top);
+
+    // A card dragged well above the Lead must stay inside the stage, not clip.
+    const clipView = harness.collect(host, harness.byClass('stwd-graph-view'))[0];
+    const beforeClip = boxMetrics(cardOf(host, '导出接口'));
+    const clipStart = pointerAt(harness, host, beforeClip);
+    clipView.props.onPointerDown({ button: 0, clientX: clipStart.clientX, clientY: clipStart.clientY, pointerId: 5, target: null });
+    clipView.props.onPointerMove({ clientX: clipStart.clientX, clientY: clipStart.clientY - 400, pointerId: 5, target: null });
+    clipView.props.onPointerUp({ pointerId: 5, target: null });
+    host = await harness.settle(render);
+    const clipped = boxMetrics(cardOf(host, '导出接口'));
+    assert.ok(clipped.top >= 0, 'a card dragged above the Lead is not clipped at y < 0');
+    const svg = harness.collect(host, harness.byClass('stwd-graph-links'))[0];
+    assert.ok(Number(svg.props.height) >= clipped.top + clipped.height, 'the stage height includes a card dragged upward');
+    const viewBox = String(svg.props.viewBox).split(/\s+/).map(Number);
+    assert.equal(viewBox.length, 4);
+    assert.ok(viewBox[2] === Number(svg.props.width) && viewBox[3] === Number(svg.props.height), 'the viewBox size matches the stage');
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
+/**
+ * Zoom (and pan) are remembered per session, the way card positions are.
+ */
+test('the canvas remembers its zoom across remounts for the same session', async () => {
+  const { factory } = await loadClientFactory();
+  const harness = createRenderHarness();
+  const instance = factory((name) => (name === 'react' ? harness.stub : {}));
+  const { ctx, registered } = createClientContext();
+  instance.apply(ctx);
+
+  const { store, storage } = isolatedStorage();
+  const previousWindow = globalThis.window;
+  globalThis.window = { localStorage: storage };
+  try {
+    const props = {
+      now: () => 1700000000000,
+      loadRun: async () => ({ status: 'empty', dir: '', artifacts: [] }),
+      useProjection: (key) => (key === 'subagentCatalog' ? [
+        { id: 'child-a', mode: 'one-shot', label: 'pm · 写规格', createdAt: 1 },
+        { id: 'child-b', mode: 'continuable', label: 'architect · 出方案', createdAt: 2 },
+      ] : undefined),
+      useSessions: (selector) => selector({ byId: {}, projectionsBySession: {} }),
+      useSessionStatus: (selector) => selector(new Map()),
+      openSession: () => {},
+      openFile: () => {},
+    };
+    const stageOf = (tree) => harness.collect(tree, harness.byClass('stwd-graph-stage'))[0];
+    const viewOf = (tree) => harness.collect(tree, harness.byClass('stwd-graph-view'))[0];
+    let host = await harness.settle(panelRender(registered, 'session-zoom-a', props));
+    toolByLabel(harness, host, '放大').props.onClick();
+    host = await harness.settle(panelRender(registered, 'session-zoom-a', props));
+    const view = viewOf(host);
+    view.props.onPointerDown({ button: 0, clientX: 120, clientY: 120, pointerId: 1, target: null, currentTarget: null });
+    view.props.onPointerMove({ clientX: 40, clientY: 60, pointerId: 1, target: null, currentTarget: null });
+    view.props.onPointerUp({ pointerId: 1, target: null, currentTarget: null });
+    host = await harness.settle(panelRender(registered, 'session-zoom-a', props));
+    const savedTransform = String(stageOf(host).props.style.transform);
+    assert.equal(harness.textOf(harness.collect(host, harness.byClass('stwd-graph-zoom'))[0]), '112%');
+    assert.match(savedTransform, /scale\(1\.12\)/);
+    assert.match(savedTransform, /translate\(/);
+    const stored = JSON.parse(store.get('dsh-super-bot.panel.camera'));
+    assert.equal(stored['session-zoom-a'].zoom, 1.12, 'zoom is written per session');
+
+    toolByLabel(harness, host, '鱼骨').props.onClick();
+    host = await harness.settle(panelRender(registered, 'session-zoom-a', props));
+    assert.equal(harness.textOf(harness.collect(host, harness.byClass('stwd-graph-zoom'))[0]), '112%', 'tidying does not change zoom');
+    const tidiedTransform = String(stageOf(host).props.style.transform);
+    assert.match(tidiedTransform, /scale\(1\.12\)/, 'tidying keeps the current zoom');
+    assert.notEqual(tidiedTransform, savedTransform, 'tidying recenters the camera on the Lead');
+    const tidiedLead = leadScreenCenter(harness, host);
+    const tidiedViewH = Number(String(viewOf(host).props.style.height).replace('px', ''));
+    assert.ok(Math.abs(tidiedLead.x - 170) < 8, 'after a tidy the Lead is horizontally centered in the view');
+    assert.ok(Math.abs(tidiedLead.y - tidiedViewH / 2) < 8, 'after a tidy the Lead is vertically centered in the view');
+
+    harness.reset();
+    host = await harness.settle(panelRender(registered, 'session-zoom-a', props));
+    assert.equal(harness.textOf(harness.collect(host, harness.byClass('stwd-graph-zoom'))[0]), '112%', 'the same session remounts at 112%');
+    assert.equal(String(stageOf(host).props.style.transform), tidiedTransform, 'remount restores zoom and the recentered pan');
+
+    harness.reset();
+    host = await harness.settle(panelRender(registered, 'session-zoom-b', props));
+    assert.equal(harness.textOf(harness.collect(host, harness.byClass('stwd-graph-zoom'))[0]), '100%', 'a different session does not inherit the zoom');
+    assert.match(String(stageOf(host).props.style.transform), /scale\(1\)/);
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
+test('the graph viewport stays short enough to reach artifacts below', async () => {
+  const { factory } = await loadClientFactory();
+  const harness = createRenderHarness();
+  const instance = factory((name) => (name === 'react' ? harness.stub : {}));
+  const { ctx, registered } = createClientContext();
+  instance.apply(ctx);
+
+  const catalog = [];
+  const roles = ['pm', 'architect', 'backend-dev', 'frontend-dev', 'qa-engineer', 'reviewer'];
+  for (let index = 0; index < 24; index += 1) {
+    catalog.push({
+      id: 'child-tall-' + index,
+      mode: 'one-shot',
+      label: roles[index % roles.length] + ' · 任务' + (index + 1),
+      createdAt: index + 1,
+    });
+  }
+  const host = await harness.settle(panelRender(registered, 'session-viewport', {
+    now: () => 1700000000000,
+    loadRun: async () => ({ status: 'empty', dir: '', artifacts: [] }),
+    useProjection: (key) => (key === 'subagentCatalog' ? catalog : undefined),
+    useSessions: (selector) => selector({ byId: {}, projectionsBySession: {} }),
+    useSessionStatus: (selector) => selector(new Map()),
+    openSession: () => {},
+    openFile: () => {},
+  }));
+  const view = harness.collect(host, harness.byClass('stwd-graph-view'))[0];
+  const height = Number(String(view.props.style.height).replace('px', ''));
+  assert.ok(height <= 400, 'the graph window is capped so the panel can still scroll to artifacts');
+  assert.ok(height >= 220, 'the graph window still has a usable height');
+  const stageHeight = Number(String(harness.collect(host, harness.byClass('stwd-graph-stage'))[0].props.style.height).replace('px', ''));
+  assert.ok(stageHeight > height, 'the graph content can be taller than the window and panned inside it');
+  assert.equal(harness.collect(host, harness.byClass('stwd-artifacts')).length, 1, 'artifacts stay below the graph');
+});
+
+/**
+ * Zoom / layout tools live in the top bar again. Clicking a tidy preset or ⟲
+ * keeps the current zoom and recenters the viewport on the Lead.
+ */
+test('tidying recenters the board on the Lead and leaves the tools in the top bar', async () => {
+  const { factory } = await loadClientFactory();
+  const harness = createRenderHarness();
+  const instance = factory((name) => (name === 'react' ? harness.stub : {}));
+  const { ctx, registered } = createClientContext();
+  instance.apply(ctx);
+
+  const { storage } = isolatedStorage();
+  const previousWindow = globalThis.window;
+  const selections = [];
+  globalThis.window = {
+    localStorage: storage,
+    getSelection: () => ({
+      removeAllRanges: () => { selections.push('cleared'); },
+    }),
+  };
+  try {
+    const props = {
+      now: () => 1700000000000,
+      loadRun: async () => ({ status: 'empty', dir: '', artifacts: [] }),
+      useProjection: (key) => (key === 'subagentCatalog' ? [
+        { id: 'child-a', mode: 'one-shot', label: 'pm · 写规格', createdAt: 1 },
+        { id: 'child-b', mode: 'continuable', label: 'architect · 出方案', createdAt: 2 },
+      ] : undefined),
+      useSessions: (selector) => selector({ byId: {}, projectionsBySession: {} }),
+      useSessionStatus: (selector) => selector(new Map()),
+      openSession: () => {},
+      openFile: () => {},
+    };
+    const render = panelRender(registered, 'session-tools-lead', props);
+    const viewOf = (host) => harness.collect(host, harness.byClass('stwd-graph-view'))[0];
+    const stageOf = (host) => harness.collect(host, harness.byClass('stwd-graph-stage'))[0];
+
+    let host = await harness.settle(render);
+    const view = viewOf(host);
+    const bar = harness.collect(host, harness.byClass('stwd-graph-bar'))[0];
+    assert.equal(harness.collect([bar], harness.byClass('stwd-graph-tools')).length, 1, 'the tools live in the top bar');
+    assert.equal(harness.collect([view], harness.byClass('stwd-graph-tools')).length, 0, 'the tools are not overlaid on the canvas');
+    assert.deepEqual(
+      harness.collect(host, harness.byClass('stwd-graph-tool')).map(harness.textOf),
+      ['−', '100%', '+', '⤢', '辐射', '鱼骨', '树状', '⟲'],
+      'the zoom, layout presets and re-layout controls keep their labels',
+    );
+
+    // Pan the camera away, then zoom in, then tidy.
+    view.props.onPointerDown({ button: 0, clientX: 200, clientY: 80, pointerId: 31, target: null, preventDefault() {} });
+    view.props.onPointerMove({ clientX: 80, clientY: 20, pointerId: 31, target: null, preventDefault() {} });
+    view.props.onPointerUp({ pointerId: 31, target: null });
+    host = await harness.settle(render);
+    toolByLabel(harness, host, '放大').props.onClick();
+    host = await harness.settle(render);
+    assert.equal(harness.textOf(harness.collect(host, harness.byClass('stwd-graph-zoom'))[0]), '112%');
+    const panned = String(stageOf(host).props.style.transform);
+
+    toolByLabel(harness, host, '鱼骨').props.onClick();
+    host = await harness.settle(render);
+    assert.equal(harness.textOf(harness.collect(host, harness.byClass('stwd-graph-zoom'))[0]), '112%', 'tidying does not change zoom');
+    assert.notEqual(String(stageOf(host).props.style.transform), panned, 'tidying moves the camera');
+    let lead = leadScreenCenter(harness, host);
+    let viewH = Number(String(viewOf(host).props.style.height).replace('px', ''));
+    assert.ok(Math.abs(lead.x - 170) < 8, 'the Lead is horizontally centered after a preset');
+    assert.ok(Math.abs(lead.y - viewH / 2) < 8, 'the Lead is vertically centered after a preset');
+
+    // Drag a card, then ⟲: cards snap back and the camera recenters again.
+    const card = harness.collect(host, harness.byClass('stwd-gnode'))[0];
+    const start = boxMetrics(card);
+    const cardStart = pointerAt(harness, host, start);
+    viewOf(host).props.onPointerDown({ button: 0, clientX: cardStart.clientX, clientY: cardStart.clientY, pointerId: 32, target: null, preventDefault() {} });
+    viewOf(host).props.onPointerMove({ clientX: cardStart.clientX + 80, clientY: cardStart.clientY + 40, pointerId: 32, target: null, preventDefault() {} });
+    viewOf(host).props.onPointerUp({ pointerId: 32, target: null });
+    host = await harness.settle(render);
+    viewOf(host).props.onPointerDown({ button: 0, clientX: 40, clientY: 40, pointerId: 33, target: null, preventDefault() {} });
+    viewOf(host).props.onPointerMove({ clientX: 140, clientY: 10, pointerId: 33, target: null, preventDefault() {} });
+    viewOf(host).props.onPointerUp({ pointerId: 33, target: null });
+    host = await harness.settle(render);
+    toolByLabel(harness, host, '重新布局').props.onClick();
+    host = await harness.settle(render);
+    assert.equal(harness.textOf(harness.collect(host, harness.byClass('stwd-graph-zoom'))[0]), '112%', '⟲ keeps the current zoom');
+    lead = leadScreenCenter(harness, host);
+    viewH = Number(String(viewOf(host).props.style.height).replace('px', ''));
+    assert.ok(Math.abs(lead.x - 170) < 8, '⟲ centers the Lead horizontally');
+    assert.ok(Math.abs(lead.y - viewH / 2) < 8, '⟲ centers the Lead vertically');
+
+    const prevented = { down: false };
+    viewOf(host).props.onPointerDown({
+      button: 0,
+      clientX: 20,
+      clientY: 20,
+      pointerId: 34,
+      target: null,
+      preventDefault: () => { prevented.down = true; },
+    });
+    viewOf(host).props.onPointerMove({
+      clientX: 50,
+      clientY: 40,
+      pointerId: 34,
+      target: null,
+      preventDefault: () => {},
+    });
+    viewOf(host).props.onPointerUp({ pointerId: 34, target: null });
+    assert.ok(prevented.down, 'a canvas drag suppresses the native text-selection default');
+    assert.ok(selections.length > 0, 'a canvas drag clears an existing text selection');
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
+test('the graph viewport can be dragged taller without burying artifacts', async () => {
+  const { factory } = await loadClientFactory();
+  const harness = createRenderHarness();
+  const instance = factory((name) => (name === 'react' ? harness.stub : {}));
+  const { ctx, registered } = createClientContext();
+  instance.apply(ctx);
+
+  const { store, storage } = isolatedStorage();
+  const previousWindow = globalThis.window;
+  globalThis.window = { localStorage: storage };
+  try {
+    const catalog = [];
+    const roles = ['pm', 'architect', 'backend-dev', 'frontend-dev', 'qa-engineer', 'reviewer'];
+    for (let index = 0; index < 24; index += 1) {
+      catalog.push({
+        id: 'child-resize-' + index,
+        mode: 'one-shot',
+        label: roles[index % roles.length] + ' · 任务' + (index + 1),
+        createdAt: index + 1,
+      });
+    }
+    const props = {
+      now: () => 1700000000000,
+      loadRun: async () => ({ status: 'empty', dir: '', artifacts: [] }),
+      useProjection: (key) => (key === 'subagentCatalog' ? catalog : undefined),
+      useSessions: (selector) => selector({ byId: {}, projectionsBySession: {} }),
+      useSessionStatus: (selector) => selector(new Map()),
+      openSession: () => {},
+      openFile: () => {},
+    };
+    const render = panelRender(registered, 'session-resize', props);
+    const viewOf = (host) => harness.collect(host, harness.byClass('stwd-graph-view'))[0];
+    const heightOf = (host) => Number(String(viewOf(host).props.style.height).replace('px', ''));
+
+    let host = await harness.settle(render);
+    const startHeight = heightOf(host);
+    assert.ok(startHeight <= 400, 'the default graph window stays short enough to reach artifacts');
+    assert.ok(startHeight >= 220, 'the default graph window still has a usable height');
+    assert.equal(harness.collect(host, harness.byClass('stwd-artifacts')).length, 1, 'artifacts stay below the graph');
+
+    const handle = harness.collect(host, harness.byClass('stwd-graph-resize'))[0];
+    assert.ok(handle, 'the bottom edge has a resize handle');
+    assert.equal(handle.props['aria-label'], '调整画板高度');
+    const stopped = { down: false, up: false };
+    handle.props.onPointerDown({
+      button: 0,
+      clientY: 400,
+      pointerId: 21,
+      stopPropagation: () => { stopped.down = true; },
+      preventDefault: () => {},
+    });
+    handle.props.onPointerMove({ clientY: 480, pointerId: 21, stopPropagation: () => {} });
+    host = await harness.settle(render);
+    assert.equal(heightOf(host), startHeight + 80, 'dragging the handle changes the viewport height');
+    harness.collect(host, harness.byClass('stwd-graph-resize'))[0].props.onPointerUp({
+      pointerId: 21,
+      stopPropagation: () => { stopped.up = true; },
+    });
+    host = await harness.settle(render);
+    assert.ok(stopped.down, 'resize pointerdown does not bubble into a canvas pan');
+    assert.equal(heightOf(host), startHeight + 80);
+
+    const far = harness.collect(host, harness.byClass('stwd-graph-resize'))[0];
+    far.props.onPointerDown({
+      button: 0,
+      clientY: 0,
+      pointerId: 22,
+      stopPropagation: () => {},
+      preventDefault: () => {},
+    });
+    far.props.onPointerMove({ clientY: 4000, pointerId: 22, stopPropagation: () => {} });
+    far.props.onPointerUp({ pointerId: 22, stopPropagation: () => {} });
+    host = await harness.settle(render);
+    const clamped = heightOf(host);
+    assert.ok(clamped <= 560, 'a very long drag still clamps to the hard cap');
+    assert.ok(clamped >= startHeight + 80, 'the clamped height is at least as tall as the earlier drag');
+    assert.equal(harness.collect(host, harness.byClass('stwd-artifacts')).length, 1, 'artifacts remain below a resized graph');
+    const stored = JSON.parse(store.get('dsh-super-bot.panel.filters'));
+    assert.equal(stored.graphHeight, clamped, 'the preferred height is written to panel prefs');
+
+    harness.reset();
+    host = await harness.settle(render);
+    assert.equal(heightOf(host), clamped, 'the preferred height survives a remount');
+    assert.equal(harness.collect(host, harness.byClass('stwd-artifacts')).length, 1);
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
+/**
+ * The graph is a canvas: it zooms from the toolbar or the keyboard, pans on a drag,
+ * and resets on a double click — all without changing which node opens a session.
+ */
+test('the agent graph is a canvas that zooms, pans and resets', async () => {
+  const { factory } = await loadClientFactory();
+  const harness = createRenderHarness();
+  const instance = factory((name) => (name === 'react' ? harness.stub : {}));
+  const { ctx, registered } = createClientContext();
+  instance.apply(ctx);
+
+  const props = {
+    now: () => 1700000000000,
+    loadRun: async () => ({ status: 'empty', dir: '', artifacts: [] }),
+    useProjection: (key) => (key === 'subagentCatalog' ? [
+      { id: 'child-a', mode: 'one-shot', label: 'pm · 写规格', createdAt: 1 },
+      { id: 'child-b', mode: 'continuable', label: 'architect · 出方案', createdAt: 2 },
+    ] : undefined),
+    useSessions: (selector) => selector({ byId: {}, projectionsBySession: {} }),
+    useSessionStatus: (selector) => selector(new Map()),
+    openSession: () => {},
+    openFile: () => {},
+  };
+  const render = panelRender(registered, 'session-canvas', props);
+  const stageOf = (host) => harness.collect(host, harness.byClass('stwd-graph-stage'))[0];
+  const viewOf = (host) => harness.collect(host, harness.byClass('stwd-graph-view'))[0];
+
+  let host = await harness.settle(render);
+  assert.match(String(stageOf(host).props.style.transform), /scale\(1\)/, 'the canvas opens at 100%');
+  assert.match(harness.textOf(harness.collect(host, harness.byClass('stwd-graph-hint'))[0]), /拖空白平移/, 'the pan/zoom hint is visible');
+  const tools = harness.collect(host, harness.byClass('stwd-graph-tool'));
+  assert.deepEqual(tools.map(harness.textOf), ['−', '100%', '+', '⤢', '辐射', '鱼骨', '树状', '⟲'], 'the zoom, layout presets and re-layout controls are wired to the canvas');
+
+  // Toolbar zoom in, then the keyboard zooms out.
+  tools[2].props.onClick();
+  host = await harness.settle(render);
+  assert.match(String(stageOf(host).props.style.transform), /scale\(1\.12\)/);
+  assert.equal(harness.textOf(harness.collect(host, harness.byClass('stwd-graph-zoom'))[0]), '112%');
+  viewOf(host).props.onKeyDown({ key: '-', preventDefault: () => {} });
+  host = await harness.settle(render);
+  assert.match(String(stageOf(host).props.style.transform), /scale\(1\)/);
+
+  // Zoom in again, then drag the canvas: the content translates.
+  harness.collect(host, harness.byClass('stwd-graph-tool'))[2].props.onClick();
+  host = await harness.settle(render);
+  const view = viewOf(host);
+  view.props.onPointerDown({ button: 0, clientX: 120, clientY: 120, pointerId: 1, target: null, currentTarget: null });
+  view.props.onPointerMove({ clientX: 40, clientY: 60, pointerId: 1, target: null, currentTarget: null });
+  view.props.onPointerUp({ pointerId: 1, target: null, currentTarget: null });
+  host = await harness.settle(render);
+  assert.match(String(stageOf(host).props.style.transform), /translate\(-\d+px,-\d+px\) scale\(1\.12\)/, 'a drag pans the canvas');
+
+  // Double click on the background resets the view.
+  viewOf(host).props.onDoubleClick({ target: null });
+  host = await harness.settle(render);
+  assert.match(String(stageOf(host).props.style.transform), /translate\(0px,0px\) scale\(1\)/);
+  assert.equal(harness.textOf(harness.collect(host, harness.byClass('stwd-graph-zoom'))[0]), '100%');
+});
+
+/**
+ * The panel counts the host's own task list — the Agent Teams board first, the
+ * Session's todo list second — and never renders a task row of its own.
+ */
+test('the panel counts the native task list without ever listing its tasks', async () => {
+  const { factory } = await loadClientFactory();
+  const harness = createRenderHarness();
+  const instance = factory((name) => (name === 'react' ? harness.stub : {}));
+  const { ctx, registered } = createClientContext();
+  instance.apply(ctx);
+
+  const renderWith = (projections) => panelRender(registered, 'session-task', {
+    now: () => 1700000000000,
+    loadRun: async () => ({ status: 'empty', dir: '', artifacts: [] }),
+    useProjection: (key) => projections[key],
+  });
+
+  // 1) The shared board wins when it carries tasks; the todo list is not consulted.
+  let host = await harness.settle(renderWith({
+    agentTeam: {
+      enabled: true,
+      tasks: [
+        { id: 'b1', subject: '板任务甲', status: 'completed' },
+        { id: 'b2', subject: '板任务乙', status: 'in_progress' },
+      ],
+    },
+    todos: [{ content: '待办甲', status: 'completed' }, { content: '待办乙', status: 'pending' }],
+  }));
+  let text = host.map((node) => harness.textOf(node)).join('\n');
+  assert.match(text, /1\/2/);
+  assert.match(text, /Agent Teams 任务板/);
+  assert.equal(text.indexOf('板任务甲') < 0, true, 'board task text stays out of the panel');
+  assert.equal(text.indexOf('待办甲') < 0, true, 'todo text stays out of the panel');
+
+  // 2) Without a board the Session's own todo list is counted instead.
+  host = await harness.settle(renderWith({
+    agentTeam: { enabled: false, tasks: [{ id: 'b1', subject: '不应出现', status: 'completed' }] },
+    todos: [
+      { content: '待办甲', status: 'completed' },
+      { content: '待办乙', status: 'in_progress' },
+      { content: '待办丙', status: 'pending' },
+    ],
+  }));
+  text = host.map((node) => harness.textOf(node)).join('\n');
+  assert.match(text, /1\/3/);
+  assert.match(text, /会话任务列表/);
+  assert.equal(text.indexOf('待办甲') < 0, true);
+
+  // 3) No native tasks at all means an honest empty bar, not a fabricated one.
+  host = await harness.settle(renderWith({}));
+  text = host.map((node) => harness.textOf(node)).join('\n');
+  assert.match(text, /原生任务列表为空/);
+  assert.equal(harness.collect(host, harness.byClass('stwd-tseg')).length, 0);
+});
+
+/**
+ * The board is graph-only: there is no list mode, the native task progress bar
+ * stays, and agents are opened from their cards.
+ */
+test('the panel keeps the task bar and has no list mode', async () => {
+  const { factory } = await loadClientFactory();
+  const harness = createRenderHarness();
+  const instance = factory((name) => (name === 'react' ? harness.stub : {}));
+  const { ctx, registered } = createClientContext();
+  instance.apply(ctx);
+
+  const opened = [];
+  const props = {
+    now: () => 1700000000000,
+    loadRun: async () => ({ status: 'empty', dir: '', artifacts: [] }),
+    useProjection: (key) => (key === 'subagentCatalog' ? [
+      { id: 'child-a', mode: 'one-shot', label: 'pm · 写规格', createdAt: 1 },
+      { id: 'child-b', mode: 'continuable', label: 'architect · 出方案', createdAt: 2 },
+    ] : undefined),
+    useSessions: (selector) => selector({ byId: {}, projectionsBySession: {} }),
+    useSessionStatus: (selector) => selector(new Map([['child-a', { running: false }]])),
+    openSession: (id, mode) => opened.push([id, mode]),
+    openFile: () => {},
+  };
+  const render = panelRender(registered, 'session-list', props);
+
+  const host = await harness.settle(render);
+  assert.equal(harness.collect(host, harness.byClass('stwd-viewtab')).length, 0, 'the list/graph switch is gone');
+  assert.equal(harness.collect(host, harness.byClass('stwd-arow')).length, 0, 'the list roster is gone');
+  assert.equal(harness.collect(host, harness.byClass('stwd-gnode')).length, 2, 'the graph is the only roster');
+  assert.ok(harness.collect(host, harness.byClass('stwd-tasks')).length >= 1, 'the native task progress bar stays');
+  const mains = harness.collect(host, harness.byClass('stwd-gnode-main'));
+  mains[0].props.onClick();
+  assert.equal(opened.length, 1, 'a card still opens the child session');
+  const panelText = host.map((node) => harness.textOf(node)).join('\n');
+  assert.equal(panelText.indexOf('任务列表') >= 0, true, 'the native list is pointed at, not copied');
+});
+
+/**
+ * Nothing invented: an agent whose Session recorded no projections shows a pending
+ * model and no usage instead of a guessed route.
+ */
+test('an agent without recorded projections degrades honestly', async () => {
+  const { factory } = await loadClientFactory();
+  const harness = createRenderHarness();
+  const instance = factory((name) => (name === 'react' ? harness.stub : {}));
+  const { ctx, registered } = createClientContext();
+  instance.apply(ctx);
+
+  const props = {
+    now: () => 1700000000000,
+    loadRun: async () => ({ status: 'empty', dir: '', artifacts: [] }),
+    useProjection: (key) => (key === 'subagentCatalog' ? [
+      { id: 'child-bare', mode: 'one-shot', label: 'reviewer · 还没开始' },
+    ] : undefined),
+    useSessions: (selector) => selector({ byId: {}, projectionsBySession: {} }),
+    useSessionStatus: (selector) => selector(new Map()),
+    openSession: () => {},
+    openFile: () => {},
+  };
+  const host = await harness.settle(panelRender(registered, 'session-bare', props));
+  const main = harness.collect(host, harness.byClass('stwd-gnode-main'))[0];
+  assert.ok(main, 'the bare agent still draws a node');
+  const text = harness.textOf(main);
+  assert.match(text, /模型待定/, 'no model is invented');
+  assert.match(text, /—/, 'no usage is invented');
+  assert.match(String(main.props['aria-label']), /待开始/);
+});
+
+/**
+ * The run directory supplies artifacts only: the panel never reads 03-plan.json or
+ * draws task nodes from it any more.
+ */
+test('the run directory supplies artifacts only, collapsed until asked for', async () => {
+  const { factory } = await loadClientFactory();
+  const harness = createRenderHarness();
+  const instance = factory((name) => (name === 'react' ? harness.stub : {}));
+
+  const listings = {
+    'tmp/superbot': [
+      { name: '1112-0930-old', type: 'directory' },
+      { name: '1113-1518-demo', type: 'directory' },
+    ],
+    'tmp/superbot/1113-1518-demo': [
+      { name: 'run.json', type: 'file', size: 120 },
+      { name: '03-plan.json', type: 'file', size: 400 },
+    ],
+    'tmp/superbot/1113-1518-demo/reports': [{ name: 'qa.md', type: 'file', size: 3000 }],
+    'tmp/superbot/1112-0930-old': [],
+  };
+  const reads = {
+    'tmp/superbot/1113-1518-demo/run.json': JSON.stringify({
+      status: 'running',
+      updatedAt: '2026-11-13T07:20:00.000Z',
+      tasks: { T1: { status: 'done' } },
+    }),
+    'tmp/superbot/1113-1518-demo/03-plan.json': JSON.stringify({
+      tasks: [{ id: 'T1', title: '导出接口', role: 'backend-dev', files: ['src/export.js'], dependsOn: [] }],
+    }),
+  };
+  const calls = [];
+  const workspaceFiles = {
+    list: async (sessionId, path) => {
+      calls.push(['list', path]);
+      return listings[path] === undefined
+        ? { ok: false, error: { message: 'workspace-file/not-found', code: 'workspace-file/not-found' } }
+        : { ok: true, value: { path, entries: listings[path], truncated: false } };
+    },
+    read: async (sessionId, path) => {
+      calls.push(['read', path]);
+      return reads[path] === undefined
+        ? { ok: false, error: { message: 'workspace-file/not-found', code: 'workspace-file/not-found' } }
+        : { ok: true, value: { text: reads[path], absolutePath: path, version: 'v1', offset: 1, lines: 1, eof: true } };
+    },
+  };
+
+  const { ctx, registered } = createClientContext({
+    remote: { session: { modelCatalog: async () => ({ ok: true, value: { groups: [] } }) }, workspaceFiles },
+  });
+  instance.apply(ctx);
+
+  const entry = panelEntry(registered);
+  const face = entry.options.inject('session-run07');
+  const facts = await face.loadRun();
+  assert.equal(facts.dir, 'tmp/superbot/1113-1518-demo', 'the newest run directory wins');
+  assert.equal(facts.run, undefined, 'run.json is only used to rank directories');
+  assert.ok(facts.artifacts.some((item) => item.name === 'reports/qa.md'), 'nested reports are listed');
+  assert.ok(calls.some(([method, path]) => method === 'list' && path === 'tmp/superbot'), 'discovery walks the run root');
+  assert.equal(calls.some(([method, path]) => method === 'read' && path.endsWith('03-plan.json')), false, 'the plan is never read');
+
+  const opened = [];
+  const render = () => entry.component({
+    ...face,
+    sessionId: 'session-run07',
+    now: () => 1700000000000,
+    useProjection: () => undefined,
+    openFile: (path) => opened.push(path),
+  });
+
+  // Collapsed by default: the artifacts exist but stay folded.
+  let host = await harness.settle(render);
+  assert.equal(harness.collect(host, harness.byClass('stwd-artrow')).length, 0, 'artifacts start collapsed');
+  assert.equal(harness.collect(host, harness.byClass('stwd-gnode')).length, 0, 'the plan never becomes nodes');
+  const head = harness.collect(host, harness.byClass('stwd-artifacts-head'))[0];
+  assert.ok(head, 'the artifacts section has a toggle');
+  head.props.onClick();
+  host = await harness.settle(render);
+  const rows = harness.collect(host, harness.byClass('stwd-artrow'));
+  assert.ok(rows.length >= 1, 'opening the section lists the files');
+  rows[0].props.onClick();
+  assert.equal(opened.length, 1, 'clicking an artifact opens it');
+  assert.ok(harness.collect(host, harness.byClass('stwd-artifacts-dir')).length === 1, 'the run directory is shown');
+});
+
+/**
+ * The injected face is how a row reaches the host: a child Session opens as a
+ * `subagentchat` resource in the right Sidebar, an artifact as a `file` resource,
+ * and the panel can ask the host to read a child's projections.
+ */
+test('the panel face opens child sessions, artifacts and asks for child projections', async () => {
+  const { factory } = await loadClientFactory();
+  const harness = createRenderHarness();
+  const instance = factory((name) => (name === 'react' ? harness.stub : {}));
+  const calls = [];
+  const refreshed = [];
+  const { ctx, registered } = createClientContext({
+    sidebarRight: {
+      mounted: { getSnapshot: () => undefined, subscribe: () => () => {} },
+      openTab: (kind) => calls.push(['tab', kind]),
+      openResource: (address, options) => calls.push(['resource', address, options]),
+    },
+    sessions: {
+      list: { getSnapshot: () => ({ projectionsBySession: {} }), subscribe: () => () => {} },
+      refreshProjections: async (id) => { refreshed.push(id); },
+    },
+  });
+  instance.apply(ctx);
+
+  const face = panelEntry(registered).options.inject('session-run09');
+  assert.equal(typeof face.now(), 'number', 'the face supplies the panel clock');
+
+  face.openSession('child-7', 'one-shot');
+  const chat = calls.find(([kind]) => kind === 'resource');
+  assert.ok(chat, 'opening a child uses the Sidebar resource path');
+  assert.equal(chat[1], 'dsh-resource://subagentchat/session/child-7?parent=session-run09&mode=one-shot');
+  assert.equal(chat[2].kind, 'subagentchat', 'the claim names the subagentchat type');
+
+  face.openFile('tmp/superbot/1113-1518-demo/reports/qa.md');
+  const file = calls.filter(([kind]) => kind === 'resource').pop();
+  assert.equal(file[1], 'dsh-resource://file/session/session-run09/tmp/superbot/1113-1518-demo/reports/qa.md');
+
+  face.openPanel();
+  assert.deepEqual(calls.filter(([kind]) => kind === 'tab'), [['tab', 'superbot']], 'the panel opens by kind');
+
+  await face.refreshChild('child-9');
+  assert.deepEqual(refreshed, ['child-9'], 'the face asks the host for a child projection read');
+});
+
+/**
+ * The configuration surface is the densest part of the panel. Render it against a
+ * settled native settings snapshot plus a live model catalog and assert the table
+ * shape: column headers, the defaults row, one row per role, three selects each.
+ */
+test('the settings section renders the model table with a defaults row and one row per role', async () => {
+  const { factory } = await loadClientFactory();
+  const harness = createRenderHarness();
+
+  const snapshot = {
+    status: 'ready',
+    writable: true,
+    revision: 4,
+    value: {
+      defaults: { provider: '', model: '', effort: '' },
+      roles: { 'backend-dev': { provider: 'ctaigw', model: 'glm-5.3', effort: 'high' } },
+    },
+  };
+  const catalog = {
+    ok: true,
+    value: {
+      groups: [
+        { id: 'ctaigw', name: 'CTAIGW', models: [{ id: 'glm-5.3', name: 'GLM 5.3', reasoning: { efforts: [{ id: 'high', name: 'High' }] } }] },
+      ],
+    },
+  };
+
+  const instance = factory((name) => (name === 'react' ? harness.stub : {}));
+  const { ctx, registered } = createClientContext({
+    remote: { session: { modelCatalog: async () => catalog } },
+    settings: { get: () => ({ getSnapshot: () => snapshot, subscribe: () => () => {}, mutate: async () => true }) },
+  });
+  instance.apply(ctx);
+
+  const settingsEntry = registered.find((entry) => entry.options.name === 'settings.section');
+  assert.ok(settingsEntry, 'the settings section is registered');
+  const { collect, labelOf, textOf, byClass } = harness;
+  const host = await harness.settle(() => settingsEntry.component({}));
+
+  assert.deepEqual(collect(host, byClass('stwd-th')).map(labelOf), ['角色', '提供方', '模型', '思考强度', '来源']);
+
+  const rows = collect(host, byClass('stwd-tr')).filter((node) => node.props.className.indexOf('stwd-tr-head') < 0);
+  assert.equal(rows.length, 8, 'one defaults row plus one row per role');
+  assert.match(rows[0].props.className, /stwd-tr-default/);
+  assert.equal(collect(host, (node) => node.type === 'select').length, 24, 'three route selects per row');
+
+  const selects = collect(host, (node) => node.type === 'select');
+  assert.equal(selects[0].props.value, '', 'the defaults provider inherits the parent agent');
+  const backend = selects.slice(9, 12);
+  assert.deepEqual(backend.map((node) => node.props.value), ['ctaigw', 'glm-5.3', 'high'], 'a configured role carries its own route');
+  const options = collect(host, (node) => node.type === 'option').map(labelOf);
+  assert.ok(options.includes('GLM 5.3'), `the live catalog feeds the model select (options: ${options.join(' | ')})`);
+
+  const sources = collect(host, (node) => typeof node.props.className === 'string'
+    && node.props.className.split(/\s+/).some((name) => name.indexOf('stwd-pill-src-') === 0));
+  assert.ok(sources.length >= 8, 'every row shows where its route comes from');
+  assert.ok(sources.some((node) => node.props.className.indexOf('stwd-pill-src-role') >= 0), 'the configured role is marked as custom');
+  assert.ok(sources.some((node) => node.props.className.indexOf('stwd-pill-src-inherit') >= 0), 'unconfigured roles are marked as inherited');
+
+  const toolbar = collect(host, byClass('stwd-toolbar'));
+  assert.equal(toolbar.length, 1, 'one save toolbar');
+  assert.match(textOf(toolbar[0]), /已同步/, 'an untouched form reports itself in sync');
+  const save = collect(toolbar, (node) => node.type === 'button' && node.props.className.indexOf('stwd-btn-primary') >= 0)[0];
+  assert.ok(save, 'the primary save action is present');
+  assert.equal(save.props.disabled, true, 'save is disabled until something changes');
+});
+
+/**
+ * The stylesheet is the one dependency the panel shares with the host: every
+ * `--dsw-*` reference must be a real theme token, tokens outside the published
+ * alias catalog must carry a fallback, and every selector must stay scoped.
+ */
+test('the panel stylesheet stays scoped and uses only host theme tokens', async () => {
+  const { factory } = await loadClientFactory();
+  const source = readFileSync(new URL('../client.js', import.meta.url), 'utf8');
+
+  // Published by `cordis_inspect_query` Theme.listTokens on this host.
+  const catalog = new Set([
+    '--dsw-alias-bg-base',
+    '--dsw-alias-bg-layer-1',
+    '--dsw-alias-bg-layer-2',
+    '--dsw-alias-bg-overlay',
+    '--dsw-alias-border-l1',
+    '--dsw-alias-border-l2',
+    '--dsw-alias-brand-primary',
+    '--dsw-alias-label-primary',
+    '--dsw-alias-label-secondary',
+    '--dsw-alias-state-error-primary',
+    '--dsw-alias-state-idle-primary',
+    '--dsw-alias-state-success-primary',
+    '--dsw-alias-state-warn-primary',
+    '--dsw-specific-sidebar-fill',
+  ]);
+  // Named in the client bundles of the shipped host packages (Agent Teams panel,
+  // Plugin Manager page, right Sidebar).
+  const nativeExtras = new Set([
+    '--dsw-alias-label-tertiary',
+    '--dsw-alias-label-caption',
+    '--dsw-alias-border-l3',
+    '--dsw-alias-border-l4',
+    '--dsw-alias-bg-layer-3',
+    '--dsw-alias-bg-module-platform',
+    '--dsw-alias-interactive-bg-hover',
+    '--dsw-alias-interactive-bg-active',
+    '--dsw-alias-state-business-primary',
+    '--dsw-alias-state-business-tertiary',
+    '--dsw-alias-button-primary-fill',
+    '--dsw-alias-label-primary-foreground',
+    '--dsw-elevation-panel',
+    '--dsw-elevation-prominent',
+    '--dsw-elevation-stroke',
+    '--dsw-elevation-stroke-color',
+    '--dsw-focus-ring-color',
+  ]);
+
+  const used = new Set([...source.matchAll(/--dsw-[a-z0-9-]+/g)].map((match) => match[0]));
+  assert.ok(used.size > 10, 'the board must be styled with theme tokens');
+
+  const unknown = [...used].filter((token) => !catalog.has(token) && !nativeExtras.has(token));
+  assert.deepEqual(unknown, [], `unknown theme tokens: ${unknown.join(', ')}`);
+
+  // Anything the Theme catalog does not publish needs a fallback in every var() use.
+  for (const token of used) {
+    if (catalog.has(token)) continue;
+    const bare = new RegExp('var\\(' + token + '\\s*\\)');
+    assert.doesNotMatch(source, bare, `${token} needs a fallback: var(${token}, …)`);
+    const withFallback = new RegExp('var\\(' + token + '\\s*,');
+    assert.match(source, withFallback, `${token} is never given a fallback value`);
+  }
+
+  const literals = [...source.matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map((match) => match[0].toLowerCase());
+  const artwork = new Set([
+    '#fff',
+    '#5b5cff',
+    '#8b5cf6',
+    '#14c16f',
+    '#0fbea6',
+    '#2f7bff',
+    '#f97316',
+    '#f59e0b',
+    '#ef4444',
+    '#64748b',
+    '#5b45c8',
+  ]);
+  const colors = literals.filter((value) => !artwork.has(value));
+  assert.deepEqual(colors, [], `literal colors are artwork-only, found: ${colors.join(', ')}`);
+
+  // Render the panel and read the stylesheet it ships: scoped, balanced, host scale.
+  const harness = createRenderHarness();
+  const instance = factory((name) => (name === 'react' ? harness.stub : {}));
+  const { ctx, registered } = createClientContext();
+  instance.apply(ctx);
+  const entry = panelEntry(registered);
+  const face = entry.options.inject('session-style');
+  const tree = entry.component({ ...face, sessionId: 'session-style', loadRun: async () => ({ status: 'empty', dir: '', run: null, plan: null, artifacts: [] }) });
+
+  const collectStyles = (element, found = []) => {
+    if (element === null || element === undefined) return found;
+    if (typeof element !== 'object') return found;
+    if (Array.isArray(element)) {
+      for (const item of element) collectStyles(item, found);
+      return found;
+    }
+    if (element.type === 'style') {
+      found.push(element);
+      return found;
+    }
+    if (typeof element.type === 'function') {
+      return collectStyles(element.type.prototype instanceof harness.stub.Component
+        ? new element.type(element.props).render()
+        : element.type(element.props), found);
+    }
+    for (const child of element.children || []) collectStyles(child, found);
+    return found;
+  };
+
+  const styleNodes = collectStyles(tree);
+  assert.ok(styleNodes.length >= 1, 'the board ships its own stylesheet');
+  const css = styleNodes[0].children.join('\n');
+  assert.equal((css.match(/{/g) || []).length, (css.match(/}/g) || []).length, 'stylesheet braces must balance');
+  assert.doesNotMatch(css, /;;/, 'stylesheet must not carry empty declarations');
+  const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const selectors = [...withoutComments.matchAll(/([^{}]+)\{/g)].map((match) => match[1].trim());
+  const KEYFRAME_STEP = /^(from|to|\d+%)(,\s*(from|to|\d+%))*$/;
+  const unscoped = selectors.filter((selector) => selector !== ''
+    && selector.charAt(0) !== '@'
+    && !KEYFRAME_STEP.test(selector)
+    && selector.indexOf('.stwd-') < 0);
+  assert.deepEqual(unscoped, [], `styles must stay scoped to the plugin prefix: ${unscoped.join(' | ')}`);
+  for (const needle of ['font-size:14px', 'font-size:11px', 'border:.5px', 'overflow-y:auto']) {
+    assert.ok(css.includes(needle), `styles must keep the host scale, missing ${needle}`);
+  }
+});
+
+
+/**
+ * Layout helpers the board exposes for unit tests.
+ * @param {Function} factory the loaded client factory.
+ * @returns {object} resolveDagPositions, dagLayout and size constants.
+ */
+function clientLayoutApi(factory) {
+  const harness = createRenderHarness();
+  const instance = factory((name) => (name === 'react' ? harness.stub : {}));
+  assert.ok(instance.__test, 'the client exports layout helpers for tests');
+  return instance.__test;
+}
+
+/**
+ * A card without a saved position sits next to the actual Lead, even when the
+ * Lead (and other cards) were dragged far from the virgin default cluster.
+ * Saved coordinates stay put; leftover non-finite values are ignored.
+ */
+test('a new agent without a saved position is placed near the actual Lead', async () => {
+  const { factory } = await loadClientFactory();
+  const t = clientLayoutApi(factory);
+  const leadId = t.LEAD_NODE_ID;
+  const rows = [
+    { id: 'child-old', state: 'running', role: 'pm' },
+    { id: 'child-new', state: 'pending', role: 'backend-dev' },
+  ];
+  const oldSlot = { x: 800 + t.NODE_W + t.NODE_GAP_Y, y: 600 };
+  const positions = t.resolveDagPositions(rows, 'map', {
+    [leadId]: { x: 800, y: 600 },
+    'child-old': oldSlot,
+    leftover: { x: Number.POSITIVE_INFINITY, y: 12 },
+  });
+  assert.equal(positions[leadId].x, 800, 'the dragged Lead stays where it is');
+  assert.equal(positions[leadId].y, 600);
+  assert.deepEqual(positions['child-old'], oldSlot, 'existing overrides must not move');
+  const placed = positions['child-new'];
+  assert.ok(placed, 'the new agent receives a position');
+  assert.ok(Number.isFinite(placed.x) && Number.isFinite(placed.y), 'the new position is finite');
+  const dist = Math.hypot(placed.x - 800, placed.y - 600);
+  const cluster = t.NODE_W + t.NODE_GAP_Y;
+  assert.ok(dist > 40, 'the new card is not stacked on the Lead');
+  assert.ok(dist <= cluster + t.NODE_H + t.NODE_GAP_Y, `the new card stays in the Lead cluster, dist=${dist}`);
+  assert.ok(placed.x > 400 && placed.y > 200, 'the new card is not left at the virgin origin cluster');
+
+  const keptFar = t.resolveDagPositions(rows, 'map', {
+    [leadId]: { x: 800, y: 600 },
+    'child-old': { x: 5000, y: 4000 },
+  });
+  assert.deepEqual(keptFar['child-old'], { x: 5000, y: 4000 }, 'a far saved position is not teleported');
+  const recovered = t.resolveDagPositions(rows, 'map', {
+    [leadId]: { x: 800, y: 600 },
+    'child-new': { x: 'nope', y: 1 },
+  });
+  const recoveredDist = Math.hypot(recovered['child-new'].x - 800, recovered['child-new'].y - 600);
+  assert.ok(Number.isFinite(recovered['child-new'].x), 'non-finite leftovers are ignored');
+  assert.ok(recoveredDist <= cluster + t.NODE_H + t.NODE_GAP_Y, 'a broken override is placed near the Lead');
+});
+
+/**
+ * First generation (no overrides) stays in one tight map around the Lead. When
+ * only the Lead has been moved, the same compact arrangement translates to it.
+ */
+test('initial generation stays in a compact cluster around the actual Lead', async () => {
+  const { factory } = await loadClientFactory();
+  const t = clientLayoutApi(factory);
+  const leadId = t.LEAD_NODE_ID;
+  const roles = ['pm', 'architect', 'backend-dev', 'frontend-dev', 'qa-engineer', 'browser-tester', 'reviewer'];
+  const rows = roles.map((role, index) => ({ id: 'child-' + role, state: 'pending', role, createdAt: index + 1 }));
+  const fresh = t.resolveDagPositions(rows, 'map', {});
+  const ids = [leadId].concat(rows.map((row) => row.id));
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const id of ids) {
+    const pos = fresh[id];
+    assert.ok(pos && Number.isFinite(pos.x) && Number.isFinite(pos.y), id + ' has a finite position');
+    minX = Math.min(minX, pos.x);
+    minY = Math.min(minY, pos.y);
+    maxX = Math.max(maxX, pos.x + t.NODE_W);
+    maxY = Math.max(maxY, pos.y + t.NODE_H);
+  }
+  const bboxW = maxX - minX;
+  const bboxH = maxY - minY;
+  assert.ok(bboxW < 1600 && bboxH < 1600, `the default map is compact, bbox=${bboxW}x${bboxH}`);
+  assert.ok(maxX < 2000 && maxY < 2000 && minX > -200 && minY > -200, 'no card is thousands of px away');
+
+  const moved = t.resolveDagPositions(rows, 'map', { [leadId]: { x: 800, y: 600 } });
+  assert.equal(moved[leadId].x, 800);
+  assert.equal(moved[leadId].y, 600);
+  for (const row of rows) {
+    assert.equal(moved[row.id].x - moved[leadId].x, fresh[row.id].x - fresh[leadId].x, row.id + ' keeps its map offset from Lead');
+    assert.equal(moved[row.id].y - moved[leadId].y, fresh[row.id].y - fresh[leadId].y, row.id + ' keeps its map offset from Lead');
+  }
+});
+
+/**
+ * Geometry ignores duration, token and description changes, so a 1s tick can
+ * refresh labels without moving any card.
+ */
+test('a duration-only update does not change layout positions', async () => {
+  const { factory } = await loadClientFactory();
+  const t = clientLayoutApi(factory);
+  const first = [{ id: 'child-run', state: 'running', role: 'backend-dev', elapsedMs: 1000, tokens: { total: 10 }, description: 'first' }];
+  const later = [{ id: 'child-run', state: 'running', role: 'backend-dev', elapsedMs: 5000, tokens: { total: 88 }, description: 'later' }];
+  assert.equal(t.layoutRowsSignature(first), t.layoutRowsSignature(later), 'elapsed and tokens are not part of the layout signature');
+  const a = t.dagLayout({ rows: first, positions: {}, layout: 'map' });
+  const b = t.dagLayout({ rows: later, positions: {}, layout: 'map' });
+  assert.equal(a.lead.x, b.lead.x);
+  assert.equal(a.lead.y, b.lead.y);
+  assert.equal(a.nodes[0].x, b.nodes[0].x);
+  assert.equal(a.nodes[0].y, b.nodes[0].y);
+});
+
+/**
+ * The same near-Lead placement shows up on the canvas when a new specialist
+ * is dispatched onto a board whose Lead was already dragged away.
+ */
+test('a newly dispatched card appears near the dragged Lead on the canvas', async () => {
+  const { factory } = await loadClientFactory();
+  const harness = createRenderHarness();
+  const instance = factory((name) => (name === 'react' ? harness.stub : {}));
+  const t = instance.__test;
+  const { ctx, registered } = createClientContext();
+  instance.apply(ctx);
+
+  const { storage } = isolatedStorage();
+  const previousWindow = globalThis.window;
+  globalThis.window = { localStorage: storage };
+  try {
+    storage.setItem('dsh-super-bot.panel.positions', JSON.stringify({
+      'session-spawn-near': {
+        [t.LEAD_NODE_ID]: { x: 800, y: 600 },
+        'child-old': { x: 800 + t.NODE_W + t.NODE_GAP_Y, y: 600 },
+      },
+    }));
+    let catalog = [
+      { id: 'child-old', mode: 'one-shot', label: 'pm · 已有规格', createdAt: 1 },
+    ];
+    const props = {
+      now: () => 1700000000000,
+      loadRun: async () => ({ status: 'empty', dir: '', artifacts: [] }),
+      useProjection: (key) => (key === 'subagentCatalog' ? catalog : undefined),
+      useSessions: (selector) => selector({ byId: {}, projectionsBySession: {} }),
+      useSessionStatus: (selector) => selector(new Map()),
+      openSession: () => {},
+      openFile: () => {},
+    };
+    const render = panelRender(registered, 'session-spawn-near', props);
+    let host = await harness.settle(render);
+    const leadBefore = boxMetrics(harness.collect(host, harness.byClass('stwd-leadnode'))[0]);
+    const oldBefore = boxMetrics(harness.collect(host, harness.byClass('stwd-gnode'))[0]);
+    catalog = [
+      catalog[0],
+      { id: 'child-new', mode: 'one-shot', label: 'backend-dev · 新来的接口', createdAt: 2 },
+    ];
+    host = await harness.settle(render);
+    const leadAfter = boxMetrics(harness.collect(host, harness.byClass('stwd-leadnode'))[0]);
+    const cards = harness.collect(host, harness.byClass('stwd-gnode'));
+    const oldAfter = boxMetrics(cards.find((node) => harness.textOf(node).indexOf('已有规格') >= 0));
+    const neu = boxMetrics(cards.find((node) => harness.textOf(node).indexOf('新来的接口') >= 0));
+    assert.equal(oldAfter.left - leadAfter.left, oldBefore.left - leadBefore.left, 'the existing card keeps its offset from the Lead');
+    assert.equal(oldAfter.top - leadAfter.top, oldBefore.top - leadBefore.top, 'the existing card keeps its offset from the Lead');
+    const dist = Math.hypot(neu.left - leadAfter.left, neu.top - leadAfter.top);
+    const cluster = t.NODE_W + t.NODE_GAP_Y;
+    assert.ok(dist <= cluster + t.NODE_H + t.NODE_GAP_Y, `the new canvas card is near the Lead, dist=${dist}`);
+    assert.ok(dist > 40, 'the new card is not stacked on the Lead');
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});

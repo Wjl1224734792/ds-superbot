@@ -1,0 +1,26 @@
+# DS Super Bot — a long-lived engineering team for DeepSeek Harness.
+#
+# One Host row. Through DSH-native extension points the plugin registers:
+#   - the `superbot_dispatch` tool (one role per call, over ctx.subagents);
+#   - the `superbot_board` tool (the Agent Teams shared task board);
+#   - the `/superbot-roster` human command;
+#   - the native Config namespace `superbot` (per-role model / effort, edited
+#     from Settings → Super Bot through configForms);
+#   - the bundled Super Bot skills on ctx.skills;
+#   - the per-session right-sidebar team panel (client half, declared in
+#     package.json `dsh.client`).
+#
+# One deliberate omission:
+#   * **No Agent Preset.** A preset is a user-selectable session mode, and a
+#     specialist mode a human can switch into would bypass the plan gate,
+#     baseline guard, QA and review that make Super Bot worth using. Every child
+#     runs the shipped `standard` composition; the role charter is prepended to
+#     the task prompt.
+#
+# Per-role model routes live in the project's `superbot.config.json`
+# (`modelRouting.<role>`), versioned with the repository and checked by
+# `scripts/validate-config.mjs`; the Settings page is the fallback layer, not the
+# first source of truth.
+- insert:
+    - id: superbot
+      name: dsh-super-bot

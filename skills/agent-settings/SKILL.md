@@ -1,0 +1,38 @@
+---
+name: agent-settings
+description: Super Bot 子代理模型与思考强度配置（DSH）。模型在「设置 → Super Bot」里逐角色配置（provider / model / 思考强度）；会话标题栏的 Super Bot 图标打开该会话的右侧栏团队面板，默认分层工作流图里每个智能体一个节点（角色 / 实际模型 / 任务 / 状态 / 耗时 / 用量），点节点进子会话。项目根 superbot.config.json 的 modelRouting 对该角色优先。Use when the user asks which model or thinking effort a Super Bot subagent uses, wants to change a role's model/effort, or wants to watch a Super Bot run on the right-sidebar team panel.
+---
+
+# 子代理模型与思考强度配置（DSH）
+
+> 目标：让用户**看得见、改得动、验得了** 7 个子代理的模型与思考强度。DSH 侧两块入口各管一件事：**设置 → Super Bot** 里是这张按角色的模型表格（逐角色 provider / model / 思考强度 + 默认兜底行）；运行情况看**每会话一份的右侧栏团队面板**（会话标题栏的 Super Bot 图标打开，或直接点右侧栏里已打开的「Super Bot 团队」tab）——默认分层工作流图，节点上就写着实际模型、任务与状态；任务进度看面板顶部那条原生任务进度条（只给计数，任务本身去 DSH 自带的任务列表 / 原生 Team 面板读）。
+
+## 生效规则（唯一事实链）
+
+1. **用户当次指定**（本轮明确说用哪个模型/档位）——派发时按用户指令，并提示这与配置不一致。
+2. **项目级** `<项目根>/superbot.config.json` 的 `modelRouting.<role>`（`{ "model": "provider/model", "effort": "…" }`）——**仓库优先**，改完跑 `scripts/validate-config.mjs`，下一次派单即生效。
+3. **设置 → Super Bot 里的该角色配置**（DSH 原生 Settings 命名空间 `superbot`，写在 profile 的 `cordis.patch.yml` 的 `- id: superbot` 行）。
+4. **设置页的默认配置**——角色没有单独配置时套用。
+5. **继承主代理**——以上都没有时。
+
+派发结果里会回显本次实际生效的路由与来源（`from superbot.config.json` / `from Settings → Super Bot`（设置页）/ `inherited parent model`），用它核对，不要猜。
+
+## 你要做的
+
+1. **先看**：让用户点会话标题栏的 Super Bot 图标、或直接点右侧栏里已打开的「Super Bot 团队」tab 看运行；模型值去「设置 → Super Bot」读，也可以直接看 `superbot.config.json` 的 `modelRouting`。把「角色 / 生效模型 / 思考强度 / 来源」照实讲，不要编默认值。
+2. **改**：
+   - 用户要「看着改」→ 让他在「设置 → Super Bot」里按角色选 provider / model / 思考强度，点保存（设置页会做真实校验并回显）。
+   - 用户要改仓库级 → 编辑项目根 `superbot.config.json` 的 `modelRouting`，跑 `node <包>/scripts/validate-config.mjs <项目根>/superbot.config.json`。
+3. **看 Agent 状态**：右侧栏团队面板默认是**分层工作流树**（Lead 左上作根，主干串起需求 → 架构 → 实施 → 质量 → 验收 → 评审 各枢纽，枢纽向右分叉卡片；节点可拖、枢纽可折叠、可隐藏已完成），每个派发一个节点：角色、**实际模型**（`model @ 思考强度`，没发过请求时写「模型待定」）、任务描述、状态（等待输入 / 运行中 / 待开始 / 已完成 / 空闲）、耗时与 tokens；**点节点主体在右侧栏打开它的子会话**，点 `⌄` 展开提供方 / 四类 token / 轮次·步骤。顶部进度条只数原生任务（`完成/总数` + 进行中 / 被阻塞 + 来源 `Agent Teams 任务板` / `会话任务列表`）——任务明细去原生 Team 面板读，或贴 `superbot_board(action="status")` 的文本快照；不要把任务列表当成面板内容去复述。
+4. **回报真实结果**：贴改后的值、校验输出、以及下一次派发回执里的路由来源。失败就是失败。
+
+## 纪律
+
+- **`provider/model` 成对**：设置页里要么都选，要么都留空（继承）；`effort` 只在该模型真实支持的集合内选，留空用模型默认档位。
+- **仓库优先**：设置页里改了但仓库 `modelRouting` 有该角色时，生效的仍是仓库值——设置页的「来源」列会标出来源，别谎报「已生效」。
+- **正文与配置分离**：`roles/*.md`、技能正文是本仓库的源文件，直接改；子代理模型只走设置页或 `superbot.config.json`，不写进技能正文。
+- **不写密钥**：只取模型名与档位，绝不回显任何 API key / baseURL。
+
+## 边界
+
+- 本技能只管「模型/档位配置 + 设置页与右侧栏团队面板怎么看」，不改子代理的职责、提示词或工具集——角色章程随派单注入，子代理跑 DSH 内置 `standard` 组合（本插件不注册 Agent Preset，角色不会出现在模式选择器里）。
