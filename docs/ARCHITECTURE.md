@@ -142,7 +142,7 @@ DSH 会话 ── 原生投影 ──▶ client.js ──▶ 右侧栏面板
 | `<project>/superbot.config.json` | 人或 agent（版本化） | 项目级配置：`modelRouting`、`docTier`、`execution.mode` 等 |
 | `<project>/.superbot/docs-state.json` | `docs-ready.mjs` | 文档就绪收据（哈希 + 评审结论） |
 | `<project>/tmp/superbot/<run>/` | 子代理产出 | 运行产物：`run.json`、`03-plan.json`、报告与证据 |
-| 浏览器 localStorage | 面板自己 | `ds-superbot.panel.filters` / `.positions` / `.camera`（纯显示状态）；旧键 `dsh-steward.panel.*` 只读回填一次 |
+| 浏览器 localStorage | 面板自己 | `ds-superbot.panel.filters` / `.positions` / `.camera`（纯显示状态）；旧键 `steward.panel.*` / `dsh-steward.panel.*` / `dsh-super-bot.panel.*` 只读回填一次 |
 
 ## 10. 安全与边界
 

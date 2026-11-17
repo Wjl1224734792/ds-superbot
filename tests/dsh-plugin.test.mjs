@@ -1601,7 +1601,7 @@ test('panel preferences written before the rename still apply and are promoted',
   instance.apply(ctx);
 
   const store = new Map();
-  store.set('dsh-steward.panel.filters', JSON.stringify({ view: 'all', hideDone: true }));
+  store.set('steward.panel.filters', JSON.stringify({ view: 'all', hideDone: true }));
   const storage = {
     getItem: (key) => (store.has(key) ? store.get(key) : null),
     setItem: (key, value) => { store.set(key, String(value)); },

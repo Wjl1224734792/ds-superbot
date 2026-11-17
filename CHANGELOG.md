@@ -28,7 +28,7 @@
 ### Notes
 
 - 运行时**零依赖**：只用 Node 内置模块；`@deepseek-ai/schemastery` 是可选 peer 依赖，用于读设置页配置。
-- **升级兼容**：重命名前的右侧栏布局（旧标签页身份 `dsh-steward`）仍会打开同一个面板；旧的 `dsh-steward.panel.*` 过滤 / 布局 / 缩放偏好会在首次读取时迁移到 `ds-superbot.panel.*`。
+- **升级兼容**：重命名前的右侧栏布局（旧标签页身份 `dsh-steward`）仍会打开同一个面板；旧的 `steward.panel.*` / `dsh-steward.panel.*` 过滤 / 布局 / 缩放偏好会在首次读取时迁移到 `ds-superbot.panel.*`。
 - 不注册 Agent Preset、不注册页面、不写私有配置文件、不自建 HTTP 桥：插件只走 DSH 原生扩展点。
 - 卸载插件不会删除项目里的 `superbot.config.json`、`.superbot/` 收据与 `tmp/superbot/` 产物。
 - 已知边界：工具守卫走 DSH 宿主内建机制，本插件不注册 `PreToolUse` 级 hook；浏览器验收按「仓库自带 Playwright → DSH 侧栏人工驱动 → 人工兜底」三级降级。

@@ -744,9 +744,9 @@ window.__ModuleLoader__.load({
     const CAMERA_KEY = 'ds-superbot.panel.camera';
     /** Keys an earlier build of this panel wrote, oldest first; read through on first use. */
     const LEGACY_PANEL_KEYS = {
-      [FILTER_KEY]: ['dsh-steward.panel.filters', 'dsh-super-bot.panel.filters'],
-      [POSITION_KEY]: ['dsh-steward.panel.positions', 'dsh-super-bot.panel.positions'],
-      [CAMERA_KEY]: ['dsh-steward.panel.camera', 'dsh-super-bot.panel.camera'],
+      [FILTER_KEY]: ['steward.panel.filters', 'dsh-steward.panel.filters', 'dsh-super-bot.panel.filters'],
+      [POSITION_KEY]: ['steward.panel.positions', 'dsh-steward.panel.positions', 'dsh-super-bot.panel.positions'],
+      [CAMERA_KEY]: ['steward.panel.camera', 'dsh-steward.panel.camera', 'dsh-super-bot.panel.camera'],
     };
 
     /**
