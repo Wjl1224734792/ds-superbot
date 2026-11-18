@@ -6,6 +6,7 @@
 
 ### Added
 
+- P2 界面：用已核对的官方加法槽接上左栏控制台（`sidebar.panellist` + `main`，同一 id `ds-superbot-console`）、顶部迷你脸（`conversation.session.header.corner`）、输入区一行字幕（`conversation.input.dock`）和「待你决定」计数；右侧现有 tab（id `ds-superbot` / kind `superbot`）改为大舞台 + 工作项详情，0.1.0 工作流树降为详情里的 DAG。眼神与动作只走 `presenceOf`，尊重 `prefers-reduced-motion`，同一时刻最多一个高能量头像。默认授权仍是 observe，不自动合并。槽位已对照安装的 DeepSeek Harness 0.2.2-rc.2 校验。
 - P1 运行时：文件型 Event Bus（`.superbot/ledger/events.jsonl`）、Steward 轻量规则 + 预留 `createModelPort` 模型接口、订阅直通（不授予任何新权限，不能扩大 Mandate 的 toolsWhitelist / scope / budget）、Watchdog 循环（进度 / 空转 / 费用）。默认授权档位仍是 observe：只记录 would-accept，不执行，不自动合并。无人 @ 时也可以提出 Candidate 工作项，但不进入 Authorized / Building，也不启动 Worker。
 - 吊销后重签 Mandate 不再覆盖同一文件：首次仍用 `MD-<workItemId>`，其后为 `MD-<workItemId>-N`（N≥2），已吊销记录作为历史副本保留。
 
@@ -14,7 +15,7 @@
 - **破坏性变更（0.2.0）**：仓库重构为 monorepo。DSH 安装入口改为 `packages/dsh-plugin`（包名仍是 `ds-superbot`）。原先对仓库根执行的 `install_bundle` 需要改路径。1.0.0 之前允许破坏性变更。
 - 产品定位升格为常驻工程组织：工作项是唯一对外产品对象；门禁脚本迁到 `packages/constitution/scripts/`，插件 `scripts/` 保留转发 shim，`node <插件包根>/scripts/docs-ready.mjs` 的退出码与 `--help` 不变。
 - 新增姊妹包 `@ds-superbot/constitution`（账本 / Policy / Mandate / Receipt / 卡片 / CLI）、`@ds-superbot/runtime`（Steward / 过滤器 / Curator / Assignment，以及 P1 的文件型 Event Bus、订阅直通、Watchdog、observe / would-accept）、`@ds-superbot/im`（三种卡、发言允许表、`presenceOf`）。
-- 放入仓 / 探 / 作 / 验占位头像（`packages/dsh-plugin/assets/residents/`，资产 README 标明「占位」）。P0 不重做左 / 顶 / 右界面；P2 槽位清单见 `docs/DEVELOPMENT.md` 与 `docs/product/INTERACTION.md`。
+- 仓 / 探 / 作 / 验占位头像（`packages/dsh-plugin/assets/residents/`，资产 README 标明「占位」）已分层，供 P2 舞台与迷你脸用 CSS 动画；正式绘制仍可后补。
 - 文档同步更新：中英文 README、仓库根 `AGENTS.md`、`docs/ARCHITECTURE.md`、`docs/DEVELOPMENT.md`、`docs/product/CONTRACT.md`、`docs/product/INTERACTION.md`。插件版本 `0.2.0`。产品名保持 ds-superbot。
 - 默认 Policy 将 `human-critical` 调到 `human-default` 之前（`auto-low` 仍最前），使纯 R3 与未命中 `auto-low` 的 `touches(prod|billing|delete|secrets)` 走到更严规则（含 `merge: human-only`）。R2 且未 touches 仍命中 `human-default`。
 - 收紧默认 `auto-low`：`when` 增加 `!touches(prod|billing|delete|secrets)`。R1 且可逆、未 touches 仍走 `auto-low`；触及 prod / billing / delete / secrets 的工作项落到 `human-critical`（`requireHuman`、`merge: human-only`、更严门禁）。表达式语言支持 `!` 取反。

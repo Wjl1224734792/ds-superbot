@@ -10,6 +10,7 @@ window.__ModuleLoader__.load({
     /** Right-Sidebar tab type: `id` keys the body/title slots, `kind` is what openTab() names. */
     const TAB_ID = 'ds-superbot';
     const TAB_KIND = 'superbot';
+    const CONSOLE_SLOT_ID = 'ds-superbot-console';
 
     const FIELDS = ['provider', 'model', 'effort'];
     /** Workspace-relative roots a Super Bot run can live at (skill contract, in this order). */
@@ -174,6 +175,49 @@ window.__ModuleLoader__.load({
         readOnly: '本部署的设置为只读。',
         conflict: '设置已在其他位置更新，请撤销后重试。',
         invalidRoute: '每个角色要么同时选提供方与模型，要么两者都留空（继承主代理）。',
+        
+        consoleLabel: '「ds-superbot」',
+        consoleTitle: 'ds-superbot',
+        consoleNav: '打开 ds-superbot 控制台',
+        decideTitle: '待你决定',
+        decideEmpty: '现在没有需要你决定的工作项',
+        decideApprove: '查看',
+        decideReject: '否决',
+        decideRejectConfirm: '确定否决这个工作项？此操作需要你确认。',
+        decidePendingMerge: '待合并',
+        decideFailed: '失败待处理',
+        decideAwaiting: '待批准',
+        decideCount: '待你决定 {count}',
+        healthTitle: '健康与授权',
+        healthOk: '系统健康',
+        healthPaused: '已暂停',
+        authorityObserve: '授权：observe',
+        autoMergeOff: '自动合并不启用',
+        watchdogOff: 'Watchdog 未启用',
+        subscribeOff: '订阅未启用',
+        historyTitle: '工作项历史',
+        historyEmpty: '还没有工作项历史',
+        workItemDetail: '工作项详情',
+        stageTitle: '舞台',
+        dagTitle: '工作流',
+        detailMandate: 'Mandate',
+        detailGates: '门禁',
+        detailReceipt: 'Receipt',
+        detailNone: '无',
+        wiStateCandidate: '候选',
+        wiStateExplored: '已取证',
+        wiStateProposed: '待提出',
+        wiStateAwaitingApproval: '待批准',
+        wiStateAuthorized: '已授权',
+        wiStatePlanned: '已计划',
+        wiStateApproved: '已批准',
+        wiStateBuilding: '施工中',
+        wiStateVerifying: '验收中',
+        wiStateDelivered: '已交付',
+        wiStateFailed: '失败',
+        wiStateParked: '已停放',
+        wiStateDropped: '已放弃',
+        wiStateSignal: '待命',
         externalUpdate: '设置已在其他位置更新；撤销后会载入新值。',
       },
       en: {
@@ -319,6 +363,49 @@ window.__ModuleLoader__.load({
         readOnly: 'This deployment stores settings read-only.',
         conflict: 'Settings changed elsewhere. Discard and try again.',
         invalidRoute: 'Each role needs both a provider and a model, or neither (inherit the parent).',
+        
+        consoleLabel: '「ds-superbot」',
+        consoleTitle: 'ds-superbot',
+        consoleNav: 'Open the ds-superbot console',
+        decideTitle: 'Needs your decision',
+        decideEmpty: 'Nothing needs your decision right now',
+        decideApprove: 'Review',
+        decideReject: 'Reject',
+        decideRejectConfirm: 'Reject this work item? This needs your confirmation.',
+        decidePendingMerge: 'Pending merge',
+        decideFailed: 'Failed, needs handling',
+        decideAwaiting: 'Awaiting approval',
+        decideCount: '{count} need your decision',
+        healthTitle: 'Health and authority',
+        healthOk: 'Healthy',
+        healthPaused: 'Paused',
+        authorityObserve: 'Authority: observe',
+        autoMergeOff: 'Auto-merge is off',
+        watchdogOff: 'Watchdog not enabled',
+        subscribeOff: 'Subscribe not enabled',
+        historyTitle: 'Work-item history',
+        historyEmpty: 'No work-item history yet',
+        workItemDetail: 'Work-item details',
+        stageTitle: 'Stage',
+        dagTitle: 'Workflow',
+        detailMandate: 'Mandate',
+        detailGates: 'Gates',
+        detailReceipt: 'Receipt',
+        detailNone: 'None',
+        wiStateCandidate: 'Candidate',
+        wiStateExplored: 'Explored',
+        wiStateProposed: 'Proposed',
+        wiStateAwaitingApproval: 'Awaiting approval',
+        wiStateAuthorized: 'Authorized',
+        wiStatePlanned: 'Planned',
+        wiStateApproved: 'Approved',
+        wiStateBuilding: 'Building',
+        wiStateVerifying: 'Verifying',
+        wiStateDelivered: 'Delivered',
+        wiStateFailed: 'Failed',
+        wiStateParked: 'Parked',
+        wiStateDropped: 'Dropped',
+        wiStateSignal: 'Idle',
         externalUpdate: 'Settings changed elsewhere; discard to load the new values.',
       },
     };
@@ -1666,6 +1753,396 @@ window.__ModuleLoader__.load({
 
     // --- primitives -----------------------------------------------------------------
 
+
+    // --- BEGIN SYNC: packages/im/src/presence.mjs ---
+    const FACES = Object.freeze(['cang', 'tan', 'zuo', 'yan']);
+
+    const FACE_LABEL = Object.freeze({
+      cang: '仓',
+      tan: '探',
+      zuo: '作',
+      yan: '验',
+    });
+
+    const IDLE = { eye: 'idle', motion: 'breathe', energy: 'low' };
+    const AVERT = { eye: 'avert', motion: 'withdraw', energy: 'low' };
+    const DOWN = { eye: 'down', motion: 'still', energy: 'low' };
+
+    const HIGH_PRIORITY = { alert: 3, await: 2, offer: 1 };
+
+    function pose(eye, motion, energy) {
+      return { eye, motion, energy };
+    }
+
+    /**
+     * Raw per-face pose before the global high-energy cap is applied.
+     */
+    function rawPresence(state, face, speakKind) {
+      const resultMoment = speakKind === 'result' || speakKind === 'result-ready';
+      const approvalMoment = speakKind === 'approval' || speakKind === 'needs-decision' || !speakKind;
+
+      switch (state) {
+        case 'Candidate':
+        case 'Explored':
+          if (face === 'tan') return pose('scan', 'search', 'mid');
+          return { ...IDLE };
+        case 'Proposed':
+          if (face === 'cang' && approvalMoment) return pose('await', 'gaze', 'high');
+          if (face === 'tan') return { ...AVERT };
+          return { ...IDLE };
+        case 'AwaitingApproval':
+          if (face === 'cang') return pose('await', 'gaze', 'high');
+          return { ...AVERT };
+        case 'Authorized':
+        case 'Planned':
+        case 'Approved':
+        case 'Signal':
+          return { ...IDLE };
+        case 'Building':
+          if (face === 'zuo') return pose('focus', 'work', 'mid');
+          if (face === 'tan') return { ...AVERT };
+          return { ...IDLE };
+        case 'Verifying':
+          if (face === 'yan') return pose('inspect', 'check', 'mid');
+          if (face === 'tan' || face === 'zuo') return { ...AVERT };
+          return { ...IDLE };
+        case 'Delivered':
+          if (resultMoment && face === 'cang') return pose('done', 'offer', 'high');
+          if (resultMoment && face === 'yan') return pose('done', 'check', 'mid');
+          return { ...IDLE };
+        case 'Failed':
+          if (face === 'cang') return pose('alert', 'startle', 'high');
+          return { ...DOWN };
+        case 'Parked':
+        case 'Dropped':
+          return { ...DOWN };
+        default:
+          return { ...IDLE };
+      }
+    }
+
+    function captionFor(face, state, workItem, poseValue, speakKind) {
+      const who = FACE_LABEL[face] ?? face;
+      const id = workItem?.id;
+      const tail = id ? ` · ${id}` : '';
+      const resultMoment = speakKind === 'result' || speakKind === 'result-ready';
+      let verb;
+      if (poseValue.eye === 'await') verb = '正在看你';
+      else if (poseValue.motion === 'offer' || (state === 'Delivered' && resultMoment && face === 'cang')) verb = '已交出结果';
+      else if (poseValue.eye === 'alert') verb = '发现失败';
+      else if (poseValue.eye === 'focus') verb = '正在施工';
+      else if (poseValue.eye === 'inspect') verb = '正在核对';
+      else if (poseValue.eye === 'scan') verb = '正在取证';
+      else if (poseValue.eye === 'down') verb = '已经停下';
+      else if (poseValue.eye === 'avert') verb = '正在待命';
+      else if (poseValue.eye === 'done') verb = face === 'cang' ? '已交出结果' : '完成核对';
+      else verb = '正在待命';
+
+      // Special tighter captions used in INTERACTION.md examples.
+      if (poseValue.eye === 'await' && (state === 'AwaitingApproval' || state === 'Proposed')) {
+        verb = '正在看你';
+        const cap = id ? `${who}${verb} · 待批 ${id}` : `${who}${verb}`;
+        return cap;
+      }
+      return `${who}${verb}${tail}`;
+    }
+
+    function countHan(text) {
+      return Array.from(text).length;
+    }
+
+    /**
+     * Apply the "at most one high" cap. Priority: alert > await > offer.
+     */
+    function capHighEnergy(field) {
+      const highs = FACES.filter((f) => field[f].energy === 'high');
+      if (highs.length <= 1) return field;
+      highs.sort((a, b) => {
+        const pa = HIGH_PRIORITY[field[a].motion] ?? HIGH_PRIORITY[field[a].eye] ?? 0;
+        const pb = HIGH_PRIORITY[field[b].motion] ?? HIGH_PRIORITY[field[b].eye] ?? 0;
+        return pb - pa;
+      });
+      const winner = highs[0];
+      const next = { ...field };
+      for (const face of highs.slice(1)) {
+        next[face] = { ...next[face], energy: next[face].energy === 'high' ? 'mid' : next[face].energy };
+      }
+      next[winner] = field[winner];
+      return next;
+    }
+
+    function presenceField(workItem, speakKind) {
+      const state = workItem?.state ?? 'Signal';
+      const raw = {};
+      for (const face of FACES) raw[face] = rawPresence(state, face, speakKind);
+      return capHighEnergy(raw);
+    }
+
+    function presenceOf({ workItem, face, speakKind } = {}) {
+      if (!FACES.includes(face)) {
+        throw new Error(`unknown face: ${face}`);
+      }
+      const field = presenceField(workItem, speakKind);
+      const poseValue = field[face];
+      const caption = captionFor(face, workItem?.state, workItem, poseValue, speakKind);
+      return { face, eye: poseValue.eye, motion: poseValue.motion, energy: poseValue.energy, caption };
+    }
+    // --- END SYNC ---
+
+    const AUTO_MERGE_DISABLED = true;
+    const DEFAULT_AUTHORITY = 'observe';
+    const DECISION_STATES = Object.freeze(['AwaitingApproval', 'Proposed']);
+    const MERGE_STATES = Object.freeze(['Delivered']);
+    const FAILED_STATES = Object.freeze(['Failed']);
+    const QUIET_STATES = Object.freeze(['Building', 'Verifying']);
+    const ROLE_FACE = Object.freeze({
+      pm: 'cang',
+      architect: 'cang',
+      'backend-dev': 'zuo',
+      'frontend-dev': 'zuo',
+      'qa-engineer': 'yan',
+      'browser-tester': 'yan',
+      reviewer: 'yan',
+    });
+    const EYE_IDS = Object.freeze(['idle', 'scan', 'await', 'focus', 'inspect', 'done', 'alert', 'down', 'avert']);
+    const MOTION_IDS = Object.freeze(['breathe', 'gaze', 'search', 'work', 'check', 'offer', 'withdraw', 'startle', 'still']);
+    const ENERGY_IDS = Object.freeze(['low', 'mid', 'high']);
+    const EYE_PRIORITY = Object.freeze({
+      alert: 50, await: 40, done: 30, focus: 20, inspect: 20, scan: 15, idle: 5, avert: 4, down: 3,
+    });
+
+    function prefersReducedMotion(flag) {
+      if (flag === true) return true;
+      if (flag === false) return false;
+      try {
+        const root = typeof globalThis !== 'undefined' ? globalThis : null;
+        const win = (root && root.window) ? root.window : root;
+        if (!win || typeof win.matchMedia !== 'function') return false;
+        return Boolean(win.matchMedia('(prefers-reduced-motion: reduce)').matches);
+      } catch {
+        return false;
+      }
+    }
+
+    /** CSS classes from a presenceOf result only — no work-item state table here. */
+    function presenceClassNames(presence, options) {
+      const opts = options || {};
+      if (!presence || typeof presence !== 'object') return 'stwd-resident';
+      const reduced = prefersReducedMotion(opts.reducedMotion);
+      const face = presence.face || 'cang';
+      const eye = EYE_IDS.indexOf(presence.eye) >= 0 ? presence.eye : 'idle';
+      const motion = reduced ? 'still' : (MOTION_IDS.indexOf(presence.motion) >= 0 ? presence.motion : 'breathe');
+      const energy = ENERGY_IDS.indexOf(presence.energy) >= 0 ? presence.energy : 'low';
+      const classes = ['stwd-resident', 'stwd-resident--' + face, 'stwd-eye-' + eye, 'stwd-motion-' + motion, 'stwd-energy-' + energy];
+      if (reduced) classes.push('stwd-reduced');
+      return classes.join(' ');
+    }
+
+    function ariaLabelFromCaption(caption) {
+      const label = String(caption || '').trim();
+      const match = label.match(/^(仓|探|作|验)(.+?)(?: · (.+))?$/);
+      if (!match) return label;
+      return match[3] ? (match[1] + '，' + match[2] + '，' + match[3]) : (match[1] + '，' + match[2]);
+    }
+
+    function ariaLabelFor(presence) {
+      if (presence && presence.caption) return ariaLabelFromCaption(presence.caption);
+      return String((presence && presence.face) || '');
+    }
+
+    function isDecisionItem(item) {
+      if (!item) return false;
+      if (DECISION_STATES.indexOf(item.state) >= 0) return true;
+      if (FAILED_STATES.indexOf(item.state) >= 0) return true;
+      if (item.pendingMerge === true) return true;
+      if (MERGE_STATES.indexOf(item.state) >= 0 && item.pendingMerge !== false) return true;
+      return false;
+    }
+
+    function decisionRank(item) {
+      if (item.state === 'AwaitingApproval' || item.state === 'Proposed') return 0;
+      if (MERGE_STATES.indexOf(item.state) >= 0 || item.pendingMerge) return 1;
+      if (FAILED_STATES.indexOf(item.state) >= 0) return 2;
+      return 3;
+    }
+
+    function sortConsoleSections(items) {
+      const list = Array.isArray(items) ? items.filter(Boolean) : [];
+      const decisions = list.filter(isDecisionItem).slice().sort((a, b) => {
+        const rank = decisionRank(a) - decisionRank(b);
+        const left = String(a && a.id ? a.id : '');
+        const right = String(b && b.id ? b.id : '');
+        return rank !== 0 ? rank : left.localeCompare(right);
+      });
+      const history = list.slice().sort((a, b) => String(a && a.id ? a.id : '').localeCompare(String(b && b.id ? b.id : '')));
+      return { decisions, history };
+    }
+
+    function healthSummary(input) {
+      const src = input || {};
+      const authority = src.authority || DEFAULT_AUTHORITY;
+      const paused = Boolean(src.paused);
+      const healthy = src.healthy !== false && !paused;
+      return {
+        authority,
+        autoMerge: false,
+        autoMergeDisabled: AUTO_MERGE_DISABLED,
+        compact: healthy && !paused,
+        paused,
+        healthy,
+        watchdog: src.watchdogEnabled ? 'on' : '未启用',
+        subscribe: src.subscribeEnabled ? 'on' : '未启用',
+      };
+    }
+
+    function chatSpeechFor(workItem) {
+      const state = workItem && workItem.state;
+      if (QUIET_STATES.indexOf(state) >= 0) return { ok: false, reason: 'quiet-process', kind: null };
+      if (DECISION_STATES.indexOf(state) >= 0) return { ok: true, reason: 'needs-decision', kind: 'approval' };
+      if (state === 'Delivered') return { ok: true, reason: 'result-ready', kind: 'result' };
+      if (state === 'Failed') return { ok: true, reason: 'failed', kind: 'result' };
+      return { ok: false, reason: 'quiet', kind: null };
+    }
+
+    function stillFrameOf(presence) {
+      if (!presence) return null;
+      return { face: presence.face, eye: presence.eye, motion: 'still', energy: presence.energy, caption: presence.caption };
+    }
+
+    function speakKindFor(workItem) {
+      const speech = chatSpeechFor(workItem);
+      if (speech.kind === 'approval') return 'approval';
+      if (speech.kind === 'result') return 'result';
+      return undefined;
+    }
+
+    function faceForRole(roleId) {
+      return ROLE_FACE[roleId] || 'cang';
+    }
+
+    function workItemStateFromAgent(row) {
+      if (!row) return 'Signal';
+      if (row.waiting) return 'AwaitingApproval';
+      if (row.failed || row.state === 'failed' || row.state === 'error') return 'Failed';
+      if (row.running) return faceForRole(row.role) === 'yan' ? 'Verifying' : 'Building';
+      if (row.state === 'done' || row.done) return 'Delivered';
+      if (row.state === 'pending') return 'Planned';
+      return 'Signal';
+    }
+
+    function workItemsFromAgents(rows, options) {
+      const list = Array.isArray(rows) ? rows.filter(Boolean) : [];
+      const authority = (options && options.authority) || DEFAULT_AUTHORITY;
+      return list.map((row) => ({
+        id: row.workItemId || row.taskId || row.id,
+        state: row.workItemState || workItemStateFromAgent(row),
+        title: row.task || row.title || row.label || '',
+        face: faceForRole(row.role),
+        role: row.role,
+        model: row.model || null,
+        mandate: row.mandate || null,
+        gates: row.gates || [],
+        receipt: row.receipt || null,
+        duration: row.elapsedMs || row.duration || null,
+        authority,
+        origin: 'agent-row',
+      }));
+    }
+
+    function resolveWorkItems(input) {
+      const src = input || {};
+      if (Array.isArray(src.workItems) && src.workItems.length > 0) return src.workItems;
+      const fromFacts = src.facts && (src.facts.workItems || src.facts.ledger);
+      if (Array.isArray(fromFacts) && fromFacts.length > 0) return fromFacts;
+      return workItemsFromAgents(src.rows || [], { authority: src.authority });
+    }
+
+    function scorePresence(presence) {
+      const energyScore = presence.energy === 'high' ? 100 : presence.energy === 'mid' ? 50 : 0;
+      return energyScore + (EYE_PRIORITY[presence.eye] || 0);
+    }
+
+    function selectPresenceForFace(items, face) {
+      const list = Array.isArray(items) ? items.filter(Boolean) : [];
+      if (list.length === 0) return presenceOf({ workItem: { state: 'Signal' }, face });
+      let best = null;
+      for (const workItem of list) {
+        const presence = presenceOf({ workItem, face, speakKind: speakKindFor(workItem) });
+        const score = scorePresence(presence);
+        if (!best || score > best.score) best = { score, presence, workItem };
+      }
+      return best.presence;
+    }
+
+    function stageField(items) {
+      const list = Array.isArray(items) ? items.filter(Boolean) : [];
+      const raw = {};
+      const full = {};
+      for (const face of FACES) {
+        const presence = selectPresenceForFace(list, face);
+        full[face] = presence;
+        raw[face] = { eye: presence.eye, motion: presence.motion, energy: presence.energy };
+      }
+      const capped = capHighEnergy(raw);
+      return FACES.map((face) => ({ ...full[face], energy: capped[face].energy }));
+    }
+
+    function stageCaption(items) {
+      const field = stageField(items);
+      const ranked = field.slice().sort((a, b) => {
+        const diff = scorePresence(b) - scorePresence(a);
+        if (diff !== 0) return diff;
+        return FACES.indexOf(a.face) - FACES.indexOf(b.face);
+      });
+      const lead = ranked[0];
+      if (!lead) return '';
+      const idle = field.every((item) => item.eye === 'idle' && item.energy === 'low');
+      if (idle && (!items || items.length === 0)) return '';
+      return lead.caption;
+    }
+
+
+    function collectWorkItems(props) {
+      const src = props || {};
+      if (Array.isArray(src.workItems)) return src.workItems;
+      if (Array.isArray(src.items)) return src.items;
+      const project = typeof src.useProjection === 'function' ? src.useProjection : null;
+      if (!project) return [];
+      const catalog = project('subagentCatalog');
+      const children = Array.isArray(catalog) ? catalog.filter((entry) => entry && entry.mode !== 'external') : [];
+      if (children.length === 0) return [];
+      const sessions = typeof src.useSessions === 'function' ? src.useSessions : null;
+      const statuses = typeof src.useSessionStatus === 'function' ? src.useSessionStatus : null;
+      const statusState = statuses ? statuses((state) => state) : undefined;
+      const rows = children.map((entry) => {
+        const id = String(entry.id);
+        const status = statusState && typeof statusState.get === 'function' ? statusState.get(id) : null;
+        return {
+          id,
+          label: entry.label,
+          role: roleOf(entry.label),
+          running: Boolean(status && status.running),
+          waiting: Boolean(status && status.pendingInteraction),
+          state: (status && status.pendingInteraction) ? 'waiting' : (status && status.running ? 'running' : (status && status.running === false ? 'done' : 'idle')),
+          done: Boolean(status && status.running === false && !status.pendingInteraction),
+        };
+      });
+      return resolveWorkItems({ rows, authority: src.authority });
+    }
+
+    function workItemStateLabel(state, text) {
+      const key = 'wiState' + String(state || '');
+      if (text && typeof text[key] === 'string') return text[key];
+      return String(state || '');
+    }
+
+    function decisionKindLabel(item, text) {
+      if (!item || !text) return '';
+      if (item.state === 'Failed') return text.decideFailed;
+      if (item.state === 'Delivered' || item.pendingMerge) return text.decidePendingMerge;
+      return text.decideAwaiting;
+    }
+
     function StatusDot({ tone }) {
       return h('span', { className: 'stwd-dot stwd-dot-' + (tone || 'idle'), 'aria-hidden': 'true' });
     }
@@ -2740,6 +3217,347 @@ window.__ModuleLoader__.load({
      * @param props - slot props plus the injected face.
      * @returns the board.
      */
+
+    function residentLayers(face) {
+      const skin = {
+        cang: { bg: '#e8f1f2', face: '#f3e0c8', hair: '#2c4a52', pupil: '#1c3136', lid: '#2c4a52', mouth: '#b08060' },
+        tan: { bg: '#f7efe4', face: '#e8c8a0', hair: '#5a2e16', pupil: '#3a1c0c', lid: '#5a2e16', mouth: '#b07a50' },
+        zuo: { bg: '#eaf3e8', face: '#e2c4a0', hair: '#1f1a17', pupil: '#1a1410', lid: '#1f1a17', mouth: '#a06a48' },
+        yan: { bg: '#f0eaf6', face: '#f0d7c3', hair: '#2a2438', pupil: '#2a2438', lid: '#2a2438', mouth: '#b08070' },
+      }[face] || { bg: '#e8f1f2', face: '#f3e0c8', hair: '#2c4a52', pupil: '#1c3136', lid: '#2c4a52', mouth: '#b08060' };
+
+      const hair = face === 'cang'
+        ? [h('path', { key: 'roof', d: 'M10 30 L32 8 L54 30 L54 36 L10 36 Z', fill: skin.hair }),
+           h('path', { key: 'bang', d: 'M14 32 C18 18, 46 18, 50 32 L50 30 C46 16, 18 16, 14 30 Z', fill: skin.hair })]
+        : face === 'tan'
+          ? [h('path', { key: 'sweep', d: 'M14 32 C16 10, 40 8, 50 20 L56 18 L52 28 C54 22, 44 12, 22 18 L14 30 Z', fill: skin.hair })]
+          : face === 'zuo'
+            ? [h('path', { key: 'crop', d: 'M16 28 L16 20 Q32 10 48 20 L48 28 Q32 22 16 28 Z', fill: skin.hair }),
+               h('rect', { key: 'band', className: 'stwd-headband', x: 15, y: 24, width: 34, height: 6, rx: 2, fill: '#d27d2c' })]
+            : [h('path', { key: 'part', d: 'M14 34 C14 14, 32 10, 32 22 C32 10, 50 14, 50 34 C46 18, 18 18, 14 34 Z', fill: skin.hair })];
+
+      const base = face === 'cang'
+        ? h('ellipse', { cx: 32, cy: 38, rx: 18, ry: 20, fill: skin.face })
+        : face === 'tan'
+          ? h('path', { d: 'M16 30 C16 16, 48 16, 48 30 L44 50 L32 58 L20 50 Z', fill: skin.face })
+          : face === 'zuo'
+            ? h('rect', { x: 16, y: 22, width: 32, height: 32, rx: 10, fill: skin.face })
+            : h('circle', { cx: 32, cy: 36, r: 18, fill: skin.face });
+
+      const eyeAt = (side) => {
+        const left = side === 'l';
+        const cx = face === 'tan' ? (left ? 24 : 42) : (left ? 24 : 40);
+        const cy = face === 'cang' || face === 'zuo' ? 38 : 36;
+        const rx = face === 'yan' ? 4.4 : face === 'tan' ? 6 : face === 'zuo' ? 5.4 : 5.2;
+        const ry = face === 'yan' ? 4.8 : face === 'tan' ? 3.2 : face === 'zuo' ? 2.6 : 3.4;
+        const px = face === 'tan' ? cx + 2.5 : face === 'zuo' ? cx + 1 : cx;
+        const py = face === 'cang' || face === 'zuo' ? cy + 0.4 : cy + 0.6;
+        const prx = face === 'yan' ? 1.8 : face === 'zuo' ? 2 : face === 'tan' ? 2.1 : 2.2;
+        const pry = face === 'yan' ? 2.2 : face === 'zuo' ? 1.8 : prx;
+        const lidY = cy - ry - 0.6;
+        return h('g', { className: 'stwd-eye stwd-eye-' + side, key: 'eye-' + side },
+          h('ellipse', { className: 'stwd-sclera', cx, cy, rx, ry, fill: '#fff' }),
+          h('ellipse', { className: 'stwd-pupil', cx: px, cy: py, rx: prx, ry: pry, fill: skin.pupil }),
+          h('rect', { className: 'stwd-lid stwd-lid-upper', x: cx - rx - 0.2, y: lidY, width: rx * 2 + 0.4, height: ry + 1.6, rx: 2, fill: skin.lid }),
+        );
+      };
+
+      const brows = face === 'tan'
+        ? [h('path', { key: 'bl', className: 'stwd-brow stwd-brow-l', d: 'M18 31 L30 32', stroke: skin.hair, strokeWidth: 1.3, fill: 'none', strokeLinecap: 'round' }),
+           h('path', { key: 'br', className: 'stwd-brow stwd-brow-r', d: 'M36 31 L48 32', stroke: skin.hair, strokeWidth: 1.3, fill: 'none', strokeLinecap: 'round' })]
+        : face === 'zuo'
+          ? [h('path', { key: 'bl', className: 'stwd-brow stwd-brow-l', d: 'M19 35 L29 35', stroke: skin.hair, strokeWidth: 1.4, fill: 'none', strokeLinecap: 'round' }),
+             h('path', { key: 'br', className: 'stwd-brow stwd-brow-r', d: 'M35 35 L45 35', stroke: skin.hair, strokeWidth: 1.4, fill: 'none', strokeLinecap: 'round' })]
+          : face === 'yan'
+            ? [h('path', { key: 'bl', className: 'stwd-brow stwd-brow-l', d: 'M18 29 Q24 27 29 29', fill: 'none', stroke: skin.hair, strokeWidth: 1.2, strokeLinecap: 'round' }),
+               h('path', { key: 'br', className: 'stwd-brow stwd-brow-r', d: 'M35 29 Q40 27 46 29', fill: 'none', stroke: skin.hair, strokeWidth: 1.2, strokeLinecap: 'round' })]
+            : [h('path', { key: 'bl', className: 'stwd-brow stwd-brow-l', d: 'M19 33 Q24 31 29 33', fill: 'none', stroke: skin.hair, strokeWidth: 1.2, strokeLinecap: 'round' }),
+               h('path', { key: 'br', className: 'stwd-brow stwd-brow-r', d: 'M35 33 Q40 31 45 33', fill: 'none', stroke: skin.hair, strokeWidth: 1.2, strokeLinecap: 'round' })];
+
+      const glasses = face === 'yan' ? h('g', { className: 'stwd-glasses', key: 'glasses' },
+        h('ellipse', { cx: 24, cy: 36, rx: 7, ry: 6, fill: 'none', stroke: '#7aa0c4', strokeWidth: 1.6 }),
+        h('ellipse', { cx: 40, cy: 36, rx: 7, ry: 6, fill: 'none', stroke: '#7aa0c4', strokeWidth: 1.6 }),
+        h('path', { d: 'M31 36 L33 36', stroke: '#7aa0c4', strokeWidth: 1.6 }),
+        h('path', { d: 'M17 36 L14 34', stroke: '#7aa0c4', strokeWidth: 1.4, strokeLinecap: 'round' }),
+        h('path', { d: 'M47 36 L50 34', stroke: '#7aa0c4', strokeWidth: 1.4, strokeLinecap: 'round' }),
+      ) : null;
+
+      const mouth = face === 'zuo'
+        ? h('path', { className: 'stwd-mouth', d: 'M29 47 L35 47', stroke: skin.mouth, strokeWidth: 1.3, strokeLinecap: 'round', fill: 'none' })
+        : face === 'tan'
+          ? h('path', { className: 'stwd-mouth', d: 'M28 46 Q32 47.5 36 46', fill: 'none', stroke: skin.mouth, strokeWidth: 1.1, strokeLinecap: 'round' })
+          : face === 'yan'
+            ? h('path', { className: 'stwd-mouth', d: 'M28 47 Q32 50 36 47', fill: 'none', stroke: skin.mouth, strokeWidth: 1.2, strokeLinecap: 'round' })
+            : h('path', { className: 'stwd-mouth', d: 'M28 47 Q32 49 36 47', fill: 'none', stroke: skin.mouth, strokeWidth: 1.2, strokeLinecap: 'round' });
+
+      const collar = face === 'cang'
+        ? h('g', { className: 'stwd-collar' },
+            h('path', { d: 'M18 54 Q32 46 46 54 L46 64 L18 64 Z', fill: '#3d6b73' }),
+            h('path', { d: 'M30 52 L32 64 L34 52', fill: '#c9a227' }),
+          )
+        : face === 'tan'
+          ? h('g', { className: 'stwd-collar' },
+              h('path', { d: 'M18 54 Q32 48 46 54 L50 64 L14 64 Z', fill: '#c56a2d' }),
+              h('path', { d: 'M40 56 L48 64 L36 64 Z', fill: '#e8c56b' }),
+            )
+          : face === 'zuo'
+            ? h('g', { className: 'stwd-collar' },
+                h('path', { d: 'M14 54 L50 54 L52 64 L12 64 Z', fill: '#3f6b3a' }),
+                h('circle', { cx: 32, cy: 58, r: 2.2, fill: '#d27d2c' }),
+              )
+            : h('g', { className: 'stwd-collar' },
+                h('path', { d: 'M16 54 Q32 48 48 54 L48 64 L16 64 Z', fill: '#5b3d7a' }),
+                h('path', { d: 'M32 52 L28 64 L36 64 Z', fill: '#7aa0c4' }),
+              );
+
+      return [
+        h('rect', { key: 'bg', className: 'stwd-face-bg', width: 64, height: 64, rx: 12, fill: skin.bg }),
+        h('g', { key: 'figure', className: 'stwd-figure' },
+          h('g', { className: 'stwd-face-base' }, base),
+          h('g', { className: 'stwd-hair' }, hair),
+          eyeAt('l'),
+          eyeAt('r'),
+          glasses,
+          h('g', { className: 'stwd-brows' }, brows),
+          mouth,
+          collar,
+        ),
+      ];
+    }
+
+    function ResidentFace(props) {
+      const presence = props.presence || presenceOf({ workItem: { state: 'Signal' }, face: props.face || 'cang' });
+      const reduced = prefersReducedMotion(props.reducedMotion);
+      const size = Number(props.size) || 64;
+      const badge = props.badge;
+      const classes = presenceClassNames(presence, { reducedMotion: reduced }) + (props.mini ? ' stwd-resident-mini' : ' stwd-resident-stage');
+      const label = ariaLabelFor(presence);
+      return h('button', {
+        type: 'button',
+        className: classes,
+        style: { width: size + 'px', height: size + 'px', animationDelay: props.delay || undefined },
+        'aria-label': label,
+        title: label,
+        onClick: typeof props.onSelect === 'function' ? () => props.onSelect(presence) : undefined,
+      },
+        h('svg', {
+          className: 'stwd-resident-svg stwd-resident-svg--' + presence.face,
+          viewBox: '0 0 64 64',
+          'aria-hidden': 'true',
+          focusable: 'false',
+        }, residentLayers(presence.face)),
+        badge ? h('span', { className: 'stwd-resident-badge' }, badge) : null,
+      );
+    }
+
+    function ResidentStage(props) {
+      const items = Array.isArray(props.items) ? props.items : [];
+      const field = stageField(items);
+      const caption = props.caption !== undefined ? props.caption : stageCaption(items);
+      const reduced = prefersReducedMotion(props.reducedMotion);
+      const highs = field.filter((item) => item.energy === 'high');
+      return h('div', { className: 'stwd-stage', 'data-high-count': String(highs.length) },
+        h('div', { className: 'stwd-stage-faces' },
+          field.map((presence, index) => {
+            const related = items.filter((item) => (item.face || faceForRole(item.role)) === presence.face);
+            const badge = related.length > 1 ? String(related[0].id || related.length) : (related.length === 1 ? String(related[0].id || '') : '');
+            const shortBadge = badge && String(badge).length > 8 ? String(badge).slice(-6) : badge;
+            return h(ResidentFace, {
+              key: presence.face,
+              presence,
+              size: props.size || 72,
+              delay: (index * 0.7) + 's',
+              badge: related.length > 1 ? shortBadge : '',
+              reducedMotion: reduced,
+              onSelect: props.onSelect,
+            });
+          }),
+        ),
+        caption ? h('p', { className: 'stwd-stage-caption' }, caption) : null,
+      );
+    }
+
+    function MiniFaces(props) {
+      const items = collectWorkItems(props);
+      const hasActivity = items.length > 0;
+      if (!hasActivity) return null;
+      const field = stageField(items);
+      const reduced = prefersReducedMotion(props.reducedMotion);
+      return h('div', { className: 'stwd-root stwd-mini' },
+        styles(),
+        h('div', { className: 'stwd-mini-row', role: 'group', 'aria-label': (props.text && props.text.stageTitle) || 'ds-superbot' },
+          field.map((presence, index) => h(ResidentFace, {
+            key: presence.face,
+            presence,
+            size: 32,
+            mini: true,
+            delay: (index * 0.8) + 's',
+            reducedMotion: reduced,
+            onSelect: () => {
+              if (typeof props.onSelect === 'function') props.onSelect(presence);
+              if (typeof props.openPanel === 'function') props.openPanel();
+            },
+          })),
+        ),
+      );
+    }
+
+    function InputCaption(props) {
+      const items = collectWorkItems(props);
+      const caption = stageCaption(items);
+      if (!caption) return null;
+      return h('div', { className: 'stwd-root stwd-dock' },
+        styles(),
+        h('p', { className: 'stwd-dock-caption' }, caption),
+      );
+    }
+
+    function DecisionCount(props) {
+      const items = collectWorkItems(props);
+      const { decisions } = sortConsoleSections(items);
+      const count = decisions.length;
+      if (count === 0) return null;
+      const text = props.text || {};
+      const label = fmt(text.decideCount || '{count}', { count });
+      return h('div', { className: 'stwd-root stwd-decision-wrap' },
+        styles(),
+        h('button', {
+          type: 'button',
+          className: 'stwd-decision-count',
+          'aria-label': label,
+          title: label,
+          onClick: () => {
+            if (typeof props.openConsole === 'function') props.openConsole();
+            else if (typeof props.openPanel === 'function') props.openPanel();
+          },
+        }, label),
+      );
+    }
+
+    function WorkItemFacts(props) {
+      const item = props.item;
+      const text = props.text || {};
+      if (!item) return null;
+      const gates = Array.isArray(item.gates) ? item.gates.join(', ') : (item.gates || text.detailNone);
+      const mandate = item.mandate ? (item.mandate.id || item.mandate) : text.detailNone;
+      const receipt = item.receipt ? (item.receipt.id || item.receipt.status || item.receipt) : text.detailNone;
+      const model = item.model && typeof item.model === 'object' ? (item.model.id || item.model.model || '') : (item.model || text.detailNone);
+      const duration = item.duration || item.elapsedMs ? fmtDuration(item.duration || item.elapsedMs) : text.detailNone;
+      return h('dl', { className: 'stwd-wifacts' },
+        h('div', null, h('dt', null, text.detailState), h('dd', null, workItemStateLabel(item.state, text))),
+        h('div', null, h('dt', null, text.detailMandate), h('dd', null, String(mandate))),
+        h('div', null, h('dt', null, text.detailGates), h('dd', null, String(gates || text.detailNone))),
+        h('div', null, h('dt', null, text.detailReceipt), h('dd', null, String(receipt))),
+        h('div', null, h('dt', null, text.detailModel), h('dd', null, String(model || text.detailNone))),
+        h('div', null, h('dt', null, text.detailElapsed), h('dd', null, String(duration))),
+      );
+    }
+
+    function ConsoleNavIcon(props) {
+      const text = props.text || {};
+      return h('span', { className: 'stwd-root stwd-console-icon' },
+        styles(),
+        h('span', { className: 'stwd-console-glyph', title: text.consoleLabel || '「ds-superbot」', 'aria-hidden': 'true' },
+          h(SuperBotIcon, { size: 18 }),
+        ),
+      );
+    }
+
+    function SuperBotConsole(props) {
+      const text = props.text || {};
+      const items = collectWorkItems(props);
+      const sections = sortConsoleSections(items);
+      const health = healthSummary({
+        authority: props.authority || DEFAULT_AUTHORITY,
+        paused: props.paused,
+        healthy: props.healthy,
+        watchdogEnabled: props.watchdogEnabled,
+        subscribeEnabled: props.subscribeEnabled,
+      });
+      const [pendingReject, setPendingReject] = useState(null);
+      const confirmReject = (item) => {
+        const ask = typeof props.confirm === 'function'
+          ? props.confirm
+          : (message) => {
+            const root = typeof globalThis !== 'undefined' ? globalThis : null;
+            const win = (root && root.window) ? root.window : root;
+            if (win && typeof win.confirm === 'function') return win.confirm(message);
+            return false;
+          };
+        if (ask(text.decideRejectConfirm || '')) {
+          if (typeof props.onDecide === 'function') props.onDecide(item, 'reject');
+          setPendingReject(null);
+        }
+      };
+      const openItem = (item) => {
+        if (typeof props.onSelectItem === 'function') props.onSelectItem(item);
+        if (typeof props.openPanel === 'function') props.openPanel();
+      };
+      return h('div', { className: 'stwd-root stwd-console' },
+        styles(),
+        h('header', { className: 'stwd-console-head' },
+          h('h1', { className: 'stwd-console-title' }, text.consoleTitle || 'ds-superbot'),
+        ),
+        h('section', { className: 'stwd-console-block stwd-console-decide', 'aria-labelledby': 'stwd-decide-title' },
+          h('h2', { id: 'stwd-decide-title', className: 'stwd-console-h' }, text.decideTitle),
+          sections.decisions.length === 0
+            ? h('p', { className: 'stwd-console-empty' }, text.decideEmpty)
+            : h('ul', { className: 'stwd-console-list' },
+              sections.decisions.map((item) => h('li', { key: item.id, className: 'stwd-console-row' },
+                h('div', { className: 'stwd-console-row-main' },
+                  h('span', { className: 'stwd-console-id' }, item.id),
+                  h('span', { className: 'stwd-console-state' }, decisionKindLabel(item, text)),
+                  item.title ? h('span', { className: 'stwd-console-title-line' }, item.title) : null,
+                ),
+                h('div', { className: 'stwd-console-actions' },
+                  h('button', { type: 'button', className: 'stwd-console-btn', onClick: () => openItem(item) }, text.decideApprove),
+                  h('button', {
+                    type: 'button',
+                    className: 'stwd-console-btn stwd-console-btn-danger',
+                    onClick: () => confirmReject(item),
+                  }, text.decideReject),
+                ),
+              )),
+            ),
+        ),
+        h('section', {
+          className: 'stwd-console-block stwd-console-health' + (health.compact ? ' stwd-console-health-compact' : ''),
+          'aria-labelledby': 'stwd-health-title',
+        },
+          h('h2', { id: 'stwd-health-title', className: 'stwd-console-h' }, text.healthTitle),
+          h('p', { className: 'stwd-console-health-line' },
+            health.healthy ? text.healthOk : text.healthPaused,
+            ' · ',
+            text.authorityObserve,
+            ' · ',
+            text.autoMergeOff,
+          ),
+          health.compact ? null : h('p', { className: 'stwd-console-health-extra' },
+            text.watchdogOff + ' · ' + text.subscribeOff,
+          ),
+        ),
+        h('section', { className: 'stwd-console-block stwd-console-history', 'aria-labelledby': 'stwd-history-title' },
+          h('h2', { id: 'stwd-history-title', className: 'stwd-console-h' }, text.historyTitle),
+          sections.history.length === 0
+            ? h('p', { className: 'stwd-console-empty' }, text.historyEmpty)
+            : h('ul', { className: 'stwd-console-list' },
+              sections.history.map((item) => h('li', {
+                key: 'hist-' + item.id,
+                className: 'stwd-console-row stwd-console-history-row',
+                onClick: () => openItem(item),
+              },
+                h('div', { className: 'stwd-console-row-main' },
+                  h('span', { className: 'stwd-console-id' }, item.id),
+                  h('span', { className: 'stwd-console-state' }, workItemStateLabel(item.state, text)),
+                  item.title ? h('span', { className: 'stwd-console-title-line' }, item.title) : null,
+                ),
+                h(WorkItemFacts, { item, text }),
+              )),
+            ),
+        ),
+      );
+    }
+
     function SuperBotPanel(props) {
       const text = props.text;
       const lang = props.lang === 'en' ? 'en' : 'zh';
@@ -2866,13 +3684,24 @@ window.__ModuleLoader__.load({
         }
       };
 
+      const workItems = useMemo(() => resolveWorkItems({
+        workItems: props.workItems,
+        rows,
+        facts,
+        authority: props.authority || DEFAULT_AUTHORITY,
+      }), [props.workItems, rows, facts, props.authority]);
+
+      const selectedWorkItem = workItems.find((item) => item && (item.id === selectedId || item.agentId === selectedId))
+        || workItems[0]
+        || null;
+
       const rosterActions = h('span', { className: 'stwd-roster-meta' },
         fleet.counts.running > 0 ? h(StatusPill, { tone: 'progress' }, text.laneRunning + ' ' + fleet.counts.running) : null,
         fleet.counts.waiting > 0 ? h(StatusPill, { tone: 'warn' }, text.laneWaiting + ' ' + fleet.counts.waiting) : null,
         fleet.counts.done > 0 ? h(StatusPill, { tone: 'done' }, text.laneDone + ' ' + fleet.counts.done) : null,
       );
 
-      const rosterBody = h('div', { className: 'stwd-roster' },
+      const rosterBody = h('div', { className: 'stwd-roster stwd-roster-detail' },
         h(TeamGraph, {
           text,
           lead,
@@ -2907,11 +3736,28 @@ window.__ModuleLoader__.load({
           ),
         ),
         h(ErrorBoundary, { fallbackTitle: text.sectionFailed }, h(TaskProgress, { text, progress })),
-        h('section', { className: 'stwd-section' },
+        h('section', { className: 'stwd-section stwd-stage-section' },
+          h(SectionHead, { title: text.stageTitle }),
+          h(ErrorBoundary, { fallbackTitle: text.sectionFailed }, h(ResidentStage, {
+            items: workItems,
+            text,
+            reducedMotion: props.reducedMotion,
+            onSelect: (presence) => {
+              const match = workItems.find((item) => (item.face || faceForRole(item.role)) === presence.face);
+              if (match) setSelectedId(match.id);
+            },
+          })),
+        ),
+        h('section', { className: 'stwd-section stwd-detail-section' },
           h(SectionHead, {
-            title: text.roster,
-            count: fleet.total === 0 ? '' : String(fleet.total),
+            title: text.workItemDetail,
+            count: workItems.length === 0 ? '' : String(workItems.length),
             actions: rosterActions,
+          }),
+          selectedWorkItem ? h(WorkItemFacts, { item: selectedWorkItem, text }) : null,
+          h(SectionHead, {
+            title: text.dagTitle,
+            count: fleet.total === 0 ? '' : String(fleet.total),
           }),
           h(ErrorBoundary, { fallbackTitle: text.sectionFailed }, rosterBody),
           h('p', { className: 'stwd-note stwd-native-note' }, text.nativeListNote),
@@ -3481,6 +4327,81 @@ window.__ModuleLoader__.load({
       '.stwd-cell-last{grid-column:1 / -1}',
       '.stwd-cell-label{display:block}',
       '}',
+
+      '.stwd-stage-section{margin-top:4px}',
+      '.stwd-stage{display:flex;flex-direction:column;gap:8px;padding:8px 0 4px}',
+      '.stwd-stage-faces{display:flex;align-items:flex-end;justify-content:space-between;gap:8px}',
+      '.stwd-stage-caption{margin:0;font-size:11px;color:var(--dsw-alias-label-secondary);line-height:1.4}',
+      '.stwd-detail-section{margin-top:8px}',
+      '.stwd-resident{position:relative;display:inline-flex;align-items:center;justify-content:center;padding:0;border:0;background:transparent;cursor:pointer;border-radius:12px}',
+      '.stwd-resident:focus-visible{outline:2px solid var(--dsw-focus-ring-color, var(--dsw-alias-brand-primary));outline-offset:2px}',
+      '.stwd-resident-svg{width:100%;height:100%;display:block;overflow:visible}',
+      '.stwd-resident-badge{position:absolute;right:-2px;bottom:-2px;min-width:16px;height:14px;padding:0 3px;border-radius:7px;font-size:9px;line-height:14px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);border:.5px solid var(--dsw-alias-border-l2)}',
+      '.stwd-figure,.stwd-pupil,.stwd-lid,.stwd-brow{transform-box:fill-box;transform-origin:center}',
+      '.stwd-lid{transform-origin:center top;transform:scaleY(.18)}',
+      '@keyframes stwd-blink{0%,86%,100%{transform:scaleY(.18)}90%,94%{transform:scaleY(1)}}',
+      '@keyframes stwd-breathe{0%,100%{transform:translateY(0)}50%{transform:translateY(1.2px)}}',
+      '@keyframes stwd-search{0%,100%{transform:translateX(0)}50%{transform:translateX(2.2px)}}',
+      '@keyframes stwd-inspect{0%,100%{transform:translateY(0)}50%{transform:translateY(1.8px)}}',
+      '@keyframes stwd-work{0%,100%{transform:translateY(0) rotate(0deg)}50%{transform:translateY(.8px) rotate(-1.2deg)}}',
+      '@keyframes stwd-gaze{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-0.6px) scale(1.03)}}',
+      '@keyframes stwd-offer{0%{transform:translateY(0) scale(1)}40%{transform:translateY(-2px) scale(1.05)}100%{transform:translateY(0) scale(1)}}',
+      '@keyframes stwd-startle{0%{transform:scale(1)}30%{transform:scale(1.08)}100%{transform:scale(1)}}',
+      '@keyframes stwd-withdraw{0%,100%{transform:rotate(0deg) translateX(0)}100%{transform:rotate(-4deg) translateX(-1px)}}',
+      '.stwd-motion-breathe .stwd-figure,.stwd-energy-low .stwd-figure{animation:stwd-breathe 3.2s ease-in-out infinite}',
+      '.stwd-motion-gaze .stwd-figure{animation:stwd-gaze 3s ease-in-out infinite}',
+      '.stwd-motion-search .stwd-figure{animation:stwd-search 3.4s ease-in-out infinite}',
+      '.stwd-motion-work .stwd-figure{animation:stwd-work 2.8s ease-in-out infinite}',
+      '.stwd-motion-check .stwd-figure{animation:stwd-breathe 3.6s ease-in-out infinite}',
+      '.stwd-motion-offer .stwd-figure{animation:stwd-offer .9s ease-out 1 both}',
+      '.stwd-motion-startle .stwd-figure{animation:stwd-startle .7s ease-out 1 both}',
+      '.stwd-motion-withdraw .stwd-figure{animation:stwd-withdraw .8s ease-out 1 both}',
+      '.stwd-motion-still .stwd-figure{animation:none}',
+      '.stwd-eye-idle .stwd-lid,.stwd-eye-scan .stwd-lid,.stwd-eye-focus .stwd-lid,.stwd-eye-inspect .stwd-lid,.stwd-eye-avert .stwd-lid{animation:stwd-blink 4.4s ease-in-out infinite}',
+      '.stwd-resident--tan .stwd-lid{animation-duration:3.6s;animation-delay:.7s}',
+      '.stwd-resident--zuo .stwd-lid{animation-duration:5.1s;animation-delay:1.4s}',
+      '.stwd-resident--yan .stwd-lid{animation-duration:4.8s;animation-delay:2.1s}',
+      '.stwd-eye-await .stwd-lid{animation:stwd-blink 6.2s ease-in-out infinite}',
+      '.stwd-eye-await .stwd-pupil{transform:translate(0,0)}',
+      '.stwd-eye-scan .stwd-pupil{animation:stwd-search 3.4s ease-in-out infinite}',
+      '.stwd-eye-focus .stwd-lid{transform:scaleY(.42)}',
+      '.stwd-eye-focus .stwd-pupil{transform:translate(1px,1.4px)}',
+      '.stwd-eye-inspect .stwd-pupil{animation:stwd-inspect 3.2s ease-in-out infinite}',
+      '.stwd-eye-done .stwd-sclera{transform:scale(1.08)}',
+      '.stwd-eye-alert .stwd-sclera{transform:scale(1.12)}',
+      '.stwd-eye-down{filter:saturate(.65)}',
+      '.stwd-eye-down .stwd-pupil{transform:translateY(2px)}',
+      '.stwd-eye-avert .stwd-lid{transform:scaleY(.45)}',
+      '.stwd-eye-avert .stwd-pupil{transform:translateX(-2px)}',
+      '.stwd-energy-high{z-index:1}',
+      '.stwd-mini{display:flex;align-items:center}',
+      '.stwd-mini-row{display:flex;align-items:center;gap:2px}',
+      '.stwd-resident-mini{border-radius:8px}',
+      '.stwd-dock{display:flex;align-items:center;min-height:0}',
+      '.stwd-dock-caption{margin:0;padding:2px 0;font-size:11px;color:var(--dsw-alias-label-secondary);line-height:1.4}',
+      '.stwd-decision-count{border:0;background:var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2));color:var(--dsw-alias-label-primary);font-size:11px;line-height:1.2;padding:3px 7px;border-radius:999px;cursor:pointer}',
+      '.stwd-console{display:flex;flex-direction:column;gap:16px;padding:16px 20px 24px;color:var(--dsw-alias-label-primary);max-width:720px}',
+      '.stwd-console-title{margin:0;font-size:14px;font-weight:600}',
+      '.stwd-console-h{margin:0 0 8px;font-size:14px;font-weight:600}',
+      '.stwd-console-block{display:flex;flex-direction:column;gap:6px}',
+      '.stwd-console-decide{order:0}',
+      '.stwd-console-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}',
+      '.stwd-console-row{display:flex;flex-direction:column;gap:6px;padding:8px 10px;border:.5px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1)}',
+      '.stwd-console-row-main{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:baseline;font-size:11px}',
+      '.stwd-console-id{font-weight:600}',
+      '.stwd-console-state{color:var(--dsw-alias-label-secondary)}',
+      '.stwd-console-title-line{color:var(--dsw-alias-label-primary)}',
+      '.stwd-console-actions{display:flex;gap:8px}',
+      '.stwd-console-btn{font-size:11px;line-height:1.2;padding:4px 8px;border:.5px solid var(--dsw-alias-border-l2);border-radius:6px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);cursor:pointer}',
+      '.stwd-console-btn-danger{color:var(--dsw-alias-state-error-primary)}',
+      '.stwd-console-empty{margin:0;font-size:11px;color:var(--dsw-alias-label-secondary)}',
+      '.stwd-console-health-compact .stwd-console-health-extra{display:none}',
+      '.stwd-console-health-line,.stwd-console-health-extra{margin:0;font-size:11px;color:var(--dsw-alias-label-secondary)}',
+      '.stwd-wifacts{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;margin:4px 0 0;font-size:11px}',
+      '.stwd-wifacts dt{margin:0;color:var(--dsw-alias-label-secondary)}',
+      '.stwd-wifacts dd{margin:0}',
+      '.stwd-console-icon{display:inline-flex}',
+      '.stwd-reduced .stwd-figure,.stwd-reduced .stwd-pupil,.stwd-reduced .stwd-lid,.stwd-reduced .stwd-brow{animation:none !important;transform:none}',
       '@media (prefers-reduced-motion:reduce){',
       '.stwd-root *{animation:none !important;transition:none !important}',
       '}',
@@ -3561,6 +4482,22 @@ window.__ModuleLoader__.load({
         resolveDagPositions,
         dagLayout,
         layoutRowsSignature,
+        presenceOf,
+        presenceField,
+        capHighEnergy,
+        presenceClassNames,
+        ariaLabelFromCaption,
+        ariaLabelFor,
+        sortConsoleSections,
+        healthSummary,
+        chatSpeechFor,
+        stillFrameOf,
+        stageField,
+        stageCaption,
+        resolveWorkItems,
+        AUTO_MERGE_DISABLED,
+        CONSOLE_SLOT_ID,
+        FACES,
       },
       apply(ctx) {
         const lang = () => pickLang(ctx);
@@ -3576,6 +4513,39 @@ window.__ModuleLoader__.load({
           locale: NS,
           label: () => textOf().nav,
         }, () => h(SettingsSection, { ctx, text: textOf(), lang: lang() }))), 'superbot: settings section');
+
+        // Official additive left console: panellist icon row + root-scoped main panel,
+        // verified against installed DeepSeek Harness 0.2.2-rc.2. Same id/key.
+        // Never register the occupied singleton slots sidebar / rightbar /
+        // conversation.session.header / conversation.header.
+        const openConsole = (target) => {
+          const layout = (target || ctx).layout;
+          if (!layout || typeof layout.selectPanel !== 'function') return false;
+          try {
+            layout.selectPanel(CONSOLE_SLOT_ID);
+            return true;
+          } catch {
+            return false;
+          }
+        };
+        ctx.effect(() => ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
+          name: 'sidebar.panellist',
+          id: CONSOLE_SLOT_ID,
+          order: 40,
+          label: () => textOf().consoleLabel || '「ds-superbot」',
+        }, () => h(ConsoleNavIcon, { text: textOf() }))), 'superbot: left console icon');
+        ctx.effect(() => ctx.slots.inject('main', () => ctx.slots.register({
+          name: 'main',
+          key: CONSOLE_SLOT_ID,
+          locale: NS,
+          inject: () => ({
+            text: textOf(),
+            lang: lang(),
+            authority: DEFAULT_AUTHORITY,
+            openPanel: () => { openPanel(ctx); },
+            openConsole: () => { openConsole(ctx); },
+          }),
+        }, SuperBotConsole)), 'superbot: left console panel');
 
         // The board is a per-Session right-Sidebar tab: the type (what opens), its
         // body and chip title, the header button, and the rule that opens it when a
@@ -3623,6 +4593,40 @@ window.__ModuleLoader__.load({
             locale: NS,
             inject: () => ({ text: textOf(), openPanel: () => { openPanel(sctx); } }),
           }, HeaderButton)), 'superbot: header button');
+
+          sctx.effect(() => sctx.slots.inject('conversation.session.header.corner', () => sctx.slots.register({
+            name: 'conversation.session.header.corner',
+            locale: NS,
+            inject: (sessionId) => ({
+              text: textOf(),
+              sessionId,
+              openPanel: () => { openPanel(sctx); },
+            }),
+          }, MiniFaces)), 'superbot: header mini faces');
+
+          sctx.effect(() => sctx.slots.inject('conversation.session.header.actions', () => sctx.slots.register({
+            name: 'conversation.session.header.actions',
+            id: 'ds-superbot-decide',
+            order: 20,
+            locale: NS,
+            inject: (sessionId) => ({
+              text: textOf(),
+              sessionId,
+              openConsole: () => { openConsole(sctx); },
+              openPanel: () => { openPanel(sctx); },
+            }),
+          }, DecisionCount)), 'superbot: header decision count');
+
+          sctx.effect(() => sctx.slots.inject('conversation.input.dock', () => sctx.slots.register({
+            name: 'conversation.input.dock',
+            id: 'ds-superbot-caption',
+            order: 20,
+            locale: NS,
+            inject: (sessionId) => ({
+              text: textOf(),
+              sessionId,
+            }),
+          }, InputCaption)), 'superbot: input caption dock');
 
           // Auto-open: the first Super Bot dispatch in a Session opens the board once,
           // so the user watches the run live without asking for it. Closing the tab

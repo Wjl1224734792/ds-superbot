@@ -1,24 +1,39 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="验 占位头像">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="验 占位头像" class="stwd-resident-svg stwd-resident-svg--yan">
   <title>验（占位）</title>
-  <rect width="64" height="64" rx="12" fill="#f0eaf6"/>
-  <!-- round face -->
-  <circle cx="32" cy="36" r="18" fill="#f0d7c3"/>
-  <!-- parted hair, high forehead -->
-  <path d="M14 34 C14 14, 32 10, 32 22 C32 10, 50 14, 50 34 C46 18, 18 18, 14 34 Z" fill="#2a2438"/>
-  <!-- inspecting eyes, slightly vertical emphasis -->
-  <ellipse cx="24" cy="36" rx="4.4" ry="4.8" fill="#fff"/>
-  <ellipse cx="40" cy="36" rx="4.4" ry="4.8" fill="#fff"/>
-  <ellipse cx="24" cy="36.6" rx="1.8" ry="2.2" fill="#2a2438"/>
-  <ellipse cx="40" cy="36.6" rx="1.8" ry="2.2" fill="#2a2438"/>
-  <!-- oval glasses, unique to 验 -->
-  <ellipse cx="24" cy="36" rx="7" ry="6" fill="none" stroke="#7aa0c4" stroke-width="1.6"/>
-  <ellipse cx="40" cy="36" rx="7" ry="6" fill="none" stroke="#7aa0c4" stroke-width="1.6"/>
-  <path d="M31 36 L33 36" stroke="#7aa0c4" stroke-width="1.6"/>
-  <path d="M17 36 L14 34" stroke="#7aa0c4" stroke-width="1.4" stroke-linecap="round"/>
-  <path d="M47 36 L50 34" stroke="#7aa0c4" stroke-width="1.4" stroke-linecap="round"/>
-  <path d="M28 47 Q32 50 36 47" fill="none" stroke="#b08070" stroke-width="1.2" stroke-linecap="round"/>
-  <!-- violet lapel -->
-  <path d="M16 54 Q32 48 48 54 L48 64 L16 64 Z" fill="#5b3d7a"/>
-  <path d="M32 52 L28 64 L36 64 Z" fill="#7aa0c4"/>
+  <rect class="stwd-face-bg" width="64" height="64" rx="12" fill="#f0eaf6"/>
+  <g class="stwd-figure">
+    <g class="stwd-face-base">
+      <circle cx="32" cy="36" r="18" fill="#f0d7c3"/>
+    </g>
+    <g class="stwd-hair">
+      <path d="M14 34 C14 14, 32 10, 32 22 C32 10, 50 14, 50 34 C46 18, 18 18, 14 34 Z" fill="#2a2438"/>
+    </g>
+    <g class="stwd-eye stwd-eye-l">
+      <ellipse class="stwd-sclera" cx="24" cy="36" rx="4.4" ry="4.8" fill="#fff"/>
+      <ellipse class="stwd-pupil" cx="24" cy="36.6" rx="1.8" ry="2.2" fill="#2a2438"/>
+      <rect class="stwd-lid stwd-lid-upper" x="19.2" y="30.6" width="9.6" height="5.4" rx="2" fill="#2a2438"/>
+    </g>
+    <g class="stwd-eye stwd-eye-r">
+      <ellipse class="stwd-sclera" cx="40" cy="36" rx="4.4" ry="4.8" fill="#fff"/>
+      <ellipse class="stwd-pupil" cx="40" cy="36.6" rx="1.8" ry="2.2" fill="#2a2438"/>
+      <rect class="stwd-lid stwd-lid-upper" x="35.2" y="30.6" width="9.6" height="5.4" rx="2" fill="#2a2438"/>
+    </g>
+    <g class="stwd-glasses">
+      <ellipse cx="24" cy="36" rx="7" ry="6" fill="none" stroke="#7aa0c4" stroke-width="1.6"/>
+      <ellipse cx="40" cy="36" rx="7" ry="6" fill="none" stroke="#7aa0c4" stroke-width="1.6"/>
+      <path d="M31 36 L33 36" stroke="#7aa0c4" stroke-width="1.6"/>
+      <path d="M17 36 L14 34" stroke="#7aa0c4" stroke-width="1.4" stroke-linecap="round"/>
+      <path d="M47 36 L50 34" stroke="#7aa0c4" stroke-width="1.4" stroke-linecap="round"/>
+    </g>
+    <g class="stwd-brows">
+      <path class="stwd-brow stwd-brow-l" d="M18 29 Q24 27 29 29" fill="none" stroke="#2a2438" stroke-width="1.2" stroke-linecap="round"/>
+      <path class="stwd-brow stwd-brow-r" d="M35 29 Q40 27 46 29" fill="none" stroke="#2a2438" stroke-width="1.2" stroke-linecap="round"/>
+    </g>
+    <path class="stwd-mouth" d="M28 47 Q32 50 36 47" fill="none" stroke="#b08070" stroke-width="1.2" stroke-linecap="round"/>
+    <g class="stwd-collar">
+      <path d="M16 54 Q32 48 48 54 L48 64 L16 64 Z" fill="#5b3d7a"/>
+      <path d="M32 52 L28 64 L36 64 Z" fill="#7aa0c4"/>
+    </g>
+  </g>
 </svg>

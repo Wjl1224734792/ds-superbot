@@ -986,8 +986,9 @@ function sampleFacts(overrides) {
 
 /**
  * The board is a per-Session right-Sidebar tab: the tab type, its body and chip
- * title, a header button, and a settings section for models. The old full page and
- * its left-nav entry must stay gone — the panel is opened per Session, not as a page.
+ * title, a header button, and a settings section for models. P2 also registers the
+ * official additive left console (sidebar.panellist + main) and header corner.
+ * Occupied singleton slots must stay unregistered.
  */
 test('the client registers a right-sidebar board, its title, a header button and the settings section', async () => {
   const { id, factory } = await loadClientFactory();
@@ -1000,23 +1001,38 @@ test('the client registers a right-sidebar board, its title, a header button and
   const { ctx, registered, tabTypes } = createClientContext();
   instance.apply(ctx);
 
-  assert.deepEqual(registered.map((entry) => entry.options.name), [
+  const names = registered.map((entry) => entry.options.name);
+  for (const name of [
     'settings.section',
+    'sidebar.panellist',
+    'main',
     'sidebar.right.pane.tab',
     'sidebar.right.pane.tab.title',
     'conversation.session.header.utilities',
-  ]);
+    'conversation.session.header.corner',
+    'conversation.session.header.actions',
+    'conversation.input.dock',
+  ]) {
+    assert.ok(names.includes(name), 'missing slot ' + name);
+  }
+  const forbidden = ['sidebar', 'rightbar', 'conversation.session.header', 'conversation.header'];
   assert.deepEqual(
-    registered.filter((entry) => entry.options.name === 'main' || entry.options.name === 'sidebar.panellist'),
+    registered.filter((entry) => forbidden.includes(entry.options.name)).map((entry) => entry.options.name),
     [],
-    'there is no full page and no left-nav entry any more',
+    'occupied singleton / column slots must not be taken',
   );
 
-  assert.equal(registered[0].options.id, 'superbot', 'the settings section keeps its id');
-  assert.equal(registered[1].options.key, 'ds-superbot', 'the body is keyed by the tab type id');
-  assert.equal(registered[2].options.key, 'ds-superbot', 'the chip title uses the same key');
-  assert.equal(registered[3].options.id, 'superbot-board');
-  assert.ok(registered[3].options.order < 0, 'the header button sits left of the overflow menu');
+  const byName = (name) => registered.filter((entry) => entry.options.name === name);
+  assert.equal(byName('settings.section')[0].options.id, 'superbot', 'the settings section keeps its id');
+  assert.equal(byName('sidebar.right.pane.tab')[0].options.key, 'ds-superbot', 'the body is keyed by the tab type id');
+  assert.equal(byName('sidebar.right.pane.tab.title')[0].options.key, 'ds-superbot', 'the chip title uses the same key');
+  const headerBtn = byName('conversation.session.header.utilities').find((entry) => entry.options.id === 'superbot-board');
+  assert.ok(headerBtn, 'the utilities entry keeps id superbot-board');
+  assert.ok(headerBtn.options.order < 0, 'the header button sits left of the overflow menu');
+  assert.equal(byName('sidebar.panellist')[0].options.id, 'ds-superbot-console');
+  assert.equal(byName('main')[0].options.key, 'ds-superbot-console');
+  const panellistLabel = byName('sidebar.panellist')[0].options.label;
+  assert.match(String(typeof panellistLabel === 'function' ? panellistLabel() : panellistLabel), /ds-superbot/);
 
   assert.equal(tabTypes.length, 1);
   assert.equal(tabTypes[0].id, 'ds-superbot');
@@ -1035,7 +1051,7 @@ test('the client registers a right-sidebar board, its title, a header button and
   assert.match(emptyText, /产物/);
 
   // The header button renders as a real control and calls the injected opener.
-  const buttonEntry = registered[3];
+  const buttonEntry = registered.find((entry) => entry.options.name === 'conversation.session.header.utilities' && entry.options.id === 'superbot-board');
   let opened = 0;
   const buttonHost = harness.expand(buttonEntry.component({ text: { openPanel: '打开 Super Bot 团队面板' }, openPanel: () => { opened += 1; } }));
   const buttons = harness.collect(buttonHost, harness.byClass('stwd-headbtn'));
@@ -2679,6 +2695,34 @@ test('the panel stylesheet stays scoped and uses only host theme tokens', async 
     '#ef4444',
     '#64748b',
     '#5b45c8',
+    // Original resident face fills (cang / tan / zuo / yan placeholder artwork).
+    '#e8f1f2',
+    '#f3e0c8',
+    '#2c4a52',
+    '#1c3136',
+    '#b08060',
+    '#3d6b73',
+    '#c9a227',
+    '#f7efe4',
+    '#e8c8a0',
+    '#5a2e16',
+    '#3a1c0c',
+    '#b07a50',
+    '#c56a2d',
+    '#e8c56b',
+    '#eaf3e8',
+    '#e2c4a0',
+    '#1f1a17',
+    '#d27d2c',
+    '#1a1410',
+    '#a06a48',
+    '#3f6b3a',
+    '#f0eaf6',
+    '#f0d7c3',
+    '#2a2438',
+    '#7aa0c4',
+    '#b08070',
+    '#5b3d7a',
   ]);
   const colors = literals.filter((value) => !artwork.has(value));
   assert.deepEqual(colors, [], `literal colors are artwork-only, found: ${colors.join(', ')}`);

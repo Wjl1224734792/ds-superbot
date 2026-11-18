@@ -38,6 +38,7 @@
     "roles/**",
     "scripts/**",
     "assets/**",
+    "lib/**",
     "AGENTS.md"
   ],
   "scripts": {

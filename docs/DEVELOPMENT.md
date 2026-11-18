@@ -25,7 +25,7 @@ npm test         # node --test：dsh-plugin / constitution / runtime / im
 
 | 包 | 开发时注意 |
 | --- | --- |
-| `packages/dsh-plugin` | 行为保持 0.1.0 兼容。P0 不注册新的左栏主面板，不改顶部和右侧栏。`scripts/` 只是 shim。 |
+| `packages/dsh-plugin` | 行为保持 0.1.0 兼容。P2 已用官方加法槽接上左栏控制台、顶部迷你脸和右侧舞台；禁止注册 `sidebar` / `rightbar` / `conversation.session.header` / `conversation.header`。`scripts/` 只是 shim。 |
 | `packages/constitution` | 不要重写门禁脚本判定逻辑。落盘必须 `--write`。Receipt 手改后必须能被 `revalidate` 识破。 |
 | `packages/runtime` | 文件型 Event Bus、订阅直通（不授权）、Watchdog（进度 / 空转 / 费用）、Steward 轻量规则 + 预留 `createModelPort`。默认 observe，只记录 would-accept，不执行、不自动合并、不开 HTTP。 |
 | `packages/im` | 面板和字幕只调用 `presenceOf`。同一时刻全场 `high` 不得超过 1 个。 |
@@ -36,9 +36,9 @@ Curator 打分权重（写在 `packages/runtime/src/curator.mjs` 的 `WEIGHTS` �
 score = 4 * value + 2 * (reversible ? 1 : 0) + 1 * evidenceCount - 3 * attentionCost
 ```
 
-## 3. P2 才接线的官方加法槽位
+## 3. P2 已接线的官方加法槽位
 
-P0 只把清单写入文档，不注册这些槽，以免 0.1.0 宿主测试翻车。实现前用宿主文档或 `cordis_inspect what:"client"` 核对名称；若某槽不存在，降级到仍存在的加法槽，不得改去自建页面或 HTTP 控制台。
+以下槽位已对照本机安装的 DeepSeek Harness **0.2.2-rc.2**（桌面版 `E:\\DSH`，官方契约来自 `ui-sidebar` / `ui-layout` / `ui-conversation`）核对后接入。官方加法槽都在；禁止占用的整栏 / 单例槽只避开，不改名、不发明新槽。若后续宿主版本缺失某槽，降级到仍存在的加法槽，不得改去自建页面或 HTTP 控制台。
 
 | 位置 | 槽 | 用途 |
 | --- | --- | --- |
