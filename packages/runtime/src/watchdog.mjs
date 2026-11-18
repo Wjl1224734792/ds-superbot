@@ -6,8 +6,14 @@
  *
  * When a tick is explicitly run with `authority: 'execute'`, timeout /
  * idle / document drift may actually `revokeMandate` and transition the
- * work item to `Parked` (legal P5 edges only). A missing snapshot is
- * not treated as drift. No HTTP, no background network, no git merge.
+ * work item to `Parked` (legal P5 edges only). P6 also treats a work
+ * item as execute during tick when `canExecute(root, item)` is allowed
+ * (an active human-issued Mandate), even if the loop default stays
+ * `observe`. `itemAuthorities` / `workItemAuthority` may override a
+ * single item. Unapproved items stay observe. Halt / over-budget stay
+ * record-only even in execute. A missing snapshot is not treated as
+ * drift. No HTTP, no background network, no git merge.
+ * `loop.mjs` must not import this module.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -24,6 +30,7 @@ import {
 import * as bus from './bus.mjs';
 import { DEFAULT_AUTHORITY, recordWouldAccept, settleAuthority, isHandsOffAuthority } from './observe.mjs';
 import { formatIso, parseIso } from './time.mjs';
+import { canExecute } from './loop.mjs';
 
 export const WATCHDOG_REL = '.superbot/ledger/watchdog';
 
@@ -112,6 +119,26 @@ function revokeAndPark(root, item, mandate, reason, now) {
  * Start (or resume) a watchdog loop for a repository root.
  * @param {{ root: string, id?: string, idleAfterMinutes?: number, authority?: string, budgets?: object }} options
  */
+
+function explicitItemAuthority(input, itemId) {
+  if (input.itemAuthorities && Object.prototype.hasOwnProperty.call(input.itemAuthorities, itemId)) {
+    return { explicit: true, value: input.itemAuthorities[itemId] };
+  }
+  if (input.workItemAuthority && Object.prototype.hasOwnProperty.call(input.workItemAuthority, itemId)) {
+    return { explicit: true, value: input.workItemAuthority[itemId] };
+  }
+  return { explicit: false, value: undefined };
+}
+
+function itemHasExecuteGrant(root, item, now) {
+  if (!root || !item) return false;
+  try {
+    return canExecute(root, item, { now }).allowed === true;
+  } catch {
+    return false;
+  }
+}
+
 export function start(options = {}) {
   const root = options.root;
   if (!root) throw new Error('watchdog.start requires root');
@@ -182,7 +209,10 @@ export function tick(state = {}) {
     const last = item.updatedAt ?? item.createdAt;
     const idleMinutes = last ? minutesBetween(last, at) : 0;
     const inFlight = ACTIVE_STATES.has(item.state);
-    const requestedForItem = input.itemAuthorities?.[item.id] ?? input.workItemAuthority?.[item.id] ?? authority;
+    const override = explicitItemAuthority(input, item.id);
+    const requestedForItem = override.explicit
+      ? override.value
+      : (itemHasExecuteGrant(root, item, now) ? 'execute' : authority);
     const itemAuthority = settleAuthority(requestedForItem, {
       root,
       action: 'watchdog',

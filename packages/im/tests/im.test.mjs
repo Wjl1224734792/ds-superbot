@@ -139,19 +139,32 @@ test('a presence field never has more than one high-energy face', () => {
   }
 });
 
-test('placeholder resident SVGs exist, are distinguishable, and are marked 占位', () => {
+test('formal original resident SVGs exist, are distinguishable, and are marked 正式', () => {
   const root = join(dirname(fileURLToPath(import.meta.url)), '../../dsh-plugin/assets/residents');
   const readme = readFileSync(join(root, 'README.md'), 'utf8');
-  assert.match(readme, /占位/);
+  assert.match(readme, /正式原创脸谱/);
+  assert.doesNotMatch(readme, /占位/);
   const bodies = {};
+  const fills = {};
   for (const face of FACES) {
     const file = join(root, face, 'face.svg');
     assert.ok(existsSync(file), file);
     const svg = readFileSync(file, 'utf8');
     assert.match(svg, /<svg[\s>]/);
-    assert.match(svg, /占位/);
+    assert.match(svg, /viewBox="0 0 64 64"/);
+    assert.match(svg, /stwd-resident-svg/);
+    assert.match(svg, /stwd-lid-upper/);
+    assert.match(svg, /stwd-pupil/);
+    assert.match(svg, /正式/);
+    assert.doesNotMatch(svg, /占位/);
     bodies[face] = svg;
+    fills[face] = [...svg.matchAll(/fill="([^"]+)"/g)].map((m) => m[1]).join('|');
   }
   const unique = new Set(Object.values(bodies));
-  assert.equal(unique.size, 4, 'the four placeholder faces must not be identical');
+  assert.equal(unique.size, 4, 'the four formal faces must not be identical');
+  assert.equal(new Set(Object.values(fills)).size, 4, 'the four formal faces must use distinguishable fills');
+  assert.match(bodies.cang, /aria-label="仓 正式头像"/);
+  assert.match(bodies.tan, /aria-label="探 正式头像"/);
+  assert.match(bodies.zuo, /aria-label="作 正式头像"/);
+  assert.match(bodies.yan, /aria-label="验 正式头像"/);
 });

@@ -205,3 +205,84 @@ test('Watchdog can Park every extended in-flight state', (t) => {
     assert.equal(getWorkItem(root, id).state, 'Parked', `${state} should have been Parked`);
   }
 });
+
+test('after a human Mandate, default observe still executes that item only', (t) => {
+  const root = tmpRoot(t);
+  const approved = seedItem(root, { id: 'WI-2026-321' });
+  const sibling = seedItem(root, { id: 'WI-2026-322', skipThread: true, intent: '未被批准的兄弟项' });
+  const snap = createSnapshot(root, { write: true }).document;
+  const mandate = issueFor(root, approved, { snapshot: snap });
+  putState(root, { ...approved, mandate: mandate.id, constitution_snapshot: snap.id }, 'Building', {
+    updatedAt: '2026-11-18T08:00:00+08:00',
+  });
+  putState(root, sibling, 'Building', {
+    updatedAt: '2026-11-18T08:00:00+08:00',
+  });
+
+  runtime.watchdog.start({ root, idleAfterMinutes: 30, authority: 'observe' });
+  const tick = runtime.watchdog.tick({
+    root,
+    now: new Date('2026-11-18T12:00:00+08:00'),
+    authority: 'observe',
+  });
+
+  assert.equal(runtime.DEFAULT_AUTHORITY, 'observe');
+  assert.equal(tick.authority, 'observe');
+  assert.equal(tick.executed, true);
+  assert.ok(tick.actions.some((a) => a.workItem === approved.id && a.type === 'revoke' && a.reason === 'timeout'));
+  assert.ok(tick.actions.some((a) => a.workItem === approved.id && a.type === 'park'));
+  assert.equal(getMandate(root, mandate.id).revokedAt != null, true);
+  assert.equal(getWorkItem(root, approved.id).state, 'Parked');
+
+  assert.equal(tick.actions.some((a) => a.workItem === sibling.id), false);
+  assert.ok(tick.wouldAccept.some((w) => w.workItem === sibling.id && w.action === 'park' && w.executed === false));
+  assert.equal(getWorkItem(root, sibling.id).state, 'Building');
+});
+
+test('itemAuthorities observe override keeps an approved item hands-off', (t) => {
+  const root = tmpRoot(t);
+  const item = seedItem(root, { id: 'WI-2026-323' });
+  const snap = createSnapshot(root, { write: true }).document;
+  const mandate = issueFor(root, item, { snapshot: snap });
+  putState(root, { ...item, mandate: mandate.id, constitution_snapshot: snap.id }, 'Building', {
+    updatedAt: '2026-11-18T08:00:00+08:00',
+  });
+
+  const tick = runtime.watchdog.tick({
+    root,
+    now: new Date('2026-11-18T12:00:00+08:00'),
+    authority: 'observe',
+    idleAfterMinutes: 30,
+    itemAuthorities: { [item.id]: 'observe' },
+  });
+  assert.equal(tick.authority, 'observe');
+  assert.equal(tick.executed, false);
+  assert.ok(tick.wouldAccept.some((w) => w.workItem === item.id));
+  assert.equal(getMandate(root, mandate.id).revokedAt, null);
+  assert.equal(getWorkItem(root, item.id).state, 'Building');
+});
+
+test('halt and over-budget stay record-only even when the approved item is execute', (t) => {
+  const root = tmpRoot(t);
+  const item = seedItem(root, { id: 'WI-2026-324' });
+  const snap = createSnapshot(root, { write: true }).document;
+  const mandate = issueFor(root, item, { snapshot: snap });
+  // Fresh update: not idle, mandate unexpired, snapshot still bound.
+  putState(root, { ...item, mandate: mandate.id, constitution_snapshot: snap.id }, 'Building', {
+    updatedAt: '2026-11-18T12:00:00+08:00',
+  });
+
+  const tick = runtime.watchdog.tick({
+    root,
+    now: new Date('2026-11-18T12:05:00+08:00'),
+    authority: 'observe',
+    idleAfterMinutes: 60,
+    usage: { [item.id]: { tokens: 50000, minutes: 120 } },
+  });
+  assert.equal(tick.authority, 'observe');
+  assert.equal(tick.executed, false);
+  assert.ok(tick.cost.some((row) => row.workItem === item.id && row.overBudget === true));
+  assert.ok(tick.wouldAccept.some((w) => w.action === 'halt' && w.executed === false));
+  assert.equal(getMandate(root, mandate.id).revokedAt, null);
+  assert.equal(getWorkItem(root, item.id).state, 'Building');
+});

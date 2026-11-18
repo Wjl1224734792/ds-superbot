@@ -1,39 +1,65 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="验 占位头像" class="stwd-resident-svg stwd-resident-svg--yan">
-  <title>验（占位）</title>
-  <rect class="stwd-face-bg" width="64" height="64" rx="12" fill="#f0eaf6"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="验 正式头像" class="stwd-resident-svg stwd-resident-svg--yan">
+  <title>验（正式原创脸谱）</title>
+  <defs>
+    <linearGradient id="stwd-yan-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f6f0fb"/>
+      <stop offset="1" stop-color="#e4d8ef"/>
+    </linearGradient>
+    <radialGradient id="stwd-yan-skin" cx="0.42" cy="0.3" r="0.8">
+      <stop offset="0" stop-color="#f6e0ce"/>
+      <stop offset="1" stop-color="#e0bba4"/>
+    </radialGradient>
+    <linearGradient id="stwd-yan-hair" x1="0.2" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#3d3650"/>
+      <stop offset="1" stop-color="#2a2438"/>
+    </linearGradient>
+    <linearGradient id="stwd-yan-collar" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0" stop-color="#6d4c8e"/>
+      <stop offset="1" stop-color="#4a3066"/>
+    </linearGradient>
+  </defs>
+  <rect class="stwd-face-bg" width="64" height="64" rx="12" fill="url(#stwd-yan-bg)"/>
   <g class="stwd-figure">
     <g class="stwd-face-base">
-      <circle cx="32" cy="36" r="18" fill="#f0d7c3"/>
+      <circle cx="32" cy="36" r="18" fill="url(#stwd-yan-skin)"/>
+      <ellipse cx="23" cy="43" rx="3.1" ry="2" fill="#e8b8b0" opacity="0.5"/>
+      <ellipse cx="41" cy="43" rx="3.1" ry="2" fill="#e8b8b0" opacity="0.5"/>
+      <path d="M31.3 39.5 Q32 42 32.7 39.5" fill="none" stroke="#c99a86" stroke-width="0.7" stroke-linecap="round"/>
     </g>
     <g class="stwd-hair">
-      <path d="M14 34 C14 14, 32 10, 32 22 C32 10, 50 14, 50 34 C46 18, 18 18, 14 34 Z" fill="#2a2438"/>
+      <path d="M14 34 C14 13.5, 32 9, 32 21.5 C32 9, 50 13.5, 50 34 C46 17.5, 18 17.5, 14 34 Z" fill="url(#stwd-yan-hair)"/>
+      <path d="M24 14 C28 12, 32 16, 32 21" fill="none" stroke="#3d3650" stroke-width="1.1" stroke-linecap="round"/>
+      <path d="M40 14 C36 12, 32 16, 32 21" fill="none" stroke="#3d3650" stroke-width="1.1" stroke-linecap="round"/>
     </g>
     <g class="stwd-eye stwd-eye-l">
       <ellipse class="stwd-sclera" cx="24" cy="36" rx="4.4" ry="4.8" fill="#fff"/>
       <ellipse class="stwd-pupil" cx="24" cy="36.6" rx="1.8" ry="2.2" fill="#2a2438"/>
+      <ellipse cx="23.4" cy="35.8" rx="0.5" ry="0.55" fill="#fff" opacity="0.75"/>
       <rect class="stwd-lid stwd-lid-upper" x="19.2" y="30.6" width="9.6" height="5.4" rx="2" fill="#2a2438"/>
     </g>
     <g class="stwd-eye stwd-eye-r">
       <ellipse class="stwd-sclera" cx="40" cy="36" rx="4.4" ry="4.8" fill="#fff"/>
       <ellipse class="stwd-pupil" cx="40" cy="36.6" rx="1.8" ry="2.2" fill="#2a2438"/>
+      <ellipse cx="39.4" cy="35.8" rx="0.5" ry="0.55" fill="#fff" opacity="0.75"/>
       <rect class="stwd-lid stwd-lid-upper" x="35.2" y="30.6" width="9.6" height="5.4" rx="2" fill="#2a2438"/>
     </g>
     <g class="stwd-glasses">
-      <ellipse cx="24" cy="36" rx="7" ry="6" fill="none" stroke="#7aa0c4" stroke-width="1.6"/>
-      <ellipse cx="40" cy="36" rx="7" ry="6" fill="none" stroke="#7aa0c4" stroke-width="1.6"/>
-      <path d="M31 36 L33 36" stroke="#7aa0c4" stroke-width="1.6"/>
-      <path d="M17 36 L14 34" stroke="#7aa0c4" stroke-width="1.4" stroke-linecap="round"/>
-      <path d="M47 36 L50 34" stroke="#7aa0c4" stroke-width="1.4" stroke-linecap="round"/>
+      <ellipse cx="24" cy="36" rx="7.1" ry="6.1" fill="none" stroke="#5e86aa" stroke-width="1.55"/>
+      <ellipse cx="40" cy="36" rx="7.1" ry="6.1" fill="none" stroke="#5e86aa" stroke-width="1.55"/>
+      <path d="M31.1 36 L32.9 36" stroke="#7aa0c4" stroke-width="1.6"/>
+      <path d="M16.9 36 L13.8 33.8" stroke="#7aa0c4" stroke-width="1.4" stroke-linecap="round"/>
+      <path d="M47.1 36 L50.2 33.8" stroke="#7aa0c4" stroke-width="1.4" stroke-linecap="round"/>
     </g>
     <g class="stwd-brows">
-      <path class="stwd-brow stwd-brow-l" d="M18 29 Q24 27 29 29" fill="none" stroke="#2a2438" stroke-width="1.2" stroke-linecap="round"/>
-      <path class="stwd-brow stwd-brow-r" d="M35 29 Q40 27 46 29" fill="none" stroke="#2a2438" stroke-width="1.2" stroke-linecap="round"/>
+      <path class="stwd-brow stwd-brow-l" d="M18 29 Q24 26.7 29 29" fill="none" stroke="#2a2438" stroke-width="1.25" stroke-linecap="round"/>
+      <path class="stwd-brow stwd-brow-r" d="M35 29 Q40 26.7 46 29" fill="none" stroke="#2a2438" stroke-width="1.25" stroke-linecap="round"/>
     </g>
-    <path class="stwd-mouth" d="M28 47 Q32 50 36 47" fill="none" stroke="#b08070" stroke-width="1.2" stroke-linecap="round"/>
+    <path class="stwd-mouth" d="M28 47 Q32 50.4 36 47" fill="none" stroke="#b08070" stroke-width="1.2" stroke-linecap="round"/>
     <g class="stwd-collar">
-      <path d="M16 54 Q32 48 48 54 L48 64 L16 64 Z" fill="#5b3d7a"/>
-      <path d="M32 52 L28 64 L36 64 Z" fill="#7aa0c4"/>
+      <path d="M16 54 Q32 47.5 48 54 L48 64 L16 64 Z" fill="url(#stwd-yan-collar)"/>
+      <path d="M32 51.8 L27.8 64 L36.2 64 Z" fill="#7aa0c4"/>
+      <path d="M32 54 L30 64 L34 64 Z" fill="#9bb8d4"/>
     </g>
   </g>
 </svg>

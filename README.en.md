@@ -15,7 +15,7 @@ The goal is not "write the code in one shot" but to keep the project **understan
 > **Status**: `0.2.0` (P0 monorepo). Breaking changes are allowed before 1.0.0 — the install path is now `packages/dsh-plugin`. DSH itself is at `0.2.x`, so the native extension-point contract moves with the host — read the [CHANGELOG](CHANGELOG.md) before upgrading DSH.
 
 
-The repository itself is a **long-lived engineering organization**: group chat is the only human/AI console, documents / norms / gates / evidence are its constitution, the work item is the only product object, and Claim → Evidence → Receipt is the only delivery currency. Decisions stay with humans, operations stay with AI, judgment stays with programs. P0 delivers the monorepo skeleton, contract validation, the Constitution Service, compatibility shims, and `presenceOf` plus placeholder faces. The 0.1.0 seven-role dispatch path is kept.
+The repository itself is a **long-lived engineering organization**: group chat is the only human/AI console, documents / norms / gates / evidence are its constitution, the work item is the only product object, and Claim → Evidence → Receipt is the only delivery currency. Decisions stay with humans, operations stay with AI, judgment stays with programs. P0 delivers the monorepo skeleton, contract validation, the Constitution Service, compatibility shims, and `presenceOf` plus faces (formal original portraits as of P6). The 0.1.0 seven-role dispatch path is kept.
 
 ## What it fixes
 
@@ -247,7 +247,7 @@ Criteria and error codes are in `docs-ready --help` and the `docs-rules` skill. 
     │   ├── index.js / client.js
     │   ├── roles/ / skills/
     │   ├── scripts/             # shims that forward to constitution
-    │   ├── assets/residents/    # placeholder faces for 仓/探/作/验
+    │   ├── assets/residents/    # formal original faces for 仓/探/作/验
     │   └── tests/
     ├── constitution/            # @ds-superbot/constitution: ledger, policy, receipts, gate SSOT
     ├── runtime/                 # @ds-superbot/runtime: Steward / Compiler / routeModel / Event Bus / Watchdog / observe

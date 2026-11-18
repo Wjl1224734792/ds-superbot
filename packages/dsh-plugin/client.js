@@ -3230,29 +3230,71 @@ window.__ModuleLoader__.load({
 
     function residentLayers(face) {
       const skin = {
-        cang: { bg: '#e8f1f2', face: '#f3e0c8', hair: '#2c4a52', pupil: '#1c3136', lid: '#2c4a52', mouth: '#b08060' },
-        tan: { bg: '#f7efe4', face: '#e8c8a0', hair: '#5a2e16', pupil: '#3a1c0c', lid: '#5a2e16', mouth: '#b07a50' },
-        zuo: { bg: '#eaf3e8', face: '#e2c4a0', hair: '#1f1a17', pupil: '#1a1410', lid: '#1f1a17', mouth: '#a06a48' },
-        yan: { bg: '#f0eaf6', face: '#f0d7c3', hair: '#2a2438', pupil: '#2a2438', lid: '#2a2438', mouth: '#b08070' },
-      }[face] || { bg: '#e8f1f2', face: '#f3e0c8', hair: '#2c4a52', pupil: '#1c3136', lid: '#2c4a52', mouth: '#b08060' };
+        cang: { bg: '#e8f1f2', face: '#f3e0c8', hair: '#2c4a52', pupil: '#1c3136', lid: '#2c4a52', mouth: '#b08060', blush: '#e8b8a4', hairHi: '#3e6570', nose: '#c99676', gold: '#c9a227', goldHi: '#e6c65a', collar: '#3d6b73', collarHi: '#4a7f88', collarLo: '#2f585f', bgHi: '#f3f8f8', bgLo: '#dce8ea', faceHi: '#f8e8d2', faceLo: '#e4c8a8' },
+        tan: { bg: '#f7efe4', face: '#e8c8a0', hair: '#5a2e16', pupil: '#3a1c0c', lid: '#5a2e16', mouth: '#b07a50', blush: '#e0a888', hairHi: '#7a3e20', nose: '#c08a62', gold: '#e8c56b', goldHi: '#f0d48a', collar: '#c56a2d', collarHi: '#d57a3a', collarLo: '#a85420', bgHi: '#fbf4ea', bgLo: '#f0e0cc', faceHi: '#f0d4b4', faceLo: '#d9b08a' },
+        zuo: { bg: '#eaf3e8', face: '#e2c4a0', hair: '#1f1a17', pupil: '#1a1410', lid: '#1f1a17', mouth: '#a06a48', blush: '#d4a07e', hairHi: '#3a3028', nose: '#b48a66', gold: '#d27d2c', goldHi: '#e0943a', collar: '#3f6b3a', collarHi: '#527c4c', collarLo: '#2f522c', bgHi: '#f1f7ee', bgLo: '#dce8d8', faceHi: '#edd0ae', faceLo: '#d2ae86', bandLo: '#b86a20' },
+        yan: { bg: '#f0eaf6', face: '#f0d7c3', hair: '#2a2438', pupil: '#2a2438', lid: '#2a2438', mouth: '#b08070', blush: '#e8b8b0', hairHi: '#3d3650', nose: '#c99a86', gold: '#7aa0c4', goldHi: '#9bb8d4', collar: '#5b3d7a', collarHi: '#6d4c8e', collarLo: '#4a3066', bgHi: '#f6f0fb', bgLo: '#e4d8ef', faceHi: '#f6e0ce', faceLo: '#e0bba4', glass: '#5e86aa' },
+      }[face] || { bg: '#e8f1f2', face: '#f3e0c8', hair: '#2c4a52', pupil: '#1c3136', lid: '#2c4a52', mouth: '#b08060', blush: '#e8b8a4', hairHi: '#3e6570', nose: '#c99676', gold: '#c9a227', goldHi: '#e6c65a', collar: '#3d6b73', collarHi: '#4a7f88', collarLo: '#2f585f', bgHi: '#f3f8f8', bgLo: '#dce8ea', faceHi: '#f8e8d2', faceLo: '#e4c8a8' };
+
+      const gid = (name) => 'stwd-' + face + '-' + name;
+      const defs = h('defs', { key: 'defs' },
+        h('linearGradient', { id: gid('bg'), x1: '0', y1: '0', x2: '0', y2: '1' },
+          h('stop', { offset: '0', stopColor: skin.bgHi || skin.bg }),
+          h('stop', { offset: '1', stopColor: skin.bgLo || skin.bg }),
+        ),
+        h('radialGradient', { id: gid('skin'), cx: '0.42', cy: '0.32', r: '0.8' },
+          h('stop', { offset: '0', stopColor: skin.faceHi || skin.face }),
+          h('stop', { offset: '1', stopColor: skin.faceLo || skin.face }),
+        ),
+        h('linearGradient', { id: gid('hair'), x1: '0.2', y1: '0', x2: '0.9', y2: '1' },
+          h('stop', { offset: '0', stopColor: skin.hairHi || skin.hair }),
+          h('stop', { offset: '1', stopColor: skin.hair }),
+        ),
+        h('linearGradient', { id: gid('collar'), x1: '0.5', y1: '0', x2: '0.5', y2: '1' },
+          h('stop', { offset: '0', stopColor: skin.collarHi || skin.collar }),
+          h('stop', { offset: '1', stopColor: skin.collarLo || skin.collar }),
+        ),
+        face === 'zuo' ? h('linearGradient', { id: gid('band'), x1: '0', y1: '0', x2: '0', y2: '1' },
+          h('stop', { offset: '0', stopColor: skin.goldHi }),
+          h('stop', { offset: '1', stopColor: skin.bandLo || skin.gold }),
+        ) : null,
+      );
 
       const hair = face === 'cang'
-        ? [h('path', { key: 'roof', d: 'M10 30 L32 8 L54 30 L54 36 L10 36 Z', fill: skin.hair }),
-           h('path', { key: 'bang', d: 'M14 32 C18 18, 46 18, 50 32 L50 30 C46 16, 18 16, 14 30 Z', fill: skin.hair })]
+        ? [h('path', { key: 'roof', d: 'M11 31 L32 7.5 L53 31 L52.5 37 L11.5 37 Z', fill: 'url(#' + gid('hair') + ')' }),
+           h('path', { key: 'bang', d: 'M14 32 C18 17.5, 46 17.5, 50 32 L50 29.5 C46 15, 18 15, 14 29.5 Z', fill: skin.hair }),
+           h('path', { key: 'shine', d: 'M18 22 L32 10 L36 16 L24 26 Z', fill: skin.hairHi, opacity: 0.85 }),
+           h('path', { key: 'peak', d: 'M30.5 8.5 L33.5 8.5 L32 6.5 Z', fill: skin.gold })]
         : face === 'tan'
-          ? [h('path', { key: 'sweep', d: 'M14 32 C16 10, 40 8, 50 20 L56 18 L52 28 C54 22, 44 12, 22 18 L14 30 Z', fill: skin.hair })]
+          ? [h('path', { key: 'sweep', d: 'M13.5 31.5 C15.5 9, 40 6.5, 51 19.5 L57 16.5 L52.5 28 C55 21.5, 44 11, 21.5 17.5 L13.5 30 Z', fill: 'url(#' + gid('hair') + ')' }),
+             h('path', { key: 'shine', d: 'M22 14 C32 8, 46 12, 52 20 L48 18 C38 11, 26 13, 20 18 Z', fill: skin.hairHi, opacity: 0.7 })]
           : face === 'zuo'
-            ? [h('path', { key: 'crop', d: 'M16 28 L16 20 Q32 10 48 20 L48 28 Q32 22 16 28 Z', fill: skin.hair }),
-               h('rect', { key: 'band', className: 'stwd-headband', x: 15, y: 24, width: 34, height: 6, rx: 2, fill: '#d27d2c' })]
-            : [h('path', { key: 'part', d: 'M14 34 C14 14, 32 10, 32 22 C32 10, 50 14, 50 34 C46 18, 18 18, 14 34 Z', fill: skin.hair })];
+            ? [h('path', { key: 'crop', d: 'M16 28.5 L16 19.5 Q32 9 48 19.5 L48 28.5 Q32 21.5 16 28.5 Z', fill: 'url(#' + gid('hair') + ')' }),
+               h('rect', { key: 'band', className: 'stwd-headband', x: 15, y: 24, width: 34, height: 6, rx: 2, fill: 'url(#' + gid('band') + ')' }),
+               h('rect', { key: 'bandhi', x: 15, y: 24, width: 34, height: 1.4, rx: 0.7, fill: skin.goldHi, opacity: 0.7 })]
+            : [h('path', { key: 'part', d: 'M14 34 C14 13.5, 32 9, 32 21.5 C32 9, 50 13.5, 50 34 C46 17.5, 18 17.5, 14 34 Z', fill: 'url(#' + gid('hair') + ')' }),
+               h('path', { key: 'part-l', d: 'M24 14 C28 12, 32 16, 32 21', fill: 'none', stroke: skin.hairHi, strokeWidth: 1.1, strokeLinecap: 'round' }),
+               h('path', { key: 'part-r', d: 'M40 14 C36 12, 32 16, 32 21', fill: 'none', stroke: skin.hairHi, strokeWidth: 1.1, strokeLinecap: 'round' })];
 
       const base = face === 'cang'
-        ? h('ellipse', { cx: 32, cy: 38, rx: 18, ry: 20, fill: skin.face })
+        ? [h('ellipse', { key: 'face', cx: 32, cy: 38, rx: 18, ry: 20, fill: 'url(#' + gid('skin') + ')' }),
+           h('ellipse', { key: 'bl', cx: 22, cy: 44, rx: 3.2, ry: 2, fill: skin.blush, opacity: 0.55 }),
+           h('ellipse', { key: 'br', cx: 42, cy: 44, rx: 3.2, ry: 2, fill: skin.blush, opacity: 0.55 }),
+           h('path', { key: 'nose', d: 'M31.2 42 Q32 45 32.8 42', fill: 'none', stroke: skin.nose, strokeWidth: 0.7, strokeLinecap: 'round' })]
         : face === 'tan'
-          ? h('path', { d: 'M16 30 C16 16, 48 16, 48 30 L44 50 L32 58 L20 50 Z', fill: skin.face })
+          ? [h('path', { key: 'face', d: 'M16.5 29.5 C16.5 15.5, 47.5 15.5, 47.5 29.5 L44 50.5 L32 58.5 L20 50.5 Z', fill: 'url(#' + gid('skin') + ')' }),
+             h('ellipse', { key: 'bl', cx: 22, cy: 43, rx: 3, ry: 1.8, fill: skin.blush, opacity: 0.5 }),
+             h('ellipse', { key: 'br', cx: 43, cy: 43, rx: 3, ry: 1.8, fill: skin.blush, opacity: 0.5 }),
+             h('path', { key: 'nose', d: 'M31.4 40.5 Q32 43.5 32.8 40.8', fill: 'none', stroke: skin.nose, strokeWidth: 0.7, strokeLinecap: 'round' })]
           : face === 'zuo'
-            ? h('rect', { x: 16, y: 22, width: 32, height: 32, rx: 10, fill: skin.face })
-            : h('circle', { cx: 32, cy: 36, r: 18, fill: skin.face });
+            ? [h('rect', { key: 'face', x: 16, y: 22, width: 32, height: 32, rx: 10, fill: 'url(#' + gid('skin') + ')' }),
+               h('ellipse', { key: 'bl', cx: 22.5, cy: 44, rx: 3, ry: 1.7, fill: skin.blush, opacity: 0.45 }),
+               h('ellipse', { key: 'br', cx: 41.5, cy: 44, rx: 3, ry: 1.7, fill: skin.blush, opacity: 0.45 }),
+               h('path', { key: 'nose', d: 'M31.3 42.5 L32 45 L32.7 42.5', fill: 'none', stroke: skin.nose, strokeWidth: 0.75, strokeLinecap: 'round' })]
+            : [h('circle', { key: 'face', cx: 32, cy: 36, r: 18, fill: 'url(#' + gid('skin') + ')' }),
+               h('ellipse', { key: 'bl', cx: 23, cy: 43, rx: 3.1, ry: 2, fill: skin.blush, opacity: 0.5 }),
+               h('ellipse', { key: 'br', cx: 41, cy: 43, rx: 3.1, ry: 2, fill: skin.blush, opacity: 0.5 }),
+               h('path', { key: 'nose', d: 'M31.3 39.5 Q32 42 32.7 39.5', fill: 'none', stroke: skin.nose, strokeWidth: 0.7, strokeLinecap: 'round' })];
 
       const eyeAt = (side) => {
         const left = side === 'l';
@@ -3268,60 +3310,66 @@ window.__ModuleLoader__.load({
         return h('g', { className: 'stwd-eye stwd-eye-' + side, key: 'eye-' + side },
           h('ellipse', { className: 'stwd-sclera', cx, cy, rx, ry, fill: '#fff' }),
           h('ellipse', { className: 'stwd-pupil', cx: px, cy: py, rx: prx, ry: pry, fill: skin.pupil }),
+          h('ellipse', { cx: px - 0.7, cy: py - 0.7, rx: 0.55, ry: 0.55, fill: '#fff', opacity: 0.7 }),
           h('rect', { className: 'stwd-lid stwd-lid-upper', x: cx - rx - 0.2, y: lidY, width: rx * 2 + 0.4, height: ry + 1.6, rx: 2, fill: skin.lid }),
         );
       };
 
       const brows = face === 'tan'
-        ? [h('path', { key: 'bl', className: 'stwd-brow stwd-brow-l', d: 'M18 31 L30 32', stroke: skin.hair, strokeWidth: 1.3, fill: 'none', strokeLinecap: 'round' }),
-           h('path', { key: 'br', className: 'stwd-brow stwd-brow-r', d: 'M36 31 L48 32', stroke: skin.hair, strokeWidth: 1.3, fill: 'none', strokeLinecap: 'round' })]
+        ? [h('path', { key: 'bl', className: 'stwd-brow stwd-brow-l', d: 'M18 31 L30 31.8', stroke: skin.hair, strokeWidth: 1.35, fill: 'none', strokeLinecap: 'round' }),
+           h('path', { key: 'br', className: 'stwd-brow stwd-brow-r', d: 'M36 31 L48 31.8', stroke: skin.hair, strokeWidth: 1.35, fill: 'none', strokeLinecap: 'round' })]
         : face === 'zuo'
-          ? [h('path', { key: 'bl', className: 'stwd-brow stwd-brow-l', d: 'M19 35 L29 35', stroke: skin.hair, strokeWidth: 1.4, fill: 'none', strokeLinecap: 'round' }),
-             h('path', { key: 'br', className: 'stwd-brow stwd-brow-r', d: 'M35 35 L45 35', stroke: skin.hair, strokeWidth: 1.4, fill: 'none', strokeLinecap: 'round' })]
+          ? [h('path', { key: 'bl', className: 'stwd-brow stwd-brow-l', d: 'M19 35 L29 34.7', stroke: skin.hair, strokeWidth: 1.45, fill: 'none', strokeLinecap: 'round' }),
+             h('path', { key: 'br', className: 'stwd-brow stwd-brow-r', d: 'M35 34.7 L45 35', stroke: skin.hair, strokeWidth: 1.45, fill: 'none', strokeLinecap: 'round' })]
           : face === 'yan'
-            ? [h('path', { key: 'bl', className: 'stwd-brow stwd-brow-l', d: 'M18 29 Q24 27 29 29', fill: 'none', stroke: skin.hair, strokeWidth: 1.2, strokeLinecap: 'round' }),
-               h('path', { key: 'br', className: 'stwd-brow stwd-brow-r', d: 'M35 29 Q40 27 46 29', fill: 'none', stroke: skin.hair, strokeWidth: 1.2, strokeLinecap: 'round' })]
-            : [h('path', { key: 'bl', className: 'stwd-brow stwd-brow-l', d: 'M19 33 Q24 31 29 33', fill: 'none', stroke: skin.hair, strokeWidth: 1.2, strokeLinecap: 'round' }),
-               h('path', { key: 'br', className: 'stwd-brow stwd-brow-r', d: 'M35 33 Q40 31 45 33', fill: 'none', stroke: skin.hair, strokeWidth: 1.2, strokeLinecap: 'round' })];
+            ? [h('path', { key: 'bl', className: 'stwd-brow stwd-brow-l', d: 'M18 29 Q24 26.7 29 29', fill: 'none', stroke: skin.hair, strokeWidth: 1.25, strokeLinecap: 'round' }),
+               h('path', { key: 'br', className: 'stwd-brow stwd-brow-r', d: 'M35 29 Q40 26.7 46 29', fill: 'none', stroke: skin.hair, strokeWidth: 1.25, strokeLinecap: 'round' })]
+            : [h('path', { key: 'bl', className: 'stwd-brow stwd-brow-l', d: 'M19 33 Q24 30.6 29 33', fill: 'none', stroke: skin.hair, strokeWidth: 1.25, strokeLinecap: 'round' }),
+               h('path', { key: 'br', className: 'stwd-brow stwd-brow-r', d: 'M35 33 Q40 30.6 45 33', fill: 'none', stroke: skin.hair, strokeWidth: 1.25, strokeLinecap: 'round' })];
 
       const glasses = face === 'yan' ? h('g', { className: 'stwd-glasses', key: 'glasses' },
-        h('ellipse', { cx: 24, cy: 36, rx: 7, ry: 6, fill: 'none', stroke: '#7aa0c4', strokeWidth: 1.6 }),
-        h('ellipse', { cx: 40, cy: 36, rx: 7, ry: 6, fill: 'none', stroke: '#7aa0c4', strokeWidth: 1.6 }),
-        h('path', { d: 'M31 36 L33 36', stroke: '#7aa0c4', strokeWidth: 1.6 }),
-        h('path', { d: 'M17 36 L14 34', stroke: '#7aa0c4', strokeWidth: 1.4, strokeLinecap: 'round' }),
-        h('path', { d: 'M47 36 L50 34', stroke: '#7aa0c4', strokeWidth: 1.4, strokeLinecap: 'round' }),
+        h('ellipse', { cx: 24, cy: 36, rx: 7.1, ry: 6.1, fill: 'none', stroke: skin.glass, strokeWidth: 1.55 }),
+        h('ellipse', { cx: 40, cy: 36, rx: 7.1, ry: 6.1, fill: 'none', stroke: skin.glass, strokeWidth: 1.55 }),
+        h('path', { d: 'M31.1 36 L32.9 36', stroke: '#7aa0c4', strokeWidth: 1.6 }),
+        h('path', { d: 'M16.9 36 L13.8 33.8', stroke: '#7aa0c4', strokeWidth: 1.4, strokeLinecap: 'round' }),
+        h('path', { d: 'M47.1 36 L50.2 33.8', stroke: '#7aa0c4', strokeWidth: 1.4, strokeLinecap: 'round' }),
       ) : null;
 
       const mouth = face === 'zuo'
-        ? h('path', { className: 'stwd-mouth', d: 'M29 47 L35 47', stroke: skin.mouth, strokeWidth: 1.3, strokeLinecap: 'round', fill: 'none' })
+        ? h('path', { className: 'stwd-mouth', d: 'M29 47.2 L35 47.2', stroke: skin.mouth, strokeWidth: 1.35, strokeLinecap: 'round', fill: 'none' })
         : face === 'tan'
-          ? h('path', { className: 'stwd-mouth', d: 'M28 46 Q32 47.5 36 46', fill: 'none', stroke: skin.mouth, strokeWidth: 1.1, strokeLinecap: 'round' })
+          ? h('path', { className: 'stwd-mouth', d: 'M28 46 Q32 47.8 36 46', fill: 'none', stroke: skin.mouth, strokeWidth: 1.15, strokeLinecap: 'round' })
           : face === 'yan'
-            ? h('path', { className: 'stwd-mouth', d: 'M28 47 Q32 50 36 47', fill: 'none', stroke: skin.mouth, strokeWidth: 1.2, strokeLinecap: 'round' })
-            : h('path', { className: 'stwd-mouth', d: 'M28 47 Q32 49 36 47', fill: 'none', stroke: skin.mouth, strokeWidth: 1.2, strokeLinecap: 'round' });
+            ? h('path', { className: 'stwd-mouth', d: 'M28 47 Q32 50.4 36 47', fill: 'none', stroke: skin.mouth, strokeWidth: 1.2, strokeLinecap: 'round' })
+            : h('path', { className: 'stwd-mouth', d: 'M28 47.2 Q32 49.6 36 47.2', fill: 'none', stroke: skin.mouth, strokeWidth: 1.2, strokeLinecap: 'round' });
 
       const collar = face === 'cang'
         ? h('g', { className: 'stwd-collar' },
-            h('path', { d: 'M18 54 Q32 46 46 54 L46 64 L18 64 Z', fill: '#3d6b73' }),
-            h('path', { d: 'M30 52 L32 64 L34 52', fill: '#c9a227' }),
+            h('path', { d: 'M18 54 Q32 45.5 46 54 L46 64 L18 64 Z', fill: 'url(#' + gid('collar') + ')' }),
+            h('path', { d: 'M29.6 51.5 L32 64 L34.4 51.5 Z', fill: skin.gold }),
+            h('path', { d: 'M31.2 52.2 L32 58 L32.8 52.2 Z', fill: skin.goldHi }),
           )
         : face === 'tan'
           ? h('g', { className: 'stwd-collar' },
-              h('path', { d: 'M18 54 Q32 48 46 54 L50 64 L14 64 Z', fill: '#c56a2d' }),
-              h('path', { d: 'M40 56 L48 64 L36 64 Z', fill: '#e8c56b' }),
+              h('path', { d: 'M17.5 54 Q32 47.5 46.5 54 L51 64 L13 64 Z', fill: 'url(#' + gid('collar') + ')' }),
+              h('path', { d: 'M40 55.5 L49 64 L35.5 64 Z', fill: skin.gold }),
+              h('path', { d: 'M41.5 58 L47 64 L39 64 Z', fill: skin.goldHi, opacity: 0.8 }),
             )
           : face === 'zuo'
             ? h('g', { className: 'stwd-collar' },
-                h('path', { d: 'M14 54 L50 54 L52 64 L12 64 Z', fill: '#3f6b3a' }),
-                h('circle', { cx: 32, cy: 58, r: 2.2, fill: '#d27d2c' }),
+                h('path', { d: 'M14 54 L50 54 L52 64 L12 64 Z', fill: 'url(#' + gid('collar') + ')' }),
+                h('circle', { cx: 32, cy: 58, r: 2.3, fill: skin.gold }),
+                h('circle', { cx: 32, cy: 57.4, r: 1, fill: skin.goldHi }),
               )
             : h('g', { className: 'stwd-collar' },
-                h('path', { d: 'M16 54 Q32 48 48 54 L48 64 L16 64 Z', fill: '#5b3d7a' }),
-                h('path', { d: 'M32 52 L28 64 L36 64 Z', fill: '#7aa0c4' }),
+                h('path', { d: 'M16 54 Q32 47.5 48 54 L48 64 L16 64 Z', fill: 'url(#' + gid('collar') + ')' }),
+                h('path', { d: 'M32 51.8 L27.8 64 L36.2 64 Z', fill: skin.gold }),
+                h('path', { d: 'M32 54 L30 64 L34 64 Z', fill: skin.goldHi }),
               );
 
       return [
-        h('rect', { key: 'bg', className: 'stwd-face-bg', width: 64, height: 64, rx: 12, fill: skin.bg }),
+        defs,
+        h('rect', { key: 'bg', className: 'stwd-face-bg', width: 64, height: 64, rx: 12, fill: 'url(#' + gid('bg') + ')' }),
         h('g', { key: 'figure', className: 'stwd-figure' },
           h('g', { className: 'stwd-face-base' }, base),
           h('g', { className: 'stwd-hair' }, hair),

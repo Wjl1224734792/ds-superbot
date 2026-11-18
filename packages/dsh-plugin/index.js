@@ -24,9 +24,12 @@
  *    implementation instead of a prompt-level promise.
  *  - `/superbot-roster` is registered on the native human-command registry.
  *  - `/superbot-decide` is the Host entry for the left-console decision
- *    buttons: approve calls runtime `approveDecision` (issues a Mandate);
- *    reject calls `rejectDecision` (records only, does not issue). This is
- *    a human command, not a new public tool; `superbot_dispatch` and the
+ *    buttons: approve calls runtime `approveDecision` (issues a Mandate),
+ *    then the live-loop adapter dispatches via `dispatchWorkItem` +
+ *    `routeModel` and starts a DSH sub-session with official
+ *    `subagents.startActivation`; reject calls `rejectDecision` (records
+ *    only, does not issue, does not start a session). This is a human
+ *    command, not a new public tool; `superbot_dispatch` and the
  *    docTier=3 hard gate are unchanged.
  *  - Skills are registered on the native `ctx.skills` registry (13 skills:
  *    main + inline / docs-rules / docs-governance + docs-new / docs-takeover /
@@ -846,14 +849,57 @@ async function handleDecideCommand(ctx, invocation) {
     });
     if (parsed.action === 'approve') {
       const mandateId = out?.mandate?.id ?? '';
-      return {
-        kind: 'success',
-        text: mandateId
-          ? `已批准 ${parsed.workItemId}，Mandate ${mandateId} 已签发。`
-          : `已批准 ${parsed.workItemId}，Mandate 已签发。`,
-      };
+      const mandateText = mandateId
+        ? `已批准 ${parsed.workItemId}，Mandate ${mandateId} 已签发。`
+        : `已批准 ${parsed.workItemId}，Mandate 已签发。`;
+      // Mandate is already issued. A missing agent / subagents / spawn
+      // must not look like a rolled-back approval.
+      try {
+        const { startApprovedWorkItem } = await import('./lib/live-loop-adapter.mjs');
+        const live = await startApprovedWorkItem(root, out, {
+          ctx,
+          parent: invocation?.agent,
+          invocation,
+          signal: invocation?.signal,
+        });
+        if (live?.started) {
+          const child = live.childId ? ` ${live.childId}` : '';
+          const label = live.label ? `（${live.label}）` : '';
+          return {
+            kind: 'success',
+            text: `${mandateText} 已派单并启动子会话${child}${label}。`,
+            childId: live.childId,
+            route: live.route,
+            assignment: live.assignment,
+            mandate: out.mandate,
+            started: true,
+          };
+        }
+        const reason = live?.reason ? ` ${live.reason}` : ' 子会话未启动。';
+        return {
+          kind: 'success',
+          text: `${mandateText}${reason.startsWith(' ') ? reason : ` ${reason}`}`,
+          childId: null,
+          route: live?.route ?? null,
+          assignment: live?.assignment ?? null,
+          mandate: out.mandate,
+          started: false,
+          reason: live?.reason ?? '子会话未启动',
+        };
+      } catch (error) {
+        return {
+          kind: 'success',
+          text: `${mandateText} 子会话未启动：${errorMessage(error)}`,
+          childId: null,
+          route: null,
+          assignment: null,
+          mandate: out.mandate,
+          started: false,
+          reason: errorMessage(error),
+        };
+      }
     }
-    return { kind: 'success', text: `已否决 ${parsed.workItemId}，未签发 Mandate。` };
+    return { kind: 'success', text: `已否决 ${parsed.workItemId}，未签发 Mandate。`, started: false, childId: null };
   } catch (error) {
     return { kind: 'error', text: `无法完成决定：${errorMessage(error)}` };
   }
@@ -875,7 +921,7 @@ function registerCommands(ctx) {
     };
     const decide = {
       name: 'superbot-decide',
-      description: '批准或否决「待你决定」中的工作项：批准签发 Mandate，否决只记账、不签发',
+      description: '批准或否决「待你决定」中的工作项：批准签发 Mandate 并派单启动子会话，否决只记账、不签发、不启动会话',
       input: { hint: 'approve <id> | reject <id> [reason]' },
       handler: (invocation) => handleDecideCommand(sctx, invocation),
     };

@@ -8,7 +8,7 @@
 
 1. **制度层（`packages/constitution`）**：工作项账本、Policy as Code、跨通道 Thread、动态治理强度（`planSteps`）、Claim / Evidence / Receipt、现有零依赖门禁脚本。模型越强，这一层越值钱。Constitution Service 是薄包装：调用同一套脚本、沿用退出码，再落 Receipt。手改收据无效，使用时必须重算哈希。
 2. **运行时层（`packages/runtime`）**：Steward 只分派、不执行、不做判定，决策用轻量规则并预留模型接口；Capability Compiler 按工作项即时编译 Mandate 草稿（不签发）；L1 程序快筛，L2 按书面 Policy 做规则慢判；Curator 按显式字段打出 Top-K；Assignment 只描述隔离边界，计算目录固定在 `tmp/superbot/<run>/`，与 `.superbot/ledger/` 存算分离（`separate` / `assertStoragePath` / `assertComputePath`）。模型路由按「能力态 × 风险」，`modelRouting.<role>` 仅作 fallback。Event Bus 接文件型事件（`.superbot/ledger/events.jsonl`）；订阅直通只把外部信号写入账本，不授予任何新权限；Watchdog 循环跟踪进度 / 空转 / 费用。默认授权档位 observe：只记录 would-accept，不执行，不自动合并。auto 灰度必须先有对应的 would-accept 观察记录，且永远不打开 auto-merge。
-3. **交互层（`packages/im` + `packages/dsh-plugin`）**：群聊是注意力总线（三种卡、PASS、Goal = 计划批准门）。DSH 原生会话是群聊主控；过程状态走顶部迷你脸、右侧舞台和左侧控制台，不走聊天。P0 实现卡片渲染、发言允许表和 `presenceOf`，并放置可区分的占位头像；P0 **不**重做左 / 顶 / 右界面。
+3. **交互层（`packages/im` + `packages/dsh-plugin`）**：群聊是注意力总线（三种卡、PASS、Goal = 计划批准门）。DSH 原生会话是群聊主控；过程状态走顶部迷你脸、右侧舞台和左侧控制台，不走聊天。P0 实现卡片渲染、发言允许表和 `presenceOf`，并放置可区分的头像（P6 起为正式原创脸谱）；P0 **不**重做左 / 顶 / 右界面。
 
 交互层必须走 DSH 官方加法槽位：左栏用 `sidebar.panellist` + `main` 做控制台，顶部用会话标题栏的 utilities / corner 放迷你眼神条，右侧现有 tab（id `ds-superbot`）做四张脸的舞台，中栏原生会话做成克制的群聊。禁止整栏替换 `sidebar` / `rightbar` / `conversation.session.header`，禁止自建 HTTP 控制台。细节以 `docs/product/INTERACTION.md` 为准。
 
@@ -24,7 +24,7 @@ Discover / Build / Verify 三类能力态 + 按需编译的 Mandate 草稿。Sco
 
 ## 治理函数
 
-`governance = f(risk, reversible)`，由 Policy 决定，不写死在角色章程里。`planSteps` / `intensity` 返回匹配规则的 `gates` / `allow` / `requireHuman` / `speak` / `merge` 以及由该规则得出的步骤数；改策略即可下调流程步数，不要靠删门禁实现。一旦绑定 `constitution_snapshot`，即使步骤里没有 `docs-ready`，哈希失效规则仍然生效。R0–R3 与默认 Policy 见 `docs/product/CONTRACT.md`。默认授权档位 observe，auto 自动合并不打开。auto 执行灰度（不是合并）由 `evaluateAuto` / `canEnterAuto` 判断，必须先有一条已落盘的、同一 action（及风险档，若请求带了风险）的 would-accept 记录；R2 / R3、`human-approval`、`requireHuman` 以及 touches prod / billing / delete / secrets 不得进入 auto。模型路由见 `packages/runtime/src/routing.mjs` 的 `routeModel({ capability, risk, role, config })`。P5 把控制台批准 / 否决、按工作项的 execute 授权、工作项派单和合并意图接到 `packages/runtime/src/loop.mjs`（`approveDecision` / `rejectDecision` / `canExecute` / `dispatchWorkItem` / `recordMergeIntent`）：批准用编译器草稿签发不可变 Mandate，否决不签发；全局默认仍是 observe，execute 是人批之后的按项授权；派单走 `routeModel`，不改 0.1.0 `superbot_dispatch`；合并只记账，不自动跑 git。Watchdog 仅在显式 execute 下才真正吊销并 Park。
+`governance = f(risk, reversible)`，由 Policy 决定，不写死在角色章程里。`planSteps` / `intensity` 返回匹配规则的 `gates` / `allow` / `requireHuman` / `speak` / `merge` 以及由该规则得出的步骤数；改策略即可下调流程步数，不要靠删门禁实现。一旦绑定 `constitution_snapshot`，即使步骤里没有 `docs-ready`，哈希失效规则仍然生效。R0–R3 与默认 Policy 见 `docs/product/CONTRACT.md`。默认授权档位 observe，auto 自动合并不打开。auto 执行灰度（不是合并）由 `evaluateAuto` / `canEnterAuto` 判断，必须先有一条已落盘的、同一 action（及风险档，若请求带了风险）的 would-accept 记录；R2 / R3、`human-approval`、`requireHuman` 以及 touches prod / billing / delete / secrets 不得进入 auto。模型路由见 `packages/runtime/src/routing.mjs` 的 `routeModel({ capability, risk, role, config })`。P5 把控制台批准 / 否决、按工作项的 execute 授权、工作项派单和合并意图接到 `packages/runtime/src/loop.mjs`（`approveDecision` / `rejectDecision` / `canExecute` / `dispatchWorkItem` / `recordMergeIntent`）：批准用编译器草稿签发不可变 Mandate，否决不签发；全局默认仍是 observe，execute 是人批之后的按项授权；派单走 `routeModel`，不改 0.1.0 `superbot_dispatch`；合并只记账，不自动跑 git。P6 在人批准之后由插件薄适配层调用 `dispatchWorkItem` 并用官方 `subagents.startActivation` 启动子会话；`dispatchWorkItem` 本身仍不起进程。P6 起 Watchdog 对已获人批 Mandate、`canExecute` 允许的工作项按 execute 运行（循环默认仍是 observe）；未批准项与未显式授权时仍只记 would-accept。halt / 超预算即使在 execute 下也只记录。
 
 ## 注意力税
 

@@ -15,7 +15,7 @@ DS Super Bot 是给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-h
 > **状态**：`0.2.0`（P0 monorepo）。1.0.0 之前允许破坏性变更——安装路径改为 `packages/dsh-plugin`。DSH 处于 `0.2.x` 阶段，插件的原生扩展点契约随宿主版本演进——升级 DSH 前请先看 [CHANGELOG](CHANGELOG.md)。
 
 
-仓库本身是一支**常驻的工程组织**：群聊是唯一人机控制台，文档 / 规范 / 门禁 / 证据是宪法，工作项是唯一产品对象，Claim → Evidence → Receipt 是唯一交付货币。决定在人、操作在 AI、判定在程序。P0 先交付 monorepo 骨架、契约校验、Constitution Service、兼容 shim，以及 `presenceOf` 与占位头像；7 角色派单路径保留。
+仓库本身是一支**常驻的工程组织**：群聊是唯一人机控制台，文档 / 规范 / 门禁 / 证据是宪法，工作项是唯一产品对象，Claim → Evidence → Receipt 是唯一交付货币。决定在人、操作在 AI、判定在程序。P0 先交付 monorepo 骨架、契约校验、Constitution Service、兼容 shim，以及 `presenceOf` 与头像（P6 起为正式原创脸谱）；7 角色派单路径保留。
 
 ## 它解决什么问题
 
@@ -247,7 +247,7 @@ node <插件>/scripts/docs-ready.mjs <root> status                              
     │   ├── index.js / client.js
     │   ├── roles/ / skills/
     │   ├── scripts/             # 转发到 constitution 的 shim
-    │   ├── assets/residents/    # 仓/探/作/验占位头像
+    │   ├── assets/residents/    # 仓/探/作/验正式原创脸谱
     │   └── tests/
     ├── constitution/            # @ds-superbot/constitution：账本、Policy、Receipt、门禁 SSOT
     ├── runtime/                 # @ds-superbot/runtime：Steward / Compiler / routeModel / Event Bus / Watchdog / observe

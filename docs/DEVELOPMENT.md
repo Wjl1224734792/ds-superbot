@@ -14,10 +14,11 @@ npm test         # node --test：dsh-plugin / constitution / runtime / im
 若本机没有 DeepSeek Harness profile（因此解析不到可选 peer `@deepseek-ai/schemastery`），`npm test` 会在 `packages/dsh-plugin/node_modules/` 写入一个仅供测试的 gitignore 桩，不是运行时依赖，也不会打进插件的 `files`。
 
 - `packages/dsh-plugin/tests/dsh-plugin.test.mjs`：工具注册、章程注入、路由、文档硬门、命令 / 技能、面板与设置页
+- `packages/dsh-plugin/tests/p6-live-loop.test.mjs`：人批后 `dispatchWorkItem` + 官方 `startActivation`、缺 subagents 仍保留 Mandate、否决不启动会话
 - `packages/dsh-plugin/tests/docs-ready.test.mjs`、`docs-governance.test.mjs`：通过插件 shim 跑原脚本（退出码与 `--help` 必须与 SSOT 一致）
 - `packages/constitution/tests/`：schema、状态机、Mandate、Policy、Receipt / revalidate、卡片、CLI、shim 回归、账本路径禁闭、跨通道 Thread、动态治理 `planSteps`
 - `packages/runtime/tests/`：导出形状、L1 / L2、curator / assignment、存算分离、Cartographer 回写、Event Bus、订阅直通、Watchdog、observe / would-accept、auto 灰度、Capability Compiler、能力态 × 风险路由、Steward 候选提案
-- `packages/im/tests/`：三种卡、发言允许表、每种状态 × 四张脸的 `presenceOf`、占位 SVG
+- `packages/im/tests/`：三种卡、发言允许表、每种状态 × 四张脸的 `presenceOf`、正式原创脸谱 SVG
 
 改了 `packages/constitution/scripts/` 后，至少再跑一遍插件包路径上的 `--help` 和 docs-ready / docs-gate 用例。
 
@@ -27,7 +28,7 @@ npm test         # node --test：dsh-plugin / constitution / runtime / im
 | --- | --- |
 | `packages/dsh-plugin` | 行为保持 0.1.0 兼容。P2 已用官方加法槽接上左栏控制台、顶部迷你脸和右侧舞台；禁止注册 `sidebar` / `rightbar` / `conversation.session.header` / `conversation.header`。`scripts/` 只是 shim。 |
 | `packages/constitution` | 不要重写门禁脚本判定逻辑。落盘必须 `--write`。Receipt 手改后必须能被 `revalidate` 识破。账本只写 `.superbot/ledger/`；`planSteps` 的步骤数随策略变，不要删门。 |
-| `packages/runtime` | 文件型 Event Bus、订阅直通（不授权）、Watchdog（进度 / 空转 / 费用 / 文档漂移）、Steward 轻量规则 + 预留 `createModelPort`、Capability Compiler（只出 Mandate 草稿）、`routeModel`、存算分离、Cartographer 回写、P5 闭环（`approveDecision` / `rejectDecision` / `canExecute` / `dispatchWorkItem` / `recordMergeIntent`）。默认 observe，只记录 would-accept，不执行、不自动合并、不开 HTTP。auto 灰度必须先有观察记录。人批 Mandate 之后该工作项才可 execute。 |
+| `packages/runtime` | 文件型 Event Bus、订阅直通（不授权）、Watchdog（进度 / 空转 / 费用 / 文档漂移）、Steward 轻量规则 + 预留 `createModelPort`、Capability Compiler（只出 Mandate 草稿）、`routeModel`、存算分离、Cartographer 回写、P5 闭环（`approveDecision` / `rejectDecision` / `canExecute` / `dispatchWorkItem` / `recordMergeIntent`）。默认 observe，禁止 auto-merge，不开 HTTP。auto 灰度必须先有观察记录。人批 Mandate 之后该工作项才可 execute；P6 起 Watchdog 对已获 `canExecute` 的工作项按 execute 运行，循环默认仍是 observe。 |
 | `packages/im` | 面板和字幕只调用 `presenceOf`。同一时刻全场 `high` 不得超过 1 个。 |
 
 Curator 打分权重（写在 `packages/runtime/src/curator.mjs` 的 `WEIGHTS` 常量里）：
@@ -54,11 +55,17 @@ score = 4 * value + 2 * (reversible ? 1 : 0) + 1 * evidenceCount - 3 * attention
 ## 5. P5 闭环约定
 
 - **控制台批准 / 否决**（`packages/runtime/src/loop.mjs`）：`approveDecision` 取 Capability Compiler 草稿（`compileMandate` / `compileIntent`），调用 constitution `issueMandate` 签发不可变 Mandate。`issuedBy` 必须是人的 id 或名字，缺省或 watchdog / observe / auto 来源一律拒绝。批准不得把 tools / scope / budget 扩大到草稿之外。`rejectDecision` 只在账本事件里记录否决，不签发 Mandate；若当前状态在 `PARK_FROM` 内则迁到 `Parked`。控制台不自动合并。插件 `console-model.mjs` 保持纯函数，副作用都在 runtime。
-- **工作项执行权**：全局 `DEFAULT_AUTHORITY` 仍是 `observe`。人签发、仍然有效（未过期、未吊销）的 Mandate 存在后，该工作项可在 Mandate 范围内进入 execute（`canExecute` / `assertCanExecute`）。没有这样的 Mandate 不得 execute。`assign` / `consider` / `watchdog` 不会因为 Mandate 存在就把默认改成 execute。`assertNoAutoMerge` 与 `resolveAuthority('auto-merge')` 仍抛 `AUTO_MERGE_DISABLED`。
+- **工作项执行权**：全局 `DEFAULT_AUTHORITY` 仍是 `observe`。人签发、仍然有效（未过期、未吊销）的 Mandate 存在后，该工作项可在 Mandate 范围内进入 execute（`canExecute` / `assertCanExecute`）。没有这样的 Mandate 不得 execute。`assign` / `consider` 不会因为 Mandate 存在就把默认改成 execute。`assertNoAutoMerge` 与 `resolveAuthority('auto-merge')` 仍抛 `AUTO_MERGE_DISABLED`。
 - **工作项派单**：`dispatchWorkItem` 按工作项 / 能力态调用 `routeModel`，并返回 `assignment.create` 的隔离结构（`workDir` 仍在 `tmp/superbot/<run>/`）。不起进程，不访问网络，不改 `createModelPort()` 的 rules-only 默认。0.1.0 `superbot_dispatch`（含 `docTier=3` 对 `backend-dev` / `frontend-dev` 的硬门）保持兼容路径，行为不改。
-- **Watchdog execute**：默认 observe 与 hands-off `auto` 仍只记 would-accept（`executed: false`），不吊销、不 Park、不合并。仅当 tick 显式带 `authority: 'execute'`（或该工作项的 itemAuthority 为 execute）时，超时 / 空转 / 文档漂移才会真正 `revokeMandate` 并把工作项迁到 `Parked`。漂移复用已绑定 snapshot 的哈希 stale 检查；未绑定 snapshot 时不虚构漂移失败。空转吊销原因是文档化扩展的 `timeout`；过期仍用 `expired`；漂移仍用 `snapshot-stale`。
+- **Watchdog execute**：循环级 `DEFAULT_AUTHORITY` 仍是 observe。未获可用人签 Mandate 的工作项，以及 hands-off `auto`，仍只记 would-accept（`executed: false`），不吊销、不 Park、不合并。当 tick 显式带 `authority: 'execute'`，或该工作项的 `itemAuthorities` / `workItemAuthority` 为 execute，或 P6 起 `canExecute(root, item)` 允许时，超时 / 空转 / 文档漂移会真正 `revokeMandate` 并把该工作项迁到 `Parked`。未批准的兄弟项不受影响。`itemAuthorities` 可把已批准项显式覆回 observe。Halt / 超预算即使在 execute 下也只记 would-accept。漂移复用已绑定 snapshot 的哈希 stale 检查；未绑定 snapshot 时不虚构漂移失败。空转吊销原因是文档化扩展的 `timeout`；过期仍用 `expired`；漂移仍用 `snapshot-stale`。
 - **状态机扩展**（有意、有测试）：Goal §5 原表只有 `AwaitingApproval` / `Building` → `Parked`。P5 增加 `Proposed`、`Authorized`、`Planned`、`Approved`、`Verifying` → `Parked`，供人否决 / 叫停与 Watchdog execute 使用。其它非法迁移仍然失败。见 `PARK_FROM` / `isLegalTransition`。
 - **结果卡与合并意图**：`renderResultCard` 列出 AC、Receipt 与产物路径（支持复数，提供 ledger `root` 时可从账本加载 Receipt）。`recordMergeIntent` 只记录「合并」/「打回」意图，不执行 `git merge` / `git push`；`auto-merge` 仍抛 `AUTO_MERGE_DISABLED`。
+
+## 5b. P6 现场可用
+
+- **批准后活环**：`/superbot-decide` 在 `approveDecision` 成功之后调用 `packages/dsh-plugin/lib/live-loop-adapter.mjs`。先走 runtime `dispatchWorkItem`（`routeModel` + assignment 隔离，仍不起进程、不访问网络），再用官方 `ctx.subagents.getProvider('spawn')` + `subagents.startActivation({ provider: 'spawn', label, prompt, parent, agentPreset: 'standard', cwd?, agentOptions?, signal, delivery: 'parent' })` 启动子会话。标签带上 仓/探/作/验 与工作项 id，以便和 0.1.0 七角色 `superbot_dispatch` 子会话区分。派单正文自包含（工作项、Mandate、路由、隔离目录）。没有父代理或 `subagents` / `spawn` 时 Mandate 已签发，只回报会话未启动，不回滚批准。否决不调用 `startActivation`。不改 `superbot_dispatch`，不加公共工具，不开 HTTP，不自动合并，不跑 git。
+- **正式脸谱**：`packages/dsh-plugin/assets/residents/{cang,tan,zuo,yan}/face.svg` 与 client 内联分层肖像已换成正式原创脸谱；短名、目录和 `presenceOf` 状态代号不变。动画仍只走 `.stwd-` 作用域 CSS。
+
 
 ## 6. P2 已接线的官方加法槽位
 
@@ -68,7 +75,7 @@ score = 4 * value + 2 * (reversible ? 1 : 0) + 1 * evidenceCount - 3 * attention
 
 | 位置 | 槽 | 用途 |
 | --- | --- | --- |
-| 左栏控制台 | `sidebar.panellist` + `main`，同一 id `ds-superbot-console` | superagent 式控制台：先「待你决定」（批准走 `/superbot-decide` → `approveDecision` 签发 Mandate，否决需确认后走 `rejectDecision`、不签发），再健康 / 授权摘要（默认 observe），再单条历史 |
+| 左栏控制台 | `sidebar.panellist` + `main`，同一 id `ds-superbot-console` | superagent 式控制台：先「待你决定」（批准走 `/superbot-decide` → `approveDecision` 签发 Mandate，再经 live-loop 适配层 `dispatchWorkItem` + 官方 `startActivation` 启动子会话；否决需确认后走 `rejectDecision`、不签发、不启动会话），再健康 / 授权摘要（默认 observe），再单条历史 |
 | 顶部迷你脸 | 优先 `conversation.session.header.corner`，否则 `utilities`；可用 `conversation.session.header.actions` 放次要计数 | 四张脸的迷你眼神条，点击打开右侧舞台 |
 | 补充全屏 | `conversation.view` | 可选「舞台 / 控制台」标签，默认仍留在 Chat |
 | 右侧舞台 | 现有 `sidebar.right.pane.tab`，id 仍是 `ds-superbot` | 大舞台 + 工作项详情；0.1.0 工作流树降为详情里的 DAG |

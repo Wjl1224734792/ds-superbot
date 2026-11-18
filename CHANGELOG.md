@@ -6,6 +6,8 @@
 
 ### Added
 
+- P6 现场可用：人批准之后，`/superbot-decide` 经薄适配层 `packages/dsh-plugin/lib/live-loop-adapter.mjs` 调用 `dispatchWorkItem`（已走 `routeModel` 并返回隔离结构，仍不起进程、不访问网络），再用官方 `ctx.subagents.startActivation`（`provider: spawn`、`agentPreset: standard`）为该工作项启动子会话。父代理缺失或没有 `subagents` / `spawn` 时 Mandate 仍保留，只明确回报会话未启动。否决不派单、不启动会话。Watchdog 在循环默认仍为 observe 时，对 `canExecute` 允许的已批准工作项按 execute 运行（空转 / 过期 / 漂移会真正吊销并 Park）；未批准的兄弟项仍只记 would-accept；`itemAuthorities` 可单项覆盖。四张占位脸替换为正式原创脸谱（短名 / 目录 / `presenceOf` 代号不变）。0.1.0 `superbot_dispatch` 与 `docTier=3` 硬门未改。默认仍 observe，禁止 auto-merge，插件不开 HTTP。未合进 main，未 push。
+
 - 左栏「待你决定」接线：主按钮改为「批准」，经 client `onDecide` 调用宿主命令 `/superbot-decide`，再由薄适配层 `packages/dsh-plugin/lib/decide-adapter.mjs` 转到 runtime `approveDecision`（签发 Mandate）与 `rejectDecision`（需确认，不签发）。`console-model.mjs` 仍是纯函数。0.1.0 `superbot_dispatch` 与 `docTier=3` 硬门未改。默认仍 observe，禁止 auto-merge，插件不开 HTTP。未合进 main，未 push。
 
 - P5 闭环接通：左栏「待你决定」的批准走 Capability Compiler 草稿 + constitution `issueMandate` 签发不可变 Mandate（`approveDecision`）；否决只记账、不签发（`rejectDecision`）。R2/R3、`human-approval` 与 Policy `requireHuman` 必须由人批准，watchdog / observe / auto 不得签发。全局 `DEFAULT_AUTHORITY` 仍是 observe；人批且未过期、未吊销的 Mandate 之后，该工作项可在 Mandate 范围内 `canExecute` / `assertCanExecute`。工作项派单 `dispatchWorkItem` 走 `routeModel` 并返回 assignment 隔离结构，不起进程、不访问网络。0.1.0 `superbot_dispatch` 与 `docTier=3` 硬门保持兼容路径。Watchdog 在显式 `authority: 'execute'` 下，超时 / 空转 / 文档漂移会真正 `revokeMandate` 并 Park；observe / auto 仍只记 would-accept。结果卡列出 AC、Receipt 与产物路径；`recordMergeIntent` 只记录合并 / 打回意图，不执行 git merge / push。默认仍禁止 auto-merge。吊销原因在既有 `human-stop` / `expired` / `snapshot-stale` 上文档化扩展 `timeout`（空转）。状态机有意扩展 `Proposed` / `Authorized` / `Planned` / `Approved` / `Verifying` → `Parked`，避免 Watchdog 或人叫停走非法迁移。

@@ -181,7 +181,7 @@ packages/dsh-plugin/assets/residents/
   tan/face.svg
   zuo/face.svg
   yan/face.svg
-  README.md          # 标注哪些是占位图，哪些是正式脸谱
+  README.md          # 四张均为正式原创脸谱；短名与 presence 代号不得改
 ```
 
 每张脸是可分层 SVG：脸底、眼白、瞳孔、眼睑、眉。用 class 切换眼神，用 CSS transform / opacity 做呼吸、眨眼、点头。眨眼间隔 3–6 秒并加抖动；循环动画 2–4 秒一圈。
@@ -214,6 +214,7 @@ packages/dsh-plugin/assets/residents/
 - **P0**：实现 `presenceOf` 与测试；放四张占位 SVG（几何简化脸亦可，但必须四张可区分，并在 README 标明「占位」）；把本文落入 `docs/product/INTERACTION.md`。不改现有右侧栏行为，不注册新的左栏主面板，以免 0.1.0 宿主测试大面积翻车。可在 DEVELOPMENT 中写明 P2 的槽位清单。
 - **P2**：已按本文接上顶部迷你脸、左侧控制台、右侧舞台和群聊卡片头像（槽位对照安装的 DeepSeek Harness 0.2.2-rc.2）；全部走官方加法槽；外部 IM 厂商不在本轮选定，只提供静帧和字幕辅助。
 - 正式脸谱绘制可以后补，但不能改变四张脸的短名、目录名和状态代号。换皮不得改契约。
+- **P6**：四张占位 SVG 已换成正式原创脸谱，短名 / 目录 / `presenceOf` 状态代号不变。
 
 ---
 

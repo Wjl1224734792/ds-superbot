@@ -45,7 +45,7 @@ Capability Compiler（`compileMandate` / `compileIntent`）只产出与 Mandate 
 
 ## Mandate
 
-签发后除 `revokedAt` / `revokeReason` 外任何字段都不得被更新。吊销允许 `human-stop`、`expired`、`snapshot-stale`，以及 P5 文档化扩展的 `timeout`（Watchdog 在 execute 下对空转 / 超时吊销）。过期或已吊销的 Mandate 不得再授权施工。人批签发之后，该工作项可在 Mandate 范围内进入 execute；全局默认授权仍是 observe。第一次签发仍使用 Goal 规定的 `MD-<workItemId>`；若该 id 已被一份已吊销记录占用，新签发使用 `MD-<workItemId>-2`、`-3`……，历史文件保持原样。`schemaVersion` 仍为 1（只放宽了 id 模式，既有 id 仍然合法）。
+签发后除 `revokedAt` / `revokeReason` 外任何字段都不得被更新。吊销允许 `human-stop`、`expired`、`snapshot-stale`，以及 P5 文档化扩展的 `timeout`（Watchdog 在 execute 下对空转 / 超时吊销）。过期或已吊销的 Mandate 不得再授权施工。人批签发之后，该工作项可在 Mandate 范围内进入 execute（含 Watchdog 对该项按 execute 运行）；全局默认授权仍是 observe，未获可用 Mandate 的工作项不得因此翻成 execute。第一次签发仍使用 Goal 规定的 `MD-<workItemId>`；若该 id 已被一份已吊销记录占用，新签发使用 `MD-<workItemId>-2`、`-3`……，历史文件保持原样。`schemaVersion` 仍为 1（只放宽了 id 模式，既有 id 仍然合法）。
 
 ## Receipt
 
