@@ -1,6 +1,6 @@
 # 工程文档流水线（Super Bot 完整库）
 
-> 来源：`C:\Users\12247\Desktop\skills\eng-doc-pipeline`（Desktop 快照 2026-10-28）；已适配 DS Super Bot。改编明细见 `PROVENANCE.md`。
+> 来源：一套内部工程文档流水线技能（2026-10-28 快照），已适配 DS Super Bot。改编明细见 `PROVENANCE.md`。
 >
 > **本库随 DS Super Bot 插件分发**，按需加载：先读本索引，再按 §3/§5 取模板（`templates/`）；docTier<3 不建深文档树。
 

@@ -1,58 +1,73 @@
-# DS Super Bot · a long-lived engineering team for DeepSeek Harness
+# DS Super Bot
 
-DS Super Bot is a multi-role engineering-team plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH). The lead conversation agent acts as **Tech Lead**: it turns a request into a task DAG, hands each task to the role that owns it (dependency-ordered, with file ownership), and only reports delivery after the plan gate, QA, browser acceptance and review have run.
+[中文](README.md) | **English**
+
+[![release](https://img.shields.io/github/v/release/Wjl1224734792/ds-superbot?label=release)](https://github.com/Wjl1224734792/ds-superbot/releases)
+[![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![DSH](https://img.shields.io/badge/DeepSeek%20Harness-0.2.x-4c6ef5)](https://github.com/deepseek-ai/deepseek-harness)
+[![node](https://img.shields.io/badge/node-%3E%3D20-3c873a)](package.json)
+[![tests](https://img.shields.io/badge/tests-87%20passing-2ea44f)](tests)
+
+DS Super Bot is a **multi-role engineering-team plugin** for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH). The lead conversation agent acts as **Tech Lead**: it turns a request into a task DAG, hands each task to the role that owns it (dependency-ordered, with file ownership), and only reports delivery after the **plan gate → QA → browser acceptance → final review** have run.
 
 The goal is not "write the code in one shot" but to keep the project **understandable, verifiable, rollback-able and extendable** after every change.
 
-| Item | Value |
-|---|---|
-| Version | 0.1.0 |
-| Project / package | `ds-superbot` |
-| License | MIT |
-| Runtime dependencies | none (Node built-ins only; `@deepseek-ai/schemastery` is an optional peer) |
-| DSH version | `>=0.2.1-rc.2 <0.4.0-0` |
+> **Status**: `0.1.0`, first official release. DSH itself is at `0.2.x`, so the native extension-point contract moves with the host — read the [CHANGELOG](CHANGELOG.md) before upgrading DSH.
 
-The plugin only uses DSH-native extension points: roles are **charters injected at dispatch time** (`roles/*.md`, **no Agent Preset is registered**, so the mode picker stays clean); model routes come from the project's `superbot.config.json` first and the **Settings page** second; dispatch is `superbot_dispatch` over `ctx.subagents` (children run the built-in `standard` composition); the human entry point is the native `/superbot-roster` command (`/superbot` is the slash gesture that triggers the `superbot` skill); skills register on `ctx.skills`; the UI is a **per-session right-sidebar team panel** plus the **Settings → Super Bot model table**. No registered page, no private config file, no custom HTTP bridge.
+## What it fixes
 
-## Install
+Handing a request to one large model usually produces code that runs, but nobody can explain, test, review or safely change. DS Super Bot splits engineering into **accountable stages**, each with a concrete artifact and an explicit release condition:
 
-Prerequisite: DSH (`0.2.1-rc.2` or newer, below `0.4.0`) and Node.js on the machine.
+| Stage | Who | Release condition |
+|---|---|---|
+| Requirements / spec | `pm` | Testable acceptance criteria, non-goals and open questions written down |
+| Plan and task DAG | `architect` | Impact map, file ownership, dependency graph machine-checked (`validate-plan.mjs`) |
+| Plan approval gate | You + `reviewer` (clean context) | You approve explicitly, the critic reports no blockers |
+| Implementation | `backend-dev` / `frontend-dev` | Done within the task's file ownership; anything outside is sent back |
+| Quality gate | `qa-engineer` | Independent re-run of `verify.mjs` is green, anti-cheat checks pass |
+| Browser acceptance | `browser-tester` | Every criterion backed by readable evidence (ARIA / DOM / console / network) |
+| Final review | `reviewer` | Diff review with no blocking findings |
 
-This repository root **is** the plugin package (`index.js` / `client.js` / `cordis.patch.yml` / `package.json` live at the top). Install the local bundle directory with the DSH plugin manager:
-
-```text
-plugin_manager(action="install_bundle", target="<checkout of this repo>")
-```
-
-Then **restart DSH** (Host code loads at startup) and open a **new session** — the skill catalog is a per-session snapshot, so older sessions may still show the previous copy.
-
-- Upgrade = `install_bundle` the same directory again, then restart. During development the plugin manager's disable/enable gives a hot reload.
-- Uninstall = remove the bundle in the plugin manager.
-- The directory needs no build or install step.
-
-## What you get
+## Features
 
 | Capability | Shape |
 |---|---|
-| 7 roles | Charters injected at dispatch time (`roles/*.md`): `pm`, `architect`, `backend-dev`, `frontend-dev`, `qa-engineer`, `browser-tester`, `reviewer`. **No Agent Preset** — roles never appear in the mode picker |
-| Dispatch | `superbot_dispatch(role, description, prompt, cwd?)`: one role per call, the charter is prepended to the task prompt, the child session id comes back and the result returns automatically |
-| Models and effort | `modelRouting.<role>` in the project root `superbot.config.json` (repository wins, checked by `scripts/validate-config.mjs`); roles without an entry use their row / the defaults row in **Settings → Super Bot**; otherwise the parent route is inherited |
-| Right-sidebar team panel | One per session, opened from the session-header Super Bot icon, the right-sidebar guide, or automatically on the first dispatch: layered workflow tree, free drag and zoom, graph/list toggle; nodes show role / actual model / task / state / elapsed / tokens; a **native task-progress bar** on top; a collapsed artifacts area at the bottom |
-| Main skill | `superbot`: the Tech Lead playbook (classification / DAG / dispatch / gates / wrap-up) |
-| Documentation entry points (4) | `docs-new` (new project, build the 01→07 baseline), `docs-takeover` (existing repo: inventory and placement first), `docs-feature` (one feature or requirement change: touch only the affected phases), `docs-review` (independent reviewer + receipt) |
-| Documentation rulebook | `docs-rules`: the seven-phase rules, SSOT map, change-link table and template index (an entry point it is **not**) |
-| Documentation readiness gate | `scripts/docs-ready.mjs`: machine-checks phase artifacts, empty shells, placeholders, `na` reasons, FR↔FP traceability, planned `docsRead` and the reviewer's machine-readable verdict; once the `.superbot/docs-state.json` receipt passes, `backend-dev` / `frontend-dev` become dispatchable |
-| On-demand skills | `inline` (the hard actions and scope when the lead does the work itself), `docs-governance` (split / archive / version snapshots plus the `docs-gate` / `doc-snapshot` gates) |
-| Supporting skills | `using-superbot` (routing), `agent-settings` (model configuration), `systematic-debugging`, `tdd`, `verification-before-completion` |
-| Shared task board | `superbot_board(action="sync"/"status"/"brief")`: turns `03-plan.json` into Agent Teams board gates and work items; task details live in the **native Team panel**, while the right-sidebar panel only shows progress counts and the source |
-| Commands | `/superbot-roster`: echoes the roster and routing rules (it does not dispatch); `/superbot` is the slash gesture that triggers the `superbot` skill |
-| Gate scripts | `scripts/`: `validate-plan.mjs`, `verify.mjs` (including `baseline record/check`), `run-state.mjs`, `maintain.mjs`, `take-over.mjs`, `validate-config.mjs`, `docs-ready.mjs` (documentation receipt), `docs-gate.mjs` / `doc-snapshot.mjs`, and the `doc/` pipeline tools |
+| **7 roles** | Charters injected at dispatch time (`roles/*.md`): `pm`, `architect`, `backend-dev`, `frontend-dev`, `qa-engineer`, `browser-tester`, `reviewer`. **No Agent Preset is registered**, so roles never appear in the session-mode picker |
+| **Dispatch** | `superbot_dispatch(role, description, prompt, cwd?)`: one role per call, the charter is prepended to the task prompt, the child session id comes back and the result returns automatically |
+| **Three-layer model routing** | `modelRouting.<role>` in the project-root `superbot.config.json` (repository wins) > that role's row in Settings > the defaults row > the parent route; routes are validated before dispatch, an unknown model fails loudly |
+| **Right-sidebar team panel** | One per session: layered workflow tree by default, free drag and zoom, graph/list toggle; nodes show role / actual model / task / state / elapsed / tokens; a native task-progress bar on top; a collapsed artifacts area at the bottom |
+| **Settings model table** | "Settings → Super Bot": per-role provider / model / reasoning effort with real validation and a source column |
+| **Shared task board** | `superbot_board`: mirrors the plan onto the Agent Teams board as gates plus work items, idempotently |
+| **Documentation pipeline** | Four entry points (`docs-new` / `docs-takeover` / `docs-feature` / `docs-review`) plus the rulebook (`docs-rules`) and a governance layer (`docs-governance`) |
+| **Documentation readiness gate** | With `docTier=3`, `backend-dev` / `frontend-dev` cannot be dispatched until `docs-ready.mjs` has issued a valid receipt |
+| **Gate scripts** | Plan validation, independent verification, baseline guard, run state machine, maintenance scan, documentation pipeline — plain Node, zero dependencies |
+| **Skills** | 13 native skills registered on `ctx.skills` |
 
-## Why no Agent Presets
+## Requirements
 
-A DSH preset is a **user-selectable session mode**; there is no such thing as an "internal preset". Turning the seven roles into presets would put writable specialist modes into the picker: switch to "Backend engineer", edit code directly, and you have a fake team that bypassed the plan gate, the baseline guard, QA and review — exactly the parts that make the plugin worth using.
+- [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) `>=0.2.1-rc.2 <0.4.0-0` (Desktop or Web)
+- Node.js `>=20`
+- A DSH profile (bundles are installed per profile and apply to every session)
 
-So the plugin registers no Agent Preset: DS Super Bot is a process (skills + tools + gate scripts). `superbot_dispatch` starts each child on DSH's built-in `standard` composition and prepends the role charter to the task prompt. The trade-off is that a worker carries all `standard` tools (delegation depth defaults to 1, which stops a worker from re-delegating); the benefit is a clean mode picker and no preset composition to keep in sync with DSH upgrades.
+## Install
+
+The repository root **is** the plugin package (`package.json` declares `dsh.bundle` pointing at the root `cordis.patch.yml`). No build step, no `npm install`.
+
+```bash
+git clone https://github.com/Wjl1224734792/ds-superbot.git
+```
+
+Then install that **directory** (not a subdirectory) with the DSH plugin manager:
+
+```text
+plugin_manager(action="install_bundle", target="<absolute path of the clone>")
+```
+
+Restart DSH afterwards (Host code loads at startup) and open a **new session** — the skill catalog is a per-session snapshot, so older sessions may still show the previous copy.
+
+- **Upgrade**: `git pull`, then `install_bundle` the same directory again and restart.
+- **Uninstall**: remove the `ds-superbot` bundle in the plugin manager.
+- **Coexistence**: skill names are global. If another plugin already registered a skill with the same name, this plugin skips that skill and logs a warning — the plugin still loads, and its tools and panel are unaffected. Tool names are prefixed with `superbot_`.
 
 ## Quick start
 
@@ -65,7 +80,7 @@ So the plugin registers no Agent Preset: DS Super Bot is a process (skills + too
 
    The lead loads the `superbot` skill: classify (S/M/L) → clarify → task DAG + file ownership → dispatch → QA → browser acceptance → review → report.
 
-3. To change a subagent's model, write `modelRouting` in the project-root `superbot.config.json` (or ask "configure the subagent model" and the lead loads `agent-settings`, edits the file and runs `validate-config.mjs`). The next `superbot_dispatch` uses the new route; no restart needed.
+3. To change a subagent's model, write `modelRouting` in the project-root `superbot.config.json` (or just say "configure the subagent model"). The next dispatch uses it; no restart needed.
 
 ## Entry points
 
@@ -81,24 +96,35 @@ So the plugin registers no Agent Preset: DS Super Bot is a process (skills + too
 | Existing-repo docs | "Take over this repo / add docs to an existing project" → `docs-takeover` |
 | One feature's docs | "Write docs for this feature / which docs does this change touch" → `docs-feature` |
 | Review the docs | "Review the docs / are we ready to start" → `docs-review` |
-| Rules and templates | "How should a PRD/FRD/contract be written" → `docs-rules` |
-| Documentation governance | "Docs are too long / reviews pile up / keep requirement versions" → `docs-governance` |
+| Rules and templates | "How should a PRD/FRD/contract be written" → `docs-rules` (rulebook, not an entry point) |
+| Documentation governance | "Docs are too long / reviews pile up" → `docs-governance` |
 | Change a model / effort | "Configure the subagent model" → `agent-settings` |
 | Not sure which entry | Load `using-superbot` to route |
 
 ## Roles
 
-| Role | `role` | Responsibility |
-|---|---|---|
-| Requirements analyst | `pm` | Vague request → testable spec |
-| Architect | `architect` | Spec → technical plan + task DAG |
-| Backend engineer | `backend-dev` | Test-first implementation within file ownership |
-| Frontend engineer | `frontend-dev` | UI implementation + acceptance script |
-| QA engineer | `qa-engineer` | Test / lint / typecheck quality gates |
-| Browser tester | `browser-tester` | Black-box acceptance in a real browser |
-| Code reviewer | `reviewer` | Final diff review with three-level findings |
+| Role | `role` | Responsibility | Artifact |
+|---|---|---|---|
+| Requirements analyst | `pm` | Vague request → testable spec | `02-spec.md` |
+| Architect | `architect` | Spec → impact, plan, task DAG | `02-impact.md` / `03-plan.md` / `03-plan.json` |
+| Backend engineer | `backend-dev` | Test-first implementation within ownership | Implementation report |
+| Frontend engineer | `frontend-dev` | UI implementation + browser acceptance script | Implementation report |
+| QA engineer | `qa-engineer` | Independent gate re-run, extra tests, anti-cheat checks | QA report |
+| Browser tester | `browser-tester` | Black-box acceptance in a real browser with evidence | Verdicts + defect list |
+| Code reviewer | `reviewer` | Final diff review; Plan Critic mode | Review report (three-level findings) |
+
+**Roles are not modes.** A DSH preset is a user-selectable session mode; shipping the roles as presets would put writable specialist modes into the picker and let a user bypass the plan gate, QA and review. So the plugin registers no Agent Preset: `superbot_dispatch` starts each child on DSH's built-in `standard` composition and prepends the role charter to the task prompt.
 
 ## Model routing
+
+Priority (the single source of truth):
+
+```text
+1. modelRouting.<role> in the project-root superbot.config.json   ← versioned with the code
+2. that role's provider / model / effort in Settings → Super Bot
+3. the defaults row in Settings → Super Bot
+4. the parent agent's current route
+```
 
 ```json
 {
@@ -109,82 +135,99 @@ So the plugin registers no Agent Preset: DS Super Bot is a process (skills + too
 }
 ```
 
-Priority: **`modelRouting.<role>` in the project-root `superbot.config.json` > that role's row in Settings → Super Bot > the defaults row > the parent route**.
-
-- `superbot_dispatch` walks up from the dispatch `cwd` to find the project root and reads the project file; the next dispatch uses it (no restart).
-- Before dispatch the route is validated through `llm.resolveModelInfo`: an unknown model or an unsupported effort fails loudly instead of silently degrading.
+- `superbot_dispatch` walks up from the dispatch `cwd` to the project root; **the next dispatch uses the new route** (no restart).
+- Routes are validated through the host's `llm.resolveModelInfo`: an unknown model or unsupported effort fails loudly instead of silently degrading.
 - A malformed entry (e.g. `model` without a `provider/` prefix) counts as "not configured" and falls back to the parent route.
-- Structure check: `node <package>/scripts/validate-config.mjs <root>/superbot.config.json`.
+- Structure check: `node <plugin>/scripts/validate-config.mjs <root>/superbot.config.json`.
 
 ## Right-sidebar team panel
 
-The panel lives in the session's **right sidebar**. DSH stores the sidebar layout per session, so **every session gets its own panel**. Three ways to open it:
+The panel lives in the session's **right sidebar**, which DSH stores per session — **each session gets its own panel**. Three ways to open it:
 
 1. the **Super Bot icon** in the session header (`conversation.session.header.utilities`);
 2. the "Super Bot team" entry on the **right-sidebar guide** page;
-3. **automatically** on the session's first Super Bot dispatch (labels look like `backend-dev · T1 export endpoint`); once the user closes it, it does not come back.
+3. **automatically** on the session's first Super Bot dispatch (once; closing it keeps it closed).
 
-**Upgrade compatibility**: filter / layout / zoom preferences stored under the older keys (`steward.panel.*` / `dsh-steward.panel.*`) are migrated to `ds-superbot.panel.*` on first read. DS Super Bot and the Steward plugin can be installed side by side: their tool names, skill names and right-sidebar tab identities do not collide.
+![pipeline schematic](docs/assets/pipeline.svg)
 
 **The panel answers exactly one question: which agent, with which model, doing what, and how far along.** Top to bottom:
 
-1. **Task progress bar (native tasks)**: `done/total` plus one segment per task (done green / running blue pulse / pending grey / blocked orange), the running and blocked counts, and the source (`Agent Teams board` or `session task list`). **Counts only, never task names** — read tasks in DSH's own list or the native Team panel.
-2. **Workflow canvas (layered tree by default, free drag and zoom)**: `Lead · this session` at the top left as the root, a trunk through spec → architecture → implementation → quality → acceptance → review hubs (empty phases omitted), with that phase's cards branching to the right. The toolbar can tidy the canvas into radial / fishbone / tree layouts, and cards stay draggable. Connectors run from the Lead to each subagent, without arrowheads. Each node shows role / **actual model** (`model @ effort`, "model pending" until a request has run — never invented) / task description / state / elapsed / tokens. Click a node to open that child session in the sidebar; click `⌄` to expand provider / effort / four token buckets / turns and steps / mode / child session id in place.
-3. **Artifacts (collapsed by default)**: files under `tmp/superbot/<run>/` (`run.json`, `03-plan.json`, plus reports and evidence under `reports/` and `evidence/`); click a row to open the file in the sidebar.
+1. **Task progress bar (native tasks)**: `done/total` plus one segment per task (done green / running pulse / pending grey / blocked orange), counts, and the source (Agent Teams board or session task list). **Counts only, never task names**.
+2. **Workflow canvas (layered tree by default, free drag and zoom)**: `Lead · this session` at the top left as the root, a trunk through spec → architecture → implementation → quality → acceptance → review hubs with that phase's cards branching to the right. The toolbar tidies the canvas into radial / fishbone / tree layouts. Each node shows role / **actual model** (`model @ effort`, "model pending" until a request has run — never invented) / task / state / elapsed / tokens; click a node to open that child session, click `⌄` to expand details in place.
+3. **Artifacts (collapsed by default)**: `run.json`, `03-plan.json`, `reports/`, `evidence/` under `tmp/superbot/<run>/`; click a row to open the file in the sidebar.
 
-Panel data comes from native live projections, never from polling a task file:
+Panel data comes from native live projections — no task-file polling, no copied task list:
 
-| What the panel shows | Native DSH source |
+| What the panel shows | Native source |
 |---|---|
-| Subagent list / role | `subagentCatalog` projection (label = `role · task`) |
+| Subagent list / role | `subagentCatalog` projection |
 | Running / waiting for input | session UI state (`running` / `pendingInteraction`) |
-| Actual model | `modelSelection` projection (`lastUsed`, else `next`) |
+| Actual model | `modelSelection` projection |
 | Tokens | `tokenUsage` projection |
 | Elapsed / normal completion | `subagentTiming` projection |
-| Turns / steps (detail) | `sessionStats` projection |
+| Turns / steps | `sessionStats` projection |
 | Task progress | `agentTeam` projection, else `todos` |
-| Artifacts / run dirs | workspace-files Remote, polled every 15s |
+| Artifacts / run dirs | workspace-files Remote (15s poll) |
 
-The panel does **not** read tasks out of `03-plan.json`, does **not** draw a task DAG and does **not** copy the task list: task state belongs to DSH's native task system. When artifacts cannot be read, the artifacts area says so and the rest keeps working.
-
-**The Settings page keeps only models**: the "Settings → Super Bot" section renders just the per-role model and effort table (role / provider / model / effort / source, a defaults row, save and revert).
+Preferences (filter / canvas positions / zoom) live in browser `localStorage` under `ds-superbot.panel.*`, per session; keys written by earlier builds are migrated on first read.
 
 ## Shared task board (Agent Teams)
 
-With the "agent teams" host bundle enabled, the shared task board is the **authoritative source** of task state, and the **native Team panel** in the session header is where task detail is read. `superbot_board(action="sync", plan="<artifacts>/03-plan.json", level="M")` turns the plan into native board tasks (idempotent, matched through the `superbot:plan=` / `superbot:gate=` markers in each description):
+With the "agent teams" host bundle enabled, the shared task board is the **authoritative source** of task state. `superbot_board` mirrors the plan onto it idempotently (matched through the `superbot:plan=` / `superbot:gate=` markers in each description):
 
-| Board task | Source | What the native Team panel shows |
+| Board task | Source | Purpose |
 |---|---|---|
 | `G1 · plan approval` | gate | Work items cannot be claimed until it completes (native dependency gate) |
-| `T<id> · <role> · <title>` | `03-plan.json` tasks | State, owner, dependencies, readiness; write scopes come from file ownership and overlaps raise warnings |
-| `G2 · QA gate` / `G3 · final review` | gates | Depend on all work items / on QA; the process order is visible on the board |
+| `T<id> · <role> · <title>` | plan tasks | Work item: goal / done-when / file ownership / report destination |
+| `G2 · QA gate` / `G3 · final review` | gates | Depend on all work items / on QA |
 
-- Assignment: `superbot_board(action="brief", role="backend-dev", task="T1")` returns a self-contained brief → `spawn_teammate` → `team_task_update(action="reassign", owner=<teammate>)`; the teammate claims before starting.
+- Assignment: `superbot_board(action="brief", ...)` returns a self-contained brief → `spawn_teammate` → `team_task_update(action="reassign", ...)`.
 - Without the team bundle there is no `agentTeams` service: `superbot_board` fails loudly and the flow falls back to `superbot_dispatch` + `run.json`.
 
-## Documentation pipeline and the hard gate (docTier=3)
+## Documentation pipeline and the hard gate
 
-Documentation is not one do-everything skill: three entry points by scenario plus a review entry, with the rules and templates kept separately.
+Documentation splits by scenario into three entry points plus a review entry, with rules and templates kept separately:
 
-| You say | Loads | Covers |
+| Scenario | Entry | Covers |
 |---|---|---|
-| New project / build the doc baseline | `docs-new` | 01-requirement (PRD→FRD) → 02-architecture → 03-contract (+05-pages) → 06-test baseline → 07-governance → closure → review → receipt |
-| Take over an existing repo | `docs-takeover` | `take-over.mjs` produces T1 → inventory and placement mapping (needs a decision) → `docs-gate --baseline-write` → fill the gaps |
-| One feature / requirement change | `docs-feature` | Impact scan → collect decision items → touch only the affected phases (`na` + reason elsewhere) → change-link table in the same batch |
-| Review / are we ready to start | `docs-review` | A fresh reviewer (clean context, read-only) → verdict under `docs/07-治理/评审记录/` + machine-readable block → `approve` |
+| New project / build the baseline | `docs-new` | 01-requirement → 02-architecture → 03-contract (+05-pages) → 06-test baseline → 07-governance → closure → review → receipt |
+| Take over an existing repo | `docs-takeover` | `take-over.mjs` inventory → placement mapping → baseline record → fill the gaps |
+| One feature / requirement change | `docs-feature` | Impact scan → touch only the affected phases (`na` + reason elsewhere) → change-link table in the same batch |
+| Review / are we ready | `docs-review` | Fresh read-only reviewer → review record + machine-readable verdict → `approve` |
 
-**The hard gate is not a prompt.** With `docTier: 3` in `superbot.config.json`, `superbot_dispatch` checks the receipt and document hashes in `.superbot/docs-state.json` before dispatching `backend-dev` / `frontend-dev` and refuses when they do not pass (`architect` / `reviewer` / `qa-engineer` / `browser-tester` are not blocked, leaving humans room to fix docs and review). Receipts are only issued by the script:
+**The gate is not a prompt.** With `docTier: 3` in `superbot.config.json`, `superbot_dispatch` checks the receipt and document hashes in `.superbot/docs-state.json` before dispatching `backend-dev` / `frontend-dev` and refuses otherwise (other roles stay dispatchable so someone can fix docs and review). Receipts are issued only by the script:
 
 ```bash
-node scripts/docs-ready.mjs <root> init --scope new|takeover|feature --write   # declare the scope
-node scripts/docs-ready.mjs <root> check [--plan <03-plan.json>] [--strict]    # machine-check closure
-node scripts/docs-ready.mjs <root> approve --review <review-record>            # issue the receipt
-node scripts/docs-ready.mjs <root> status                                      # current state (incl. stale)
+node <plugin>/scripts/docs-ready.mjs <root> init --scope new|takeover|feature --write  # declare the scope
+node <plugin>/scripts/docs-ready.mjs <root> check [--plan <03-plan.json>] [--strict]   # machine-check closure
+node <plugin>/scripts/docs-ready.mjs <root> approve --review <review-record>           # issue the receipt
+node <plugin>/scripts/docs-ready.mjs <root> status                                     # current state (incl. stale)
 ```
 
-The criteria and error codes (`E-DOC-MISSING` / `E-DOC-PLACEHOLDER` / `E-DOC-THIN` / `E-NA-REASON` / `E-PLAN-DOCSREAD` / `E-PLAN-NA-CONFLICT` / `E-STATE-STALE` / `E-REVIEW-*`) are in `docs-ready --help` and the `docs-rules` skill. Editing any normative document (PRD / FRD / architecture / contract / page / test plan) invalidates the receipt; `执行步骤.md`, `评审状态.md` and `评审记录/` are excluded from the hash so day-to-day bookkeeping does not force a re-review.
+Criteria and error codes are in `docs-ready --help` and the `docs-rules` skill. Editing any normative document (PRD / FRD / architecture / contract / page / test plan) invalidates the receipt; bookkeeping documents are excluded from the hash.
 
-**Rollback**: set `docTier` back to 1/2 and the whole gate turns off — no code change required.
+**Rollback**: set `docTier` back to 1/2 and the whole gate turns off — no code change.
+
+## Configuration reference
+
+`<project-root>/superbot.config.json` (every field optional; validate with `scripts/validate-config.mjs`):
+
+```json
+{
+  "docTier": 3,
+  "modelRouting": {
+    "reviewer": { "model": "provider/strong-model", "effort": "high" },
+    "qa-engineer": { "model": "provider/fast-model" }
+  },
+  "execution": { "mode": "subagent" }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `docTier` | `0/1/2` = T0/T1 only; `3` = seven-phase documentation tree + the development gate |
+| `modelRouting.<role>` | Per-role provider/model/effort, highest priority |
+| `execution.mode` | `subagent` (default) or `inline` (the lead does the work itself, with a reduced scope) |
 
 ## Repository layout
 
@@ -195,7 +238,7 @@ The criteria and error codes (`E-DOC-MISSING` / `E-DOC-PLACEHOLDER` / `E-DOC-THI
 ├── cordis.patch.yml      # bundle patch: one Host row (id = superbot)
 ├── package.json          # manifest (dsh.bundle / dsh.client / exports)
 ├── icon.svg              # plugin icon
-├── locale/{zh,en}.json   # plugin title and summary (shown on the plugin page)
+├── locale/{zh,en}.json   # plugin title and summary shown on the plugin page
 ├── roles/                # 7 role charters + manifest.json (injected at dispatch time)
 ├── skills/               # 13 native skills + manifest.json
 ├── scripts/              # gate and documentation scripts (plain Node, zero dependencies)
@@ -207,24 +250,39 @@ The criteria and error codes (`E-DOC-MISSING` / `E-DOC-PLACEHOLDER` / `E-DOC-THI
 
 ```bash
 node --check index.js && node --check client.js   # syntax
-node --test tests/                                # host-contract tests (86 cases)
+node --test tests/                                # host-contract tests (87 cases)
 npm test                                          # same as the line above
 ```
 
-The tests drive `apply()` with a fake `ctx` and cover: tool registration and argument validation, role-charter injection, model-route precedence, the documentation readiness gate, command and skill registration, client panel rendering and canvas interaction, the Settings table, and stylesheet scoping. See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for details and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the architecture.
+The tests drive `apply()` with a fake `ctx` and run `client.js` through a fake module loader, so DSH does not need to be running:
+
+- `tests/dsh-plugin.test.mjs`: tool registration and argument validation, charter injection, route precedence, the documentation gate, command and skill registration, panel rendering and canvas interaction, the Settings table, stylesheet scoping
+- `tests/docs-ready.test.mjs`: end-to-end behaviour and error codes of the documentation readiness script
+- `tests/docs-governance.test.mjs`: documentation governance gates and snapshot behaviour
+
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for details and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the architecture.
 
 ## Troubleshooting
 
-- **`/superbot` echoes the roster instead of the skill**: the roster command is `/superbot-roster`; `/superbot` is the slash gesture for the `superbot` skill. Still seeing the roster means a different build is installed — re-run `install_bundle` and restart DSH.
-- **The `/superbot` gesture does not trigger the skill**: the gesture needs a space after `/superbot` (or Enter on its own); a stuck-on form such as `/superbotdoX` is not recognised. Natural language is the safest entry.
-- **Nothing changed after installing**: Host code loads only after a DSH restart; the skill catalog is a per-session snapshot, so open a **new session**. During development, disable/enable in the plugin manager for a hot reload.
-- **Model routing does not apply**: a malformed `modelRouting.<role>` counts as "not configured" and falls back to the parent route; run `validate-config.mjs` to check the structure.
-- **`superbot_board` says "Agent Teams not enabled"**: that is an optional capability; keep using `superbot_dispatch` + `run.json`, or enable "agent teams" on the plugin page and refresh.
+- **Nothing changed after installing**: Host code loads only after a DSH restart; the skill catalog is a per-session snapshot, so open a **new session**.
+- **`/superbot` echoes the roster**: the roster command is `/superbot-roster`; `/superbot` is the slash gesture for the `superbot` skill (followed by a space or Enter).
+- **A skill is missing**: if another plugin registered the same skill name first, this plugin skips it and logs a warning; remove or rename the conflicting plugin.
+- **Model routing does not apply**: a malformed `modelRouting.<role>` counts as "not configured"; run `validate-config.mjs` to check the structure.
+- **`superbot_board` says "Agent Teams not enabled"**: that is an optional capability; keep using `superbot_dispatch` + `run.json`.
+
+## Contributing
+
+Issues and pull requests are welcome. Read [AGENTS.md](AGENTS.md) first — it documents the directory layout, the hard constraints and the gates every change must pass. Use `<type>(<scope>): <summary>` for commit messages, and update both language versions when user-facing copy changes.
+
+There is **no CI**: the gates are local — `node --check` plus `node --test tests/` must be green.
+
+## License
+
+[MIT](LICENSE) © 2026 Lin
 
 ## More
 
+- Changelog: [CHANGELOG.md](CHANGELOG.md)
 - Architecture and extension points: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - Development and release: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
-- Changelog: [CHANGELOG.md](CHANGELOG.md)
 - 中文: [README.md](README.md)
-- License: MIT

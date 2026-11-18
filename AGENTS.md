@@ -29,7 +29,7 @@
 
 ```bash
 node --check index.js && node --check client.js   # 语法
-node --test tests/                                # 宿主契约测试（86 例）
+node --test tests/                                # 宿主契约测试（87 例）
 ```
 
 - 改了 `scripts/` 下的脚本：至少跑 `node <script> --help` / 相关用例，确认参数与退出码没变。

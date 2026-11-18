@@ -2,8 +2,8 @@
 
 ## 来源
 
-- 源路径：`C:\Users\12247\Desktop\skills\eng-doc-pipeline`
-- 变体：Desktop canonical（与 `E:\CodeStore\有灵\.agents\skills\eng-doc-pipeline`、AIOS、demo、明德AIERP 的副本逐字节相同）
+- 来源：一套内部工程文档流水线技能（本仓库作者维护），本目录是它随插件分发前的快照
+- 变体：canonical（与本插件其它宿主副本逐字节相同）
 - 快照日期：2026-11-06；源文件 mtime 2026-10-28 17:53
 - 源规模：`SKILL.md` 37,796 B / 336 行；`references/` 7 个文件 + `templates.md` 691 行 / 37,507 B；`assets/coding-guidelines-baseline.md` 42,468 B / 677 行；`locales/` 2 个文件
 - 吸收范围：8 个 references（`templates.md` 拆为 `templates/`）、assets 基线、naming guard 规则与脚本

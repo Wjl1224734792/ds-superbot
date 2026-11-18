@@ -8,7 +8,7 @@
 
 ## [0.1.0] - 2026-11-18
 
-首个版本：DS Super Bot 作为独立的 DeepSeek Harness 插件发布。项目 / 包名 `ds-superbot`。
+首个正式版本，同时开源发布（MIT）。DS Super Bot 是独立的 DeepSeek Harness 插件，项目 / 包名 `ds-superbot`；仓库根目录即插件包，克隆后用插件管理器 `install_bundle` 安装。
 
 ### Added
 
@@ -23,12 +23,13 @@
 - **文档治理增量层**：`scripts/docs-gate.mjs`（G1–G11 体积预算、frontmatter 读契约、07 分层、自动索引、ADR 双向、版本三处一致、快照完整性等）与 `scripts/doc-snapshot.mjs`（基线快照 + `history/` 哈希清单）。
 - **门禁脚本**（纯 Node、零依赖）：`validate-plan.mjs`、`verify.mjs`（含 `baseline record/check`）、`run-state.mjs`、`maintain.mjs`、`take-over.mjs`、`validate-config.mjs`，以及 `scripts/doc/` 下的 `doc-init.mjs` / `doc-check.mjs` / `guard-naming.mjs`。
 - **`/superbot-roster` 命令**：回显名册、子代理组合与路由口径；`/superbot` 是触发 `superbot` 技能的斜杠手势。
-- **宿主契约测试**：`tests/` 下 86 例 `node:test` 用例，用假 `ctx` 驱动 `apply()`，覆盖工具注册与参数校验、章程注入、路由优先级、文档硬门、命令与技能注册、面板渲染与画板交互、设置页表格与样式作用域。
+- **宿主契约测试**：`tests/` 下 87 例 `node:test` 用例，用假 `ctx` 驱动 `apply()`，覆盖工具注册与参数校验、章程注入、路由优先级、文档硬门、命令与技能注册、面板渲染与画板交互、设置页表格与样式作用域。
 
 ### Notes
 
 - 运行时**零依赖**：只用 Node 内置模块；`@deepseek-ai/schemastery` 是可选 peer 依赖，用于读设置页配置。
-- **升级兼容**：旧的 `steward.panel.*` / `dsh-steward.panel.*` 过滤 / 布局 / 缩放偏好会在首次读取时迁移到 `ds-superbot.panel.*`。本插件与 Steward 插件可并存：工具名（`superbot_*` vs `steward_*`）、技能名（`superbot` / `using-superbot` vs `steward` / `using-steward`）、右侧栏标签页身份（`ds-superbot` vs `dsh-steward`）均不冲突。
+- **偏好持久化**：面板的过滤 / 布局 / 缩放保存在浏览器本地 `ds-superbot.panel.*`，早期构建留下的旧键会在首次读取时回填到新键。
+- **技能名共存**：技能名全局唯一。若同名技能已被其它插件先注册，本插件跳过该技能并打一条 warning，不影响插件加载与它独有的工具、面板。
 - 不注册 Agent Preset、不注册页面、不写私有配置文件、不自建 HTTP 桥：插件只走 DSH 原生扩展点。
 - 卸载插件不会删除项目里的 `superbot.config.json`、`.superbot/` 收据与 `tmp/superbot/` 产物。
 - 已知边界：工具守卫走 DSH 宿主内建机制，本插件不注册 `PreToolUse` 级 hook；浏览器验收按「仓库自带 Playwright → DSH 侧栏人工驱动 → 人工兜底」三级降级。

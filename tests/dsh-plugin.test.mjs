@@ -2547,14 +2547,14 @@ test('the settings section renders the model table with a defaults row and one r
     revision: 4,
     value: {
       defaults: { provider: '', model: '', effort: '' },
-      roles: { 'backend-dev': { provider: 'ctaigw', model: 'glm-5.3', effort: 'high' } },
+      roles: { 'backend-dev': { provider: 'example-gw', model: 'demo-model', effort: 'high' } },
     },
   };
   const catalog = {
     ok: true,
     value: {
       groups: [
-        { id: 'ctaigw', name: 'CTAIGW', models: [{ id: 'glm-5.3', name: 'GLM 5.3', reasoning: { efforts: [{ id: 'high', name: 'High' }] } }] },
+        { id: 'example-gw', name: 'Example GW', models: [{ id: 'demo-model', name: 'Demo model', reasoning: { efforts: [{ id: 'high', name: 'High' }] } }] },
       ],
     },
   };
@@ -2581,9 +2581,9 @@ test('the settings section renders the model table with a defaults row and one r
   const selects = collect(host, (node) => node.type === 'select');
   assert.equal(selects[0].props.value, '', 'the defaults provider inherits the parent agent');
   const backend = selects.slice(9, 12);
-  assert.deepEqual(backend.map((node) => node.props.value), ['ctaigw', 'glm-5.3', 'high'], 'a configured role carries its own route');
+  assert.deepEqual(backend.map((node) => node.props.value), ['example-gw', 'demo-model', 'high'], 'a configured role carries its own route');
   const options = collect(host, (node) => node.type === 'option').map(labelOf);
-  assert.ok(options.includes('GLM 5.3'), `the live catalog feeds the model select (options: ${options.join(' | ')})`);
+  assert.ok(options.includes('Demo model'), `the live catalog feeds the model select (options: ${options.join(' | ')})`);
 
   const sources = collect(host, (node) => typeof node.props.className === 'string'
     && node.props.className.split(/\s+/).some((name) => name.indexOf('stwd-pill-src-') === 0));

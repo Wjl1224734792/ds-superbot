@@ -49,7 +49,7 @@ client.js（Web 端模块，由 DSH 模块加载器加载）
 | 槽位 / 服务 | 用法 |
 |---|---|
 | `settings.section` | 「设置 → Super Bot」分区：逐角色模型与思考强度表格（`ctx.configForms.get('superbot')`） |
-| `sidebar.right.pane.tab` | 右侧栏面板主体（`id: ds-superbot`，与 Steward 插件的 `dsh-steward` 互不冲突） |
+| `sidebar.right.pane.tab` | 右侧栏面板主体（`id: ds-superbot`，与 `openTab` 的 kind `superbot` 对应） |
 | `sidebar.right.pane.tab.title` | 面板标题栏 |
 | `conversation.session.header.utilities` | 会话标题栏的 Super Bot 图标（`right.openTab('superbot')`） |
 | `sidebar.right.pane.tab` 的 guide | 右侧栏引导页里的「Super Bot 团队」入口 |
@@ -142,7 +142,7 @@ DSH 会话 ── 原生投影 ──▶ client.js ──▶ 右侧栏面板
 | `<project>/superbot.config.json` | 人或 agent（版本化） | 项目级配置：`modelRouting`、`docTier`、`execution.mode` 等 |
 | `<project>/.superbot/docs-state.json` | `docs-ready.mjs` | 文档就绪收据（哈希 + 评审结论） |
 | `<project>/tmp/superbot/<run>/` | 子代理产出 | 运行产物：`run.json`、`03-plan.json`、报告与证据 |
-| 浏览器 localStorage | 面板自己 | `ds-superbot.panel.filters` / `.positions` / `.camera`（纯显示状态）；旧键 `steward.panel.*` / `dsh-steward.panel.*` / `dsh-super-bot.panel.*` 只读回填一次 |
+| 浏览器 localStorage | 面板自己 | `ds-superbot.panel.filters` / `.positions` / `.camera`（纯显示状态）；早期构建留下的旧键只读回填一次 |
 
 ## 10. 安全与边界
 

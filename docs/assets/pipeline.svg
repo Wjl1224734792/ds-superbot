@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 958 272" width="958" height="272" role="img" aria-label="DS Super Bot 流程示意：Lead 派单 → pm 规格 → architect 方案与任务 DAG → G1 计划批准门 → 任务单实施 → qa-engineer 质量门 → G2 → browser-tester 验收 → G3 终审 → 交付">
+  <title>DS Super Bot 流程示意（schematic, not a screenshot）</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8b949e"/>
+    </marker>
+    <style>
+      .box { fill: #f6f8fa; stroke: #c9d1d9; stroke-width: 1.5; }
+      .gate { fill: #fff8e1; stroke: #d4a72c; stroke-width: 1.5; }
+      .done { fill: #eaf7ee; stroke: #2ea44f; stroke-width: 1.5; }
+      .name { font-family: system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif; font-size: 14px; font-weight: 600; fill: #1f2328; }
+      .sub  { font-family: system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif; font-size: 11.5px; fill: #57606a; }
+      .link { stroke: #8b949e; stroke-width: 1.6; fill: none; marker-end: url(#arrow); }
+      .ret  { stroke: #8b949e; stroke-width: 1.6; fill: none; stroke-dasharray: 5 4; marker-end: url(#arrow); }
+      .cap  { font-family: system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif; font-size: 11px; fill: #8b949e; }
+    </style>
+  </defs>
+
+  <rect x="1" y="1" width="956" height="270" rx="10" fill="#ffffff" stroke="#d0d7de"/>
+
+  <!-- row 1 -->
+  <g>
+    <rect class="box" x="40" y="40" width="150" height="60" rx="8"/>
+    <text class="name" x="115" y="66" text-anchor="middle">Lead</text>
+    <text class="sub"  x="115" y="85" text-anchor="middle">本会话主代理</text>
+
+    <rect class="box" x="212" y="40" width="150" height="60" rx="8"/>
+    <text class="name" x="287" y="66" text-anchor="middle">pm</text>
+    <text class="sub"  x="287" y="85" text-anchor="middle">需求 → 可测规格</text>
+
+    <rect class="box" x="384" y="40" width="150" height="60" rx="8"/>
+    <text class="name" x="459" y="66" text-anchor="middle">architect</text>
+    <text class="sub"  x="459" y="85" text-anchor="middle">方案 + 任务 DAG</text>
+
+    <rect class="gate" x="556" y="40" width="150" height="60" rx="8"/>
+    <text class="name" x="631" y="66" text-anchor="middle">G1 计划批准门</text>
+    <text class="sub"  x="631" y="85" text-anchor="middle">用户批准 + Critic</text>
+
+    <rect class="box" x="728" y="40" width="190" height="60" rx="8"/>
+    <text class="name" x="823" y="66" text-anchor="middle">backend / frontend-dev</text>
+    <text class="sub"  x="823" y="85" text-anchor="middle">按任务单 + 文件所有权实施</text>
+  </g>
+
+  <path class="link" d="M 190 70 H 208"/>
+  <path class="link" d="M 362 70 H 380"/>
+  <path class="link" d="M 534 70 H 552"/>
+  <path class="link" d="M 706 70 H 724"/>
+
+  <!-- return path into row 2 -->
+  <path class="ret" d="M 823 100 V 131 Q 823 137 817 137 H 121 Q 115 137 115 143 V 166"/>
+
+  <!-- row 2 -->
+  <g>
+    <rect class="box" x="40" y="170" width="150" height="60" rx="8"/>
+    <text class="name" x="115" y="196" text-anchor="middle">qa-engineer</text>
+    <text class="sub"  x="115" y="215" text-anchor="middle">独立复跑门禁</text>
+
+    <rect class="gate" x="212" y="170" width="150" height="60" rx="8"/>
+    <text class="name" x="287" y="196" text-anchor="middle">G2 质量门</text>
+    <text class="sub"  x="287" y="215" text-anchor="middle">全绿才放行</text>
+
+    <rect class="box" x="384" y="170" width="150" height="60" rx="8"/>
+    <text class="name" x="459" y="196" text-anchor="middle">browser-tester</text>
+    <text class="sub"  x="459" y="215" text-anchor="middle">真实浏览器验收</text>
+
+    <rect class="gate" x="556" y="170" width="150" height="60" rx="8"/>
+    <text class="name" x="631" y="196" text-anchor="middle">G3 终审</text>
+    <text class="sub"  x="631" y="215" text-anchor="middle">reviewer 无 blocking</text>
+
+    <rect class="done" x="728" y="170" width="190" height="60" rx="8"/>
+    <text class="name" x="823" y="196" text-anchor="middle">交付</text>
+    <text class="sub"  x="823" y="215" text-anchor="middle">报告 + 05-record + 回填项目记忆</text>
+  </g>
+
+  <path class="link" d="M 190 200 H 208"/>
+  <path class="link" d="M 362 200 H 380"/>
+  <path class="link" d="M 534 200 H 552"/>
+  <path class="link" d="M 706 200 H 724"/>
+
+  <text class="cap" x="40" y="256">示意：S 级可跳过 pm / 批准门；无 UI 改动可跳过浏览器验收。“超时/失败”均回派对应角色，最多 2 轮。</text>
+</svg>
