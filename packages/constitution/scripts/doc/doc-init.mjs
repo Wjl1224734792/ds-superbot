@@ -72,9 +72,10 @@ ${hasProject
       '- [DECISIONS](project/DECISIONS.md)',
       '- [RUNBOOK](project/RUNBOOK.md)',
       '- [CHANGELOG](project/CHANGELOG.md)',
+      '- [INVARIANTS](project/INVARIANTS.md)',
       '- [HEALTH](project/HEALTH.md)',
     ].join('\n')
-  : '尚未生成 T1。先运行插件 `scripts/take-over.mjs <root> --write`（或「接手这个项目」）生成 `AGENTS.md` + `docs/project/` 六件，再写 T3 文档。'}
+  : '尚未生成 T1。先运行插件 `scripts/take-over.mjs <root> --write`（或「接手这个项目」）生成 `AGENTS.md` + `docs/project/` 七件（含 INVARIANTS.md），再写 T3 文档。'}
 `;
 
 const actions = [];

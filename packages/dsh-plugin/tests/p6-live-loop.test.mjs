@@ -22,6 +22,7 @@ import {
   startApprovedWorkItem,
 } from '../lib/live-loop-adapter.mjs';
 import * as consoleModel from '../lib/console-model.mjs';
+import { disarmAllWatchdogLoops } from '../lib/watchdog-loop-adapter.mjs';
 
 const PLUGIN = new URL('../index.js', import.meta.url);
 const ROLE_IDS = ['pm', 'architect', 'backend-dev', 'frontend-dev', 'qa-engineer', 'browser-tester', 'reviewer'];
@@ -222,6 +223,7 @@ test('missing subagents keeps the Mandate and does not start a session', async (
 });
 
 test('/superbot-decide approve starts a child; missing spawn keeps the Mandate; reject starts nothing', async (t) => {
+  t.after(() => { disarmAllWatchdogLoops(); });
   const root = tmpRoot(t);
   const approvedItem = seedItem(root, { id: 'WI-2026-601' });
   toAwaiting(root, approvedItem);

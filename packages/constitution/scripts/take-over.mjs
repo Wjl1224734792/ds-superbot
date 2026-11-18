@@ -15,19 +15,10 @@ import {
 } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { T1_FILES } from './lib/t1-files.mjs';
 
 const SCRIPT_DIR = fileURLToPath(new URL('.', import.meta.url));
 const TPL_DIR = join(SCRIPT_DIR, 'templates');
-
-const T1_FILES = [
-  'AGENTS.md',
-  'docs/project/CONSTITUTION.md',
-  'docs/project/ARCHITECTURE.md',
-  'docs/project/DECISIONS.md',
-  'docs/project/RUNBOOK.md',
-  'docs/project/CHANGELOG.md',
-  'docs/project/HEALTH.md',
-];
 
 // --- args ---
 const args = process.argv.slice(2);

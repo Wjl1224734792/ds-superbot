@@ -33,6 +33,12 @@ test('runtime export shape includes P0 APIs and P1 implementations', () => {
   assert.equal(typeof runtime.routeModel, 'function');
   assert.equal(typeof runtime.evaluateAuto, 'function');
   assert.equal(typeof runtime.canEnterAuto, 'function');
+  assert.equal(typeof runtime.applyMerge, 'function');
+  assert.equal(typeof runtime.gitStatus, 'function');
+  assert.equal(typeof runtime.canApplyAutoLow, 'function');
+  assert.equal(typeof runtime.dispatchAutoLow, 'function');
+  assert.equal(typeof runtime.git.applyMerge, 'function');
+  assert.equal(typeof runtime.autoLow.dispatchAutoLow, 'function');
   assert.equal(typeof runtime.compiler.compileMandate, 'function');
   assert.equal(typeof runtime.routing.routeModel, 'function');
   assert.equal(typeof runtime.assertStoragePath, 'function');

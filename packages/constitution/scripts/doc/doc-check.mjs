@@ -6,7 +6,7 @@
  *   node doc-check.mjs <root> [--tier <n>] [--json]
  *
  * 检查：
- *   1. T1 是否存在（AGENTS.md + docs/project/ 六件）；tier=3 时缺 T1 记 error。
+ *   1. T1 是否存在（AGENTS.md + docs/project/ 七件，含 INVARIANTS.md）；tier=3 时缺 T1 记 error。
  *   2. 深文档树存在时必须有不 docs/README.md。
  *   3. AGENTS.md 与 docs 下所有 .md 的相对链接是否存在（跳过外链、纯锚点、代码围栏）。
  *   4. docs/01..07 下的 .md 是否都进了 docs/README.md 索引（双向核对）。
@@ -15,6 +15,7 @@
  */
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
+import { T1_FILES } from '../lib/t1-files.mjs';
 
 const args = process.argv.slice(2);
 const flags = new Set(args.filter((a) => a.startsWith('--')));
@@ -27,15 +28,7 @@ if (!existsSync(root)) {
   fail(2, `根目录不存在：${root}`);
 }
 
-const T1 = [
-  'AGENTS.md',
-  'docs/project/CONSTITUTION.md',
-  'docs/project/ARCHITECTURE.md',
-  'docs/project/DECISIONS.md',
-  'docs/project/RUNBOOK.md',
-  'docs/project/CHANGELOG.md',
-  'docs/project/HEALTH.md',
-];
+const T1 = T1_FILES;
 const DEEP_DIRS = ['docs/01-需求', 'docs/02-架构', 'docs/03-契约', 'docs/04-专项', 'docs/05-页面', 'docs/06-测试', 'docs/07-治理'];
 const EXCLUDE_SEGMENTS = new Set(['.git', '.zcode', '.minimax', '.superbot', 'node_modules', 'dist', 'coverage', 'playwright-report', 'test-results', 'tmp']);
 

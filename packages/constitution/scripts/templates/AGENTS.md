@@ -32,6 +32,7 @@
 | [docs/project/CONSTITUTION.md](docs/project/CONSTITUTION.md) | 质量/安全/架构红线，不可协商项 |
 | [docs/project/ARCHITECTURE.md](docs/project/ARCHITECTURE.md) | 模块地图、依赖方向、不变量 |
 | [docs/project/DECISIONS.md](docs/project/DECISIONS.md) | ADR 决策日志（追加式） |
+| [docs/project/INVARIANTS.md](docs/project/INVARIANTS.md) | 不变量（只追加，供 Cartographer 回写） |
 | [docs/project/RUNBOOK.md](docs/project/RUNBOOK.md) | 安装/启动/测试/排障 |
 | [docs/project/CHANGELOG.md](docs/project/CHANGELOG.md) | 用户可见变更 |
 | [docs/project/HEALTH.md](docs/project/HEALTH.md) | 债务、风险、维护 backlog |

@@ -27,10 +27,13 @@
  *    buttons: approve calls runtime `approveDecision` (issues a Mandate),
  *    then the live-loop adapter dispatches via `dispatchWorkItem` +
  *    `routeModel` and starts a DSH sub-session with official
- *    `subagents.startActivation`; reject calls `rejectDecision` (records
- *    only, does not issue, does not start a session). This is a human
- *    command, not a new public tool; `superbot_dispatch` and the
- *    docTier=3 hard gate are unchanged.
+ *    `subagents.startActivation`, and the watchdog-loop adapter starts
+ *    the Watchdog loop at authority `observe` and arms a host-side
+ *    timer that ticks immediately then on an interval; reject calls
+ *    `rejectDecision` (records only, does not issue, does not start a
+ *    session or an execute loop). This is a human command, not a new
+ *    public tool; `superbot_dispatch` and the docTier=3 hard gate are
+ *    unchanged.
  *  - Skills are registered on the native `ctx.skills` registry (13 skills:
  *    main + inline / docs-rules / docs-governance + docs-new / docs-takeover /
  *    docs-feature / docs-review + four generic light skills).
@@ -45,6 +48,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkReadiness, formatGaps, readState } from './scripts/lib/docs-state.mjs';
+import { disarmAllWatchdogTimers } from './lib/watchdog-timers.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROLES_DIR = path.join(HERE, 'roles');
@@ -853,53 +857,63 @@ async function handleDecideCommand(ctx, invocation) {
         ? `已批准 ${parsed.workItemId}，Mandate ${mandateId} 已签发。`
         : `已批准 ${parsed.workItemId}，Mandate 已签发。`;
       // Mandate is already issued. A missing agent / subagents / spawn
-      // must not look like a rolled-back approval.
+      // or a missing scheduler must not look like a rolled-back approval.
+      const { armWatchdogLoop, formatWatchdogArmResult } = await import('./lib/watchdog-loop-adapter.mjs');
+      let live = null;
+      let liveError = null;
       try {
         const { startApprovedWorkItem } = await import('./lib/live-loop-adapter.mjs');
-        const live = await startApprovedWorkItem(root, out, {
+        live = await startApprovedWorkItem(root, out, {
           ctx,
           parent: invocation?.agent,
           invocation,
           signal: invocation?.signal,
         });
-        if (live?.started) {
-          const child = live.childId ? ` ${live.childId}` : '';
-          const label = live.label ? `（${live.label}）` : '';
-          return {
-            kind: 'success',
-            text: `${mandateText} 已派单并启动子会话${child}${label}。`,
-            childId: live.childId,
-            route: live.route,
-            assignment: live.assignment,
-            mandate: out.mandate,
-            started: true,
-          };
-        }
-        const reason = live?.reason ? ` ${live.reason}` : ' 子会话未启动。';
-        return {
-          kind: 'success',
-          text: `${mandateText}${reason.startsWith(' ') ? reason : ` ${reason}`}`,
-          childId: null,
-          route: live?.route ?? null,
-          assignment: live?.assignment ?? null,
-          mandate: out.mandate,
-          started: false,
-          reason: live?.reason ?? '子会话未启动',
-        };
       } catch (error) {
+        liveError = errorMessage(error);
+      }
+      const watch = armWatchdogLoop(root, {
+        now: undefined,
+      });
+      const watchText = formatWatchdogArmResult(watch);
+      if (live?.started) {
+        const child = live.childId ? ` ${live.childId}` : '';
+        const label = live.label ? `（${live.label}）` : '';
         return {
           kind: 'success',
-          text: `${mandateText} 子会话未启动：${errorMessage(error)}`,
-          childId: null,
-          route: null,
-          assignment: null,
+          text: `${mandateText} 已派单并启动子会话${child}${label}。${watchText}`.trim(),
+          childId: live.childId,
+          route: live.route,
+          assignment: live.assignment,
           mandate: out.mandate,
-          started: false,
-          reason: errorMessage(error),
+          started: true,
+          watchdog: watch,
         };
       }
+      const reason = liveError
+        ? ` 子会话未启动：${liveError}`
+        : (live?.reason ? ` ${live.reason}` : ' 子会话未启动。');
+      return {
+        kind: 'success',
+        text: `${mandateText}${reason.startsWith(' ') ? reason : ` ${reason}`}${watchText}`,
+        childId: null,
+        route: live?.route ?? null,
+        assignment: live?.assignment ?? null,
+        mandate: out.mandate,
+        started: false,
+        reason: liveError ?? live?.reason ?? '子会话未启动',
+        watchdog: watch,
+      };
     }
-    return { kind: 'success', text: `已否决 ${parsed.workItemId}，未签发 Mandate。`, started: false, childId: null };
+    const { disarmIfNoExecutable } = await import('./lib/watchdog-loop-adapter.mjs');
+    const watch = disarmIfNoExecutable(root, {});
+    return {
+      kind: 'success',
+      text: `已否决 ${parsed.workItemId}，未签发 Mandate。`,
+      started: false,
+      childId: null,
+      watchdog: watch,
+    };
   } catch (error) {
     return { kind: 'error', text: `无法完成决定：${errorMessage(error)}` };
   }
@@ -921,12 +935,13 @@ function registerCommands(ctx) {
     };
     const decide = {
       name: 'superbot-decide',
-      description: '批准或否决「待你决定」中的工作项：批准签发 Mandate 并派单启动子会话，否决只记账、不签发、不启动会话',
+      description: '批准或否决「待你决定」中的工作项：批准签发 Mandate、派单启动子会话并武装该工作项 Watchdog 循环，否决只记账、不签发、不启动会话或 execute 循环',
       input: { hint: 'approve <id> | reject <id> [reason]' },
       handler: (invocation) => handleDecideCommand(sctx, invocation),
     };
     sctx.effect(() => sctx.commands.register(roster), 'superbot: /superbot-roster command');
     sctx.effect(() => sctx.commands.register(decide), 'superbot: /superbot-decide command');
+    sctx.effect(() => () => { disarmAllWatchdogTimers(); }, 'superbot: watchdog loop teardown');
   });
 }
 

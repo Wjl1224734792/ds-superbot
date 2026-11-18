@@ -15,7 +15,7 @@ description: Super Bot 文档入口（DSH）· 接手存量项目。触发语「
 
 ```bash
 node <插件>/scripts/take-over.mjs <root>            # 只扫描，出盘点报告（推荐先跑）
-node <插件>/scripts/take-over.mjs <root> --write    # 生成 AGENTS.md + docs/project/ 六件（缺什么补什么，不覆盖）
+node <插件>/scripts/take-over.mjs <root> --write    # 生成 AGENTS.md + docs/project/ 七件（含 INVARIANTS.md；缺什么补什么，不覆盖）
 ```
 
 探测不到的项会留 `{{...}}` / `TODO(拍板)`。**未确认的占位符不许当事实引用**，也不许直接拿去派单。

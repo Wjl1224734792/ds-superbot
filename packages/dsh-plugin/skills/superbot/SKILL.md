@@ -68,7 +68,7 @@ description: Super Bot 研发团队调度手册（Tech Lead，DSH 宿主）。�
 2. `docs/project/CONSTITUTION.md`：红线（质量/安全/架构/测试/数据）。与红线冲突的做法一律不可。
 3. `superbot.config.json`：docTier、门禁开关、命令、浏览器与隔离配置、执行模式 `execution.mode`（`subagent` / `inline`，结构见 ROADMAP §5.4）。
 
-T1（AGENTS.md + docs/project/ 七件套）缺失时，可运行插件的 `take-over.mjs` 扫描生成初稿（确认占位符后才能用），或走接手模式（接手存量）。**占位符 `{{...}}` / `TODO(拍板)` 未确认前不许当事实引用。**
+T1（AGENTS.md + docs/project/ 七件，含 INVARIANTS.md）缺失时，可运行插件的 `take-over.mjs` 扫描生成初稿（确认占位符后才能用），或走接手模式（接手存量）。**占位符 `{{...}}` / `TODO(拍板)` 未确认前不许当事实引用。**
 
 **门禁脚本**（位于本技能所属插件包的 `scripts/` 目录，即技能文件向上两级；纯 Node 无依赖，在目标仓库根用绝对路径执行）：
 

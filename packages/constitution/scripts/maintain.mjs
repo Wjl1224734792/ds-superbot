@@ -21,6 +21,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join, relative, resolve, sep } from 'node:path';
+import { T1_FILES } from './lib/t1-files.mjs';
 
 const SRC_RE = /\.(m?js|cjs|jsx|tsx?|py|go|rs)$/i;
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.superbot', 'coverage', 'tmp', '.venv']);
@@ -172,7 +173,7 @@ if (enabled('docDrift')) {
   } else {
     add('docDrift', 3, '缺 AGENTS.md（T0）：项目记忆地基未建立', [], 2);
   }
-  for (const must of ['docs/project/CONSTITUTION.md', 'docs/project/HEALTH.md']) {
+  for (const must of T1_FILES.filter((f) => f !== 'AGENTS.md')) {
     if (!existsSync(join(root, must))) add('docDrift', 3, `缺 ${must}（T1）`, [], 2);
   }
 }

@@ -49,7 +49,7 @@ Capability Compiler（`compileMandate` / `compileIntent`）只产出与 Mandate 
 
 ## Receipt
 
-只有脚本可签发。`exitCode !== 0` 不得签 `pass`。`status` 为 `pass` | `fail` | `stale`（`browser-ac` 额外允许 `unverified`）。`.superbot/docs-state.json` 仍是 docs-ready 的原生口径；Receipt 是统一包装，不取代它。手改收据后 `revalidate` 必须重算哈希，发现不一致则 `status=stale` 或报错，不许静默相信文件。Delivered / Failed 结果卡（`renderResultCard`）必须可核对，列出 AC、Receipt 与产物路径（可复数；提供账本 root 时可从 ledger 加载 Receipt）。「合并」仍由人决定；本轮只通过 `recordMergeIntent` 记录意图，不自动执行 git merge / push。
+只有脚本可签发。`exitCode !== 0` 不得签 `pass`。`status` 为 `pass` | `fail` | `stale`（`browser-ac` 额外允许 `unverified`）。`.superbot/docs-state.json` 仍是 docs-ready 的原生口径；Receipt 是统一包装，不取代它。手改收据后 `revalidate` 必须重算哈希，发现不一致则 `status=stale` 或报错，不许静默相信文件。Delivered / Failed 结果卡（`renderResultCard`）必须可核对，列出 AC、Receipt 与产物路径（可复数；提供账本 root 时可从 ledger 加载 Receipt）。「合并」仍由人决定；`recordMergeIntent` 只记录意图，不自动执行 git merge / push。P7 提供真实 git 适配器：只读检查可用；仅当 `issuedBy` / `decidedBy` 为人时，显式 `applyMerge` 才会运行 `git merge`。禁止 auto-merge，永不 `git push`。
 
 ## Thread（跨通道）
 

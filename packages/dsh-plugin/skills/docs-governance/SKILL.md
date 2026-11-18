@@ -19,7 +19,7 @@ description: Super Bot 文档治理（DSH，docTier=3 增量层）。当项目�
 
 | 类 | 例子 | 生长方式 | 治理手段 |
 |---|---|---|---|
-| **活文档** | 根/子 AGENTS、README、docs/README、T1 六件、架构总纲、契约、页面设计、测试方案、执行步骤、开发顺序、评审状态 | 原地修订，同一主题只一份 | 体积预算 + hub-and-spoke 拆册 |
+| **活文档** | 根/子 AGENTS、README、docs/README、T1（AGENTS + docs/project/ 七件，含 INVARIANTS.md）、架构总纲、契约、页面设计、测试方案、执行步骤、开发顺序、评审状态 | 原地修订，同一主题只一份 | 体积预算 + hub-and-spoke 拆册 |
 | **记录文档** | ADR 单条、评审记录单篇、postmortem、CHANGELOG 条目 | 只增不改，单条不可变 | 薄索引 + 归档轮转 |
 | **基线文档** | PRD、FRD、API 契约、数据模型、DESIGN 冻结节、测试方案（有冻结语义者） | 原地修订 + 里程碑快照 | frontmatter `version` + 修订记录 + `history/` 快照 |
 
