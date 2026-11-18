@@ -6,13 +6,16 @@
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![DSH](https://img.shields.io/badge/DeepSeek%20Harness-0.2.x-4c6ef5)](https://github.com/deepseek-ai/deepseek-harness)
 [![node](https://img.shields.io/badge/node-%3E%3D20-3c873a)](package.json)
-[![tests](https://img.shields.io/badge/tests-87%20passing-2ea44f)](tests)
+[![tests](https://img.shields.io/badge/tests-node--test-2ea44f)](packages/dsh-plugin/tests)
 
 DS Super Bot is a **multi-role engineering-team plugin** for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH). The lead conversation agent acts as **Tech Lead**: it turns a request into a task DAG, hands each task to the role that owns it (dependency-ordered, with file ownership), and only reports delivery after the **plan gate → QA → browser acceptance → final review** have run.
 
 The goal is not "write the code in one shot" but to keep the project **understandable, verifiable, rollback-able and extendable** after every change.
 
-> **Status**: `0.1.0`, first official release. DSH itself is at `0.2.x`, so the native extension-point contract moves with the host — read the [CHANGELOG](CHANGELOG.md) before upgrading DSH.
+> **Status**: `0.2.0` (P0 monorepo). Breaking changes are allowed before 1.0.0 — the install path is now `packages/dsh-plugin`. DSH itself is at `0.2.x`, so the native extension-point contract moves with the host — read the [CHANGELOG](CHANGELOG.md) before upgrading DSH.
+
+
+The repository itself is a **long-lived engineering organization**: group chat is the only human/AI console, documents / norms / gates / evidence are its constitution, the work item is the only product object, and Claim → Evidence → Receipt is the only delivery currency. Decisions stay with humans, operations stay with AI, judgment stays with programs. P0 delivers the monorepo skeleton, contract validation, the Constitution Service, compatibility shims, and `presenceOf` plus placeholder faces. The 0.1.0 seven-role dispatch path is kept.
 
 ## What it fixes
 
@@ -51,16 +54,16 @@ Handing a request to one large model usually produces code that runs, but nobody
 
 ## Install
 
-The repository root **is** the plugin package (`package.json` declares `dsh.bundle` pointing at the root `cordis.patch.yml`). No build step, no `npm install`.
+This repository is a monorepo. The DeepSeek Harness install entry is **`packages/dsh-plugin`** (the package `name` remains `ds-superbot`; `dsh.bundle` / `dsh.client` are unchanged). No build step, no `npm install`.
 
 ```bash
 git clone https://github.com/Wjl1224734792/ds-superbot.git
 ```
 
-Then install that **directory** (not a subdirectory) with the DSH plugin manager:
+Then install that plugin directory with the DSH plugin manager:
 
 ```text
-plugin_manager(action="install_bundle", target="<absolute path of the clone>")
+plugin_manager(action="install_bundle", target="<absolute path of the clone>/packages/dsh-plugin")
 ```
 
 Restart DSH afterwards (Host code loads at startup) and open a **new session** — the skill catalog is a per-session snapshot, so older sessions may still show the previous copy.
@@ -233,34 +236,40 @@ Criteria and error codes are in `docs-ready --help` and the `docs-rules` skill. 
 
 ```text
 .
-├── index.js              # Host half: Config, superbot_dispatch / superbot_board, /superbot-roster, skill registration
-├── client.js             # Client half: right-sidebar team panel + Settings model table
-├── cordis.patch.yml      # bundle patch: one Host row (id = superbot)
-├── package.json          # manifest (dsh.bundle / dsh.client / exports)
-├── icon.svg              # plugin icon
-├── locale/{zh,en}.json   # plugin title and summary shown on the plugin page
-├── roles/                # 7 role charters + manifest.json (injected at dispatch time)
-├── skills/               # 13 native skills + manifest.json
-├── scripts/              # gate and documentation scripts (plain Node, zero dependencies)
-├── tests/                # host-contract tests (node:test, driven by a fake ctx)
-└── docs/                 # developer documentation for this project
+├── package.json                 # private workspace: test / check across packages
+├── AGENTS.md                    # monorepo conventions and red lines
+├── docs/                        # architecture, development, and product contracts
+│   ├── ARCHITECTURE.md
+│   ├── DEVELOPMENT.md
+│   └── product/                 # CONTRACT.md / INTERACTION.md
+└── packages/
+    ├── dsh-plugin/              # DSH install entry (name: ds-superbot)
+    │   ├── index.js / client.js
+    │   ├── roles/ / skills/
+    │   ├── scripts/             # shims that forward to constitution
+    │   ├── assets/residents/    # placeholder faces for 仓/探/作/验
+    │   └── tests/
+    ├── constitution/            # @ds-superbot/constitution: ledger, policy, receipts, gate SSOT
+    ├── runtime/                 # @ds-superbot/runtime: P0 interfaces; bus/watchdog/subscribe are stubs
+    └── im/                      # @ds-superbot/im: three cards, speak rules, presenceOf
 ```
 
 ## Development and tests
 
 ```bash
-node --check index.js && node --check client.js   # syntax
-node --test tests/                                # host-contract tests (87 cases)
-npm test                                          # same as the line above
+npm run check    # node --check over the plugin and new entry files
+npm test         # node:test across packages
 ```
 
-The tests drive `apply()` with a fake `ctx` and run `client.js` through a fake module loader, so DSH does not need to be running:
+Tests drive `apply()` with a fake `ctx` and run the `client.js` factory through a fake module loader, plus Constitution CLI fixtures in temporary directories. You do not need to start DSH, and tests must not touch the network:
 
-- `tests/dsh-plugin.test.mjs`: tool registration and argument validation, charter injection, route precedence, the documentation gate, command and skill registration, panel rendering and canvas interaction, the Settings table, stylesheet scoping
-- `tests/docs-ready.test.mjs`: end-to-end behaviour and error codes of the documentation readiness script
-- `tests/docs-governance.test.mjs`: documentation governance gates and snapshot behaviour
+- `packages/dsh-plugin/tests/dsh-plugin.test.mjs`: tool registration and argument checks, charter injection, routing priority, the documentation hard gate, command / skill registration, panel rendering and board interaction, the Settings table, style scoping
+- `packages/dsh-plugin/tests/docs-ready.test.mjs`: end-to-end docs-ready behaviour and exit codes (via the plugin shim)
+- `packages/dsh-plugin/tests/docs-governance.test.mjs`: documentation governance gates and snapshots
+- `packages/constitution/tests/`: work-item ledger, Mandate, Policy, Receipt, cards, and CLI
+- `packages/runtime/tests/`, `packages/im/tests/`: export shape, `NOT_IMPLEMENTED`, `presenceOf`
 
-See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for details and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the architecture.
+Details are in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Architecture is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Contracts are in [docs/product/CONTRACT.md](docs/product/CONTRACT.md). Interaction is in [docs/product/INTERACTION.md](docs/product/INTERACTION.md).
 
 ## Troubleshooting
 

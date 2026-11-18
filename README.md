@@ -6,13 +6,16 @@
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![DSH](https://img.shields.io/badge/DeepSeek%20Harness-0.2.x-4c6ef5)](https://github.com/deepseek-ai/deepseek-harness)
 [![node](https://img.shields.io/badge/node-%3E%3D20-3c873a)](package.json)
-[![tests](https://img.shields.io/badge/tests-87%20passing-2ea44f)](tests)
+[![tests](https://img.shields.io/badge/tests-node--test-2ea44f)](packages/dsh-plugin/tests)
 
 DS Super Bot 是给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）用的**多角色研发团队插件**：主对话代理担任 **Tech Lead**，把需求拆成任务 DAG，按「依赖 + 文件所有权」把任务派给对应角色的子代理，走完**计划批准门 → QA → 浏览器验收 → 终审**才交付。
 
 目标不是「一次把代码写完」，而是让项目在每次变更后仍然**可理解、可验证、可回滚、可继续演进**。
 
-> **状态**：`0.1.0`，首个正式版本。DSH 处于 `0.2.x` 阶段，插件的原生扩展点契约随宿主版本演进——升级 DSH 前请先看 [CHANGELOG](CHANGELOG.md)。
+> **状态**：`0.2.0`（P0 monorepo）。1.0.0 之前允许破坏性变更——安装路径改为 `packages/dsh-plugin`。DSH 处于 `0.2.x` 阶段，插件的原生扩展点契约随宿主版本演进——升级 DSH 前请先看 [CHANGELOG](CHANGELOG.md)。
+
+
+仓库本身是一支**常驻的工程组织**：群聊是唯一人机控制台，文档 / 规范 / 门禁 / 证据是宪法，工作项是唯一产品对象，Claim → Evidence → Receipt 是唯一交付货币。决定在人、操作在 AI、判定在程序。P0 先交付 monorepo 骨架、契约校验、Constitution Service、兼容 shim，以及 `presenceOf` 与占位头像；7 角色派单路径保留。
 
 ## 它解决什么问题
 
@@ -51,16 +54,16 @@ DS Super Bot 是给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-h
 
 ## 安装
 
-本仓库根目录**就是**插件包本身（`package.json` 的 `dsh.bundle` 指向根部的 `cordis.patch.yml`），不需要构建，不需要 `npm install`。
+本仓库是 monorepo。DeepSeek Harness 的安装入口是 **`packages/dsh-plugin`**（该包的 `name` 仍是 `ds-superbot`，`dsh.bundle` / `dsh.client` 保持不变）。不需要构建，不需要 `npm install`。
 
 ```bash
 git clone https://github.com/Wjl1224734792/ds-superbot.git
 ```
 
-然后在 DSH 里用插件管理器安装这个**目录**（不是某个子目录）：
+然后在 DSH 里用插件管理器安装插件包目录：
 
 ```text
-plugin_manager(action="install_bundle", target="<克隆下来的绝对路径>")
+plugin_manager(action="install_bundle", target="<克隆下来的绝对路径>/packages/dsh-plugin")
 ```
 
 装完 **重启 DSH**（Host 代码只在启动时加载），再开 **新会话**——技能目录是会话级快照，旧会话可能仍显示上一版文案。
@@ -233,34 +236,40 @@ node <插件>/scripts/docs-ready.mjs <root> status                              
 
 ```text
 .
-├── index.js              # Host 半：Config、superbot_dispatch / superbot_board、/superbot-roster、技能注册
-├── client.js             # Client 半：右侧栏团队面板 + 设置页模型表格
-├── cordis.patch.yml      # bundle 补丁：一行 Host（id = superbot）
-├── package.json          # 包清单（dsh.bundle / dsh.client / exports）
-├── icon.svg              # 插件图标
-├── locale/{zh,en}.json   # 插件页展示的标题与简介
-├── roles/                # 7 个角色章程 + manifest.json（派单时注入）
-├── skills/               # 13 个原生技能 + manifest.json
-├── scripts/              # 门禁 / 文档流水线脚本（纯 Node、零依赖）
-├── tests/                # 宿主契约测试（node:test，驱动假 ctx）
-└── docs/                 # 本项目的开发文档
+├── package.json                 # 私有 workspace：test / check 调各包
+├── AGENTS.md                    # monorepo 约定与红线
+├── docs/                        # 架构、开发与产品契约
+│   ├── ARCHITECTURE.md
+│   ├── DEVELOPMENT.md
+│   └── product/                 # CONTRACT.md / INTERACTION.md
+└── packages/
+    ├── dsh-plugin/              # DSH 安装入口（name: ds-superbot）
+    │   ├── index.js / client.js
+    │   ├── roles/ / skills/
+    │   ├── scripts/             # 转发到 constitution 的 shim
+    │   ├── assets/residents/    # 仓/探/作/验占位头像
+    │   └── tests/
+    ├── constitution/            # @ds-superbot/constitution：账本、Policy、Receipt、门禁 SSOT
+    ├── runtime/                 # @ds-superbot/runtime：P0 接口；bus/watchdog/subscribe 为占位
+    └── im/                      # @ds-superbot/im：三种卡、发言规则、presenceOf
 ```
 
 ## 开发与测试
 
 ```bash
-node --check index.js && node --check client.js   # 语法
-node --test tests/                                # 宿主契约测试（87 例）
-npm test                                          # 等价于上面这行
+npm run check    # node --check 覆盖插件与新入口
+npm test         # 各包 node:test
 ```
 
-测试用假 `ctx` 驱动 `apply()`、用假模块加载器执行 `client.js` 工厂，因此不需要启动 DSH：
+测试用假 `ctx` 驱动 `apply()`、用假模块加载器执行 `client.js` 工厂，并在临时目录跑 Constitution CLI，因此不需要启动 DSH，也不访问网络：
 
-- `tests/dsh-plugin.test.mjs`：工具注册与参数校验、章程注入、路由优先级、文档硬门、命令 / 技能注册、面板渲染与画板交互、设置页表格、样式作用域
-- `tests/docs-ready.test.mjs`：文档就绪脚本的端到端行为与错误码
-- `tests/docs-governance.test.mjs`：文档治理门禁与快照行为
+- `packages/dsh-plugin/tests/dsh-plugin.test.mjs`：工具注册与参数校验、章程注入、路由优先级、文档硬门、命令 / 技能注册、面板渲染与画板交互、设置页表格、样式作用域
+- `packages/dsh-plugin/tests/docs-ready.test.mjs`：文档就绪脚本（经 shim）的端到端行为与错误码
+- `packages/dsh-plugin/tests/docs-governance.test.mjs`：文档治理门禁与快照行为
+- `packages/constitution/tests/`：工作项账本、Mandate、Policy、Receipt、卡片与 CLI
+- `packages/runtime/tests/`、`packages/im/tests/`：导出形状、`NOT_IMPLEMENTED`、`presenceOf`
 
-细节见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)，架构见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+细节见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)，架构见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)，契约见 [docs/product/CONTRACT.md](docs/product/CONTRACT.md)，交互见 [docs/product/INTERACTION.md](docs/product/INTERACTION.md)。
 
 ## 排障
 

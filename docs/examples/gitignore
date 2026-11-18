@@ -1,0 +1,9 @@
+# Example gitignore fragment for a project governed by ds-superbot.
+# The ledger is a runtime book, not source. Copy these lines into the
+# target repository's .gitignore; do not force-commit .superbot/ledger/.
+
+tmp/
+.superbot/
+# If you must track policy while ignoring the ledger:
+# .superbot/ledger/
+# .superbot/docs-state.json

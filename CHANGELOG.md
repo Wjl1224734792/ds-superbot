@@ -4,7 +4,19 @@
 
 ## [Unreleased]
 
-（暂无。发布下一个版本前，把本节条目移入对应版本小节。）
+### Changed
+
+- **破坏性变更（0.2.0）**：仓库重构为 monorepo。DSH 安装入口改为 `packages/dsh-plugin`（包名仍是 `ds-superbot`）。原先对仓库根执行的 `install_bundle` 需要改路径。1.0.0 之前允许破坏性变更。
+- 产品定位升格为常驻工程组织：工作项是唯一对外产品对象；门禁脚本迁到 `packages/constitution/scripts/`，插件 `scripts/` 保留转发 shim，`node <插件包根>/scripts/docs-ready.mjs` 的退出码与 `--help` 不变。
+- 新增姊妹包 `@ds-superbot/constitution`（账本 / Policy / Mandate / Receipt / 卡片 / CLI）、`@ds-superbot/runtime`（P0 接口；bus / watchdog / subscribe 为 `NOT_IMPLEMENTED` 占位）、`@ds-superbot/im`（三种卡、发言允许表、`presenceOf`）。
+- 放入仓 / 探 / 作 / 验占位头像（`packages/dsh-plugin/assets/residents/`，资产 README 标明「占位」）。P0 不重做左 / 顶 / 右界面；P2 槽位清单见 `docs/DEVELOPMENT.md` 与 `docs/product/INTERACTION.md`。
+- 文档同步更新：中英文 README、仓库根 `AGENTS.md`、`docs/ARCHITECTURE.md`、`docs/DEVELOPMENT.md`、`docs/product/CONTRACT.md`、`docs/product/INTERACTION.md`。插件版本 `0.2.0`。产品名保持 ds-superbot。
+
+### Notes
+
+- 0.1.0 的 7 角色派单路径、`docTier=3` 硬门、工具名与右侧 tab id `ds-superbot` 均保留。不要把「活仓库」当作产品名。
+- `.superbot/ledger/` 是目标项目运行时账本，不要强制提交（见 `docs/examples/gitignore`）。
+- 默认授权档位仍是 observe；本版本不打开 auto 自动合并。
 
 ## [0.1.0] - 2026-11-18
 

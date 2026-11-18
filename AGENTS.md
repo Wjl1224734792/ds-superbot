@@ -1,53 +1,55 @@
-# 本仓库开发约定（DS Super Bot）
+# 本仓库开发约定（ds-superbot）
 
-本仓库是 **DS Super Bot** 的完整源码：仓库根目录就是 DeepSeek Harness 插件包，`roles/`、`skills/`、`scripts/` 都是**源文件**，直接改，不存在生成物或构建步骤。
+产品名是 **ds-superbot**。本仓库是 monorepo：仓库根不再等于 DSH 插件包。安装入口是 `packages/dsh-plugin`。
+
+红线：决定在人、操作在 AI、判定在程序。对外只有一个产品对象——工作项。不要用「活仓库」当产品名。不要新增可写的第 8 个角色。默认授权档位是 observe；不要打开 auto 自动合并。
 
 ## 目录归属
 
 | 路径 | 内容 | 改这里的后果 |
 |---|---|---|
-| `index.js` | Host 半：Config、两个工具、`/superbot-roster`、技能注册 | 影响工具与技能在宿主里的行为 |
-| `client.js` | Client 半：右侧栏团队面板、设置页模型表格 | 影响用户看到的界面 |
-| `cordis.patch.yml` | bundle 补丁，插入一行 Host（`id: superbot`） | 行 id 必须与 `index.js` 的 `CONFIG_NS` 一致 |
-| `package.json` | 包清单（`dsh.bundle` / `dsh.client` / `exports` / `files`） | 改导出或文件清单时必须同步 `files` |
-| `roles/` | 7 个角色章程 + `manifest.json` | 派单时注入的正文，改了立即影响子代理行为 |
-| `skills/` | 13 个技能 + `manifest.json` | 改技能正文 / 增删技能必须同步 manifest |
-| `scripts/` | 门禁与文档流水线脚本 | 纯 Node、零依赖，可被目标项目直接运行 |
-| `tests/` | 宿主契约测试 | 任何行为改动都要在这里有对应用例 |
-| `docs/` | 本项目的开发文档 | 架构、开发与发布说明 |
+| `packages/dsh-plugin/` | DSH 插件（`name`: `ds-superbot`）：`index.js`、`client.js`、角色、技能、占位头像 | 影响宿主安装与 0.1.0 兼容路径（7 角色派单、右侧栏、硬门） |
+| `packages/dsh-plugin/scripts/` | 转发 shim | 必须保持 `node <插件包根>/scripts/docs-ready.mjs` 的退出码与 `--help` |
+| `packages/constitution/` | `@ds-superbot/constitution`：账本、Policy、Mandate、Receipt、门禁脚本 SSOT | 影响工作项状态机与收据；不要重写门禁脚本的判定逻辑 |
+| `packages/runtime/` | `@ds-superbot/runtime`：Steward / filter / curator / assignment；bus / watchdog / subscribe 为 P1 占位 | P0 不得把占位实现成「假装成功」 |
+| `packages/im/` | `@ds-superbot/im`：三种卡、发言允许表、`presenceOf` | 面板与字幕只能调用 `presenceOf`，不要在 `client.js` 另写一套 |
+| `docs/product/` | 对象契约与交互说明 | 与 `packages/constitution/schemas/`、卡片模板保持一致 |
+| `docs/ARCHITECTURE.md` / `docs/DEVELOPMENT.md` | 架构与开发循环 | 改目录或命令时必须同步 |
 
 ## 硬性约束
 
-1. **运行时零依赖**：`index.js` / `client.js` / `scripts/` 只用 Node 内置模块。除可选的 `@deepseek-ai/schemastery` peer 外，不新增 `dependencies`。
-2. **不注册 Agent Preset**：角色只能是派单时注入的章程。注册可选的专员模式会绕开计划门、QA 与终审，等于毁掉插件的价值。
-3. **工具名与命名空间固定**：`superbot_dispatch` / `superbot_board` / `superbot-roster`；配置命名空间 `superbot` 必须与 `cordis.patch.yml` 的行 id 相同。
-4. **只走原生扩展点**：不注册页面、不写私有配置文件、不自建 HTTP 桥（`webServer` / `/api/...`）；界面只能用原生 slot、configForms 与原生会话跳转。
-5. **项目配置优先**：子代理模型的第一来源是项目根 `superbot.config.json` 的 `modelRouting`，设置页只是兜底；不要反转这个优先级。
-6. **角色与技能清单一致**：`roles/manifest.json`、`skills/manifest.json` 与实际目录必须一一对应；`index.js` 从 manifest 读角色，`skills/manifest.json` 是技能名的唯一清单。
+1. **运行时零依赖**：各包 `type: module`，Node `>=20`。`packages/constitution`、`packages/runtime`、`packages/im` 不得添加 `dependencies`；校验自己写，不要用 ajv。插件除可选 peer `@deepseek-ai/schemastery` 外同样零依赖。
+2. **不要引入 TypeScript 构建、bundler 或 workspace 构建步骤。** 根 `package.json` 用简单 scripts 调 `node --test`。
+3. **不注册 Agent Preset**；不自建 HTTP 桥或独立端口控制台。
+4. **工具名、右侧 tab id、配置命名空间、`.stwd-` 前缀一律不改。**
+5. **界面只做加法槽位**：禁止整栏替换 `sidebar` / `rightbar` / `conversation.session.header`。P0 不注册新的左栏主面板，不改顶部和右侧栏行为。
+6. **现有门禁脚本的判定逻辑不重写。** Constitution Service 是薄包装：调用同一套脚本、沿用退出码（0 通过 / 1 判定失败 / 2 用法或 IO 错误），再落 Receipt。
+7. **`.superbot/ledger/` 是目标项目运行时账本，不要强制提交。** 见 `docs/examples/gitignore`。
 
 ## 每次改动都要跑
 
 ```bash
-node --check index.js && node --check client.js   # 语法
-node --test tests/                                # 宿主契约测试（87 例）
+npm run check    # node --check 覆盖插件与新入口
+npm test         # 各包 node:test（含迁移后的宿主契约 / docs-ready / docs-governance）
 ```
 
-- 改了 `scripts/` 下的脚本：至少跑 `node <script> --help` / 相关用例，确认参数与退出码没变。
-- 改了面向用户的文案（工具描述、locale、README、CHANGELOG）：中英两份一起改，别只改一边。
-- 改了角色或技能：同步 manifest，并确认 `tests/dsh-plugin.test.mjs` 的注册断言仍然通过。
-- 测试必须真跑，不许用「应该没问题」代替；失败如实上报。
+- 改了 `packages/constitution/scripts/`：至少跑插件 shim 的 `--help` / 相关用例，确认参数与退出码没变。
+- 改了面向用户的文案：中英 README、locale、CHANGELOG 一起改。
+- 改了角色或技能：同步 manifest，并确认 `packages/dsh-plugin/tests/dsh-plugin.test.mjs` 仍然通过。
+- 测试必须真跑，不许用「应该没问题」代替；失败如实上报。不要在测试里访问网络或写用户的真实仓库。
 
 ## 文档口径
 
 - `README.md` 是中文主文档，`README.en.md` 是英文镜像；`locale/{zh,en}.json` 是插件页展示的标题与简介。
-- `docs/ARCHITECTURE.md` 讲扩展点与数据流，`docs/DEVELOPMENT.md` 讲开发、测试与发布。
-- 提交信息用 `<type>(<scope>): <summary>`（如 `feat(panel): ...`、`fix(dispatch): ...`）。
+- `docs/ARCHITECTURE.md` 讲三层架构与扩展点，`docs/DEVELOPMENT.md` 讲开发、测试、发布与 P2 槽位。
+- `docs/product/CONTRACT.md` 与 `docs/product/INTERACTION.md` 是对象契约和交互说明。
+- 提交信息用 `<type>(<scope>): <summary>`。
 
 ## 发布
 
-1. 改 `package.json` 的 `version`（SemVer；1.0.0 之前允许破坏性变更，但要写进 CHANGELOG）。
-2. 把 CHANGELOG 的 `[Unreleased]` 条目移入新的版本小节（Added / Changed / Fixed / Removed / Notes）。
+1. 改 `packages/dsh-plugin/package.json` 的 `version`（SemVer；1.0.0 之前允许破坏性变更，但要写进 CHANGELOG）。姊妹包版本与之对齐。
+2. 把 CHANGELOG 的 `[Unreleased]` 条目移入新的版本小节。
 3. 跑完上面两条命令，确认全绿。
 4. `git tag -a v<version> -m "v<version>"`，再推送 tag。
 
-安装 / 升级到本仓库的方式见 `README.md` 的「安装」一节：用 DSH 插件管理器 `install_bundle` 指向本仓库根目录，然后重启 DSH。
+安装方式见 `README.md`：`plugin_manager(action="install_bundle", target="<repo>/packages/dsh-plugin")`，然后重启 DSH。
