@@ -6,6 +6,7 @@
 
 ### Added
 
+- P3 运行时：Capability Compiler（`compileMandate` / `compileIntent`）按工作项即时编译 Mandate 草稿，按能力态装配 Discover / Build / Verify，并附上 Cartographer（不执行 P4 回写）。`roles/*.md` 仅在编译失败时作为 fallback。`routeModel` 按能力态 × 风险选择轻量 / 强档模型，`modelRouting.<role>` 保留为 fallback。`evaluateAuto` / `canEnterAuto` 要求先有落盘的 would-accept 观察记录才能进入 auto 执行灰度；默认仍是 observe，auto-merge 仍然禁用。
 - P2 界面：用已核对的官方加法槽接上左栏控制台（`sidebar.panellist` + `main`，同一 id `ds-superbot-console`）、顶部迷你脸（`conversation.session.header.corner`）、输入区一行字幕（`conversation.input.dock`）和「待你决定」计数；右侧现有 tab（id `ds-superbot` / kind `superbot`）改为大舞台 + 工作项详情，0.1.0 工作流树降为详情里的 DAG。眼神与动作只走 `presenceOf`，尊重 `prefers-reduced-motion`，同一时刻最多一个高能量头像。默认授权仍是 observe，不自动合并。槽位已对照安装的 DeepSeek Harness 0.2.2-rc.2 校验。
 - P1 运行时：文件型 Event Bus（`.superbot/ledger/events.jsonl`）、Steward 轻量规则 + 预留 `createModelPort` 模型接口、订阅直通（不授予任何新权限，不能扩大 Mandate 的 toolsWhitelist / scope / budget）、Watchdog 循环（进度 / 空转 / 费用）。默认授权档位仍是 observe：只记录 would-accept，不执行，不自动合并。无人 @ 时也可以提出 Candidate 工作项，但不进入 Authorized / Building，也不启动 Worker。
 - 吊销后重签 Mandate 不再覆盖同一文件：首次仍用 `MD-<workItemId>`，其后为 `MD-<workItemId>-N`（N≥2），已吊销记录作为历史副本保留。
@@ -24,7 +25,8 @@
 
 - 0.1.0 的 7 角色派单路径、`docTier=3` 硬门、工具名与右侧 tab id `ds-superbot` 均保留。不要把「活仓库」当作产品名。
 - `.superbot/ledger/` 是目标项目运行时账本，不要强制提交（见 `docs/examples/gitignore`）。
-- 默认授权档位仍是 observe；本版本不打开 auto 自动合并。
+- 默认授权档位仍是 observe；本版本不打开 auto 自动合并。auto 执行灰度不是合并，且必须先有观察记录。
+- P3 不改 0.1.0 的 `superbot_dispatch` 行为，不在插件里开 HTTP，不新注册 Agent Preset 或第 8 个角色文件。
 
 ## [0.1.0] - 2026-11-18
 

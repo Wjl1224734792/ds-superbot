@@ -26,6 +26,23 @@
 
 完整状态迁移表见实施 Goal 第 5 节，由 `packages/constitution/src/workitem.mjs` 执行。
 
+## Owner → 能力态（P3）
+
+`scope.owners` 仍使用现有角色 id，运行时再映射到能力态，不新增第 8 个角色文件：
+
+| owners / 角色 id | 能力态 | 装配 |
+| --- | --- | --- |
+| `pm`, `architect` | Discover | Scout（只读感知）/ Explorer（只读 Fact Pack）/ Curator（只交 Top-K） |
+| `backend-dev`, `frontend-dev` | Build | 由现有章程模板编译的 Worker，工具可含 shell / read / edit / git，范围不得扩大 |
+| `qa-engineer`, `browser-tester`, `reviewer` | Verify | 独立上下文 Verifier + 确定性脚本；Critic 对抗性终审 |
+| （非 role id） | Cartographer | 任务结束后只写知识库（Decision / Invariant），不得改业务代码；完整回写是 P4 |
+
+缺 owners（或 owners 都不是已知角色 id）时的推断：规划 / 文档类 gates → Discover；`scope.files` / `newFiles` 非空 → Build；`verify` / `browser-ac` / `review` → Verify；以上都没有但 intent 存在 → 仅 Discover。成功编译始终附上 Cartographer。未知 owner id 被忽略，永不发明新角色 id。推断结果只影响装配，不回写到 `scope.owners`。
+
+Capability Compiler（`compileMandate` / `compileIntent`）只产出与 Mandate 字段兼容的**草稿**（goal / ac / nonGoals / scope / toolsWhitelist / budget / evidenceRequired / constitution_snapshot / workItem）。签发仍走 `issueMandate`，R2 / R3 与 `human-approval` 仍要人批。编译失败（缺 intent、缺 AC、AC 不可判定、范围越出仓库根）时 `via: 'fallback'`，只用匹配的 `roles/*.md`，且不得扩大 tools 或 scope。
+
+模型路由升级为「能力态 × 风险」：轻量档给 Discover / Steward 等，强档给契约编译与终验；R2 / R3 升到强档。`superbot.config.json` 的 `modelRouting.<role>` 保留为 fallback，0.1.0 派单解析不改。
+
 ## Mandate
 
 签发后除 `revokedAt` / `revokeReason` 外任何字段都不得被更新。吊销只允许 `human-stop`、`expired`、`snapshot-stale`。过期 Mandate 不得再授权施工。第一次签发仍使用 Goal 规定的 `MD-<workItemId>`；若该 id 已被一份已吊销记录占用，新签发使用 `MD-<workItemId>-2`、`-3`……，历史文件保持原样。`schemaVersion` 仍为 1（只放宽了 id 模式，既有 id 仍然合法）。
@@ -45,6 +62,7 @@
 - `!expr` 对原子条件取反，例如 `!touches(prod|billing|delete|secrets)`；空的 `touches` 视为未命中该集合。
 - `requireHuman: true` 时，`authority` 必须是 `human-approval`，不得自动进入 Authorized。
 - `merge: human-only` 在 P0 只记录在匹配结果里。
+- auto 执行灰度（不是合并）必须先有一条已落盘的 would-accept 观察记录，匹配键至少是同一 `action`，请求带风险时还要同一风险档。R2 / R3、`human-approval`、`requireHuman`，以及 `touches` 命中 prod / billing / delete / secrets 的工作项，不得进入 auto，保持人工门。即使灰度资格成立，`would.merge` 仍为 false，且不得执行合并。默认授权档位仍是 observe。
 
 注意：默认文件按「先匹配到的规则生效」解释，规则顺序是 `auto-low` → `human-critical` → `human-default`。`auto-low` 仅匹配 R1 及以下、可逆、且未 `touches(prod|billing|delete|secrets)` 的工作项。纯 R3，以及 touches 敏感范围（含 R1 且可逆但 touches）的工作项，会命中 `human-critical`（含 `requireHuman`、`merge: human-only` 与更严门禁）。R2 且未 touches 仍命中 `human-default`。
 

@@ -11,7 +11,9 @@ import { create as createAssignment } from './assignment.mjs';
 import * as bus from './bus.mjs';
 import { fastPath, slowPath } from './filter.mjs';
 import { createModelPort, RULES_MODEL, rulesComplete } from './model.mjs';
-import { DEFAULT_AUTHORITY, assertNoAutoMerge, recordWouldAccept, resolveAuthority } from './observe.mjs';
+import { compileMandate } from './compiler.mjs';
+import { assertNoAutoMerge, recordWouldAccept, settleAuthority } from './observe.mjs';
+
 import { formatIso } from './time.mjs';
 import {
   createThread, createWorkItem, getThread,
@@ -20,7 +22,7 @@ import {
 
 const SPEAK_EVENTS = new Set(['needs-decision', 'result-ready', 'failed']);
 
-export { createModelPort, RULES_MODEL, rulesComplete };
+export { createModelPort, RULES_MODEL, rulesComplete, compileMandate };
 
 /**
  * @param {{ type?: string, kind?: string, state?: string, speakKind?: string }} event
@@ -35,39 +37,22 @@ export function speakAllowed(event = {}) {
 }
 
 /**
- * Structured intent compilation (no model call by default).
- * A reserved model port may refine the draft; it cannot issue a
- * mandate or mark gates as passed.
- * @returns {{ planNeeds: object, mandateDraft: object, via: string }}
+ * Structured intent compilation via the Capability Compiler.
+ * On success `via` is `compiler`; on failure it falls back to the
+ * matching `roles/*.md` templates with `via: 'fallback'`. A reserved
+ * model port may refine the draft; it cannot issue a mandate or mark
+ * gates as passed. The default port never calls a network.
+ * @returns {{ planNeeds: object, mandateDraft: object, via: string, reason: string|null, assembly: object, issued: false }}
  */
-export function compileIntent(workItem, snapshot, model) {
+export function compileIntent(workItem, snapshot, model, options) {
   if (!workItem) throw new Error('compileIntent requires a work item');
-  const ac = workItem.ac ?? [];
-  const missingCover = ac.filter((a) => !(a.coveredBy && a.coveredBy.length)).map((a) => a.id);
-  const planNeeds = {
-    impact: Boolean(workItem.intent),
-    acceptanceCriteria: ac,
-    missingCoveredBy: missingCover,
-    scope: workItem.scope ?? { files: [], newFiles: [], owners: [] },
-    gates: workItem.gates ?? [],
-    snapshotId: snapshot?.id ?? workItem.constitution_snapshot ?? null,
-  };
-  const mandateDraft = {
-    workItem: workItem.id,
-    goal: workItem.intent,
-    ac,
-    nonGoals: workItem.nonGoals ?? [],
-    scope: workItem.scope ?? { files: [], newFiles: [], owners: [] },
-    toolsWhitelist: ['shell', 'read', 'edit', 'git'],
-    budget: { tokens: 200000, minutes: 45 },
-    evidenceRequired: workItem.gates ?? [],
-    constitution_snapshot: snapshot?.id ?? workItem.constitution_snapshot ?? null,
-  };
-  let via = 'rules';
-  if (model && typeof model.completeSync === 'function' && model.kind === 'rules') {
-    model.completeSync('draft-intent', workItem);
+  let modelPort = model;
+  let opts = options ?? {};
+  if (model && typeof model === 'object' && typeof model.completeSync !== 'function' && typeof model.complete !== 'function') {
+    opts = model;
+    modelPort = opts.model ?? null;
   }
-  return { planNeeds, mandateDraft, via };
+  return compileMandate(workItem, snapshot, { ...opts, model: modelPort });
 }
 
 /** @deprecated use compileIntent */
@@ -82,7 +67,17 @@ export function compile(workItem, snapshot, model) {
 export function assign(input = {}) {
   if (!input.workItem?.id) throw new Error('steward.assign requires a work item');
   assertNoAutoMerge(input.action);
-  const authority = resolveAuthority(input.authority);
+  const settled = settleAuthority(input.authority, {
+    root: input.root,
+    action: 'assign',
+    risk: input.workItem?.risk ?? input.risk,
+    reversible: input.workItem?.reversible ?? input.reversible,
+    touches: input.workItem?.touches ?? input.touches,
+    requireHuman: input.requireHuman,
+    itemAuthority: input.workItem?.authority,
+    workItem: input.workItem,
+  });
+  const authority = settled.authority;
   const assignment = createAssignment({
     workItem: input.workItem,
     mandate: input.mandate,
@@ -93,15 +88,19 @@ export function assign(input = {}) {
     executed: false,
     started: false,
     authority,
-    wouldAccept: authority === 'observe',
+    wouldAccept: authority === 'observe' || authority === 'auto',
     workItem: input.workItem.id,
+    auto: settled.auto,
   };
   if (input.root) {
     record.wouldAcceptEvent = recordWouldAccept(input.root, {
       action: 'assign',
       workItem: input.workItem.id,
-      reason: 'steward.assign in observe mode does not start a worker',
-      authority,
+      risk: input.workItem?.risk ?? input.risk ?? null,
+      reason: authority === 'auto'
+        ? 'steward.assign entered auto grayscale but does not start a worker or merge'
+        : 'steward.assign in observe mode does not start a worker',
+      authority: authority === 'auto' ? 'observe' : authority,
       would: { assign: true, execute: false, merge: false },
       source: 'steward',
       details: { workDir: assignment.workDir, toolsWhitelist: assignment.toolsWhitelist },
@@ -142,7 +141,17 @@ function ensureThread(root, slug, signal) {
 export function consider(signal = {}, ctx = {}) {
   const root = ctx.root ?? signal.root;
   if (!root) throw new Error('steward.consider requires root');
-  const authority = resolveAuthority(ctx.authority ?? signal.authority);
+  const settled = settleAuthority(ctx.authority ?? signal.authority, {
+    root,
+    action: 'propose-candidate',
+    risk: signal.risk,
+    reversible: signal.reversible,
+    touches: signal.touches,
+    requireHuman: signal.requireHuman,
+    itemAuthority: signal.itemAuthority,
+    workItem: signal.workItem,
+  });
+  const authority = settled.authority;
   const mentioned = Boolean(signal.mentioned ?? signal.atMentioned);
   const model = ctx.model ?? RULES_MODEL;
 
@@ -222,9 +231,10 @@ export function consider(signal = {}, ctx = {}) {
   const would = recordWouldAccept(root, {
     action: 'propose-candidate',
     workItem: moved.id,
+    risk,
     reason: mentioned ? 'signal-with-mention' : 'signal-without-mention',
     mentioned,
-    authority,
+    authority: authority === 'auto' ? 'observe' : authority,
     policy: l2.policy,
     would: { propose: true, execute: false, merge: false, assign: false },
     source: 'steward',

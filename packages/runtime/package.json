@@ -3,14 +3,14 @@
   "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "ds-superbot runtime substrate: Steward, filters, curator, assignment, file-backed event bus, subscription pass-through, Watchdog, and observe / would-accept.",
+  "description": "ds-superbot runtime substrate: Steward, Capability Compiler, capability×risk model routing, filters, curator, assignment, file-backed event bus, subscription pass-through, Watchdog, observe / would-accept, and auto grayscale gating.",
   "license": "MIT",
   "exports": {
     ".": "./src/index.mjs"
   },
   "scripts": {
     "test": "node --test tests/*.mjs",
-    "check": "node --check src/index.mjs"
+    "check": "node --check src/index.mjs && node --check src/compiler.mjs && node --check src/routing.mjs && node --check src/steward.mjs && node --check src/observe.mjs"
   },
   "engines": {
     "node": ">=20"

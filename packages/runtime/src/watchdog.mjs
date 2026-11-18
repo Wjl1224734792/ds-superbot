@@ -8,7 +8,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { listWorkItems, listMandates, isExpired } from '../../constitution/src/index.mjs';
 import * as bus from './bus.mjs';
-import { DEFAULT_AUTHORITY, recordWouldAccept, resolveAuthority } from './observe.mjs';
+import { DEFAULT_AUTHORITY, recordWouldAccept, settleAuthority, isHandsOffAuthority } from './observe.mjs';
 import { formatIso, parseIso } from './time.mjs';
 
 export const WATCHDOG_REL = '.superbot/ledger/watchdog';
@@ -56,7 +56,10 @@ export function start(options = {}) {
     lastTickAt: existing?.lastTickAt ?? null,
     ticks: existing?.ticks ?? 0,
     idleAfterMinutes: options.idleAfterMinutes ?? existing?.idleAfterMinutes ?? 15,
-    authority: resolveAuthority(options.authority ?? existing?.authority ?? DEFAULT_AUTHORITY),
+    authority: settleAuthority(options.authority ?? existing?.authority ?? DEFAULT_AUTHORITY, {
+      root,
+      action: 'watchdog',
+    }).authority,
     budgets: options.budgets ?? existing?.budgets ?? null,
   };
   writeLoop(root, doc);
@@ -81,7 +84,10 @@ export function tick(state = {}) {
   }
   const now = input.now ?? new Date();
   const at = formatIso(now);
-  const authority = resolveAuthority(input.authority ?? loop.authority);
+  const authority = settleAuthority(input.authority ?? loop.authority, {
+    root,
+    action: 'watchdog',
+  }).authority;
   const idleAfter = Number(input.idleAfterMinutes ?? loop.idleAfterMinutes ?? 15);
   const usage = input.usage ?? {};
 
@@ -114,10 +120,11 @@ export function tick(state = {}) {
     if (inFlight && idleMinutes >= idleAfter) {
       const idleRow = { ...row, reason: 'idle-timeout' };
       idle.push(idleRow);
-      if (authority === 'observe') {
+      if (isHandsOffAuthority(authority)) {
         wouldAccept.push(recordWouldAccept(root, {
           action: 'park',
           workItem: item.id,
+          risk: item.risk ?? null,
           reason: `idle for ${idleMinutes.toFixed(1)} minutes (threshold ${idleAfter})`,
           authority,
           would: { park: true, execute: false, merge: false },
@@ -128,10 +135,11 @@ export function tick(state = {}) {
     }
 
     if (mandate && isExpired(mandate.expiresAt, now)) {
-      if (authority === 'observe') {
+      if (isHandsOffAuthority(authority)) {
         wouldAccept.push(recordWouldAccept(root, {
           action: 'revoke',
           workItem: item.id,
+          risk: item.risk ?? null,
           reason: `mandate ${mandate.id} expired at ${mandate.expiresAt}`,
           authority,
           would: { revoke: true, execute: false, merge: false },
@@ -162,6 +170,7 @@ export function tick(state = {}) {
         wouldAccept.push(recordWouldAccept(root, {
           action: 'halt',
           workItem: item.id,
+          risk: item.risk ?? null,
           reason: 'over budget',
           authority,
           would: { halt: true, execute: false, merge: false },

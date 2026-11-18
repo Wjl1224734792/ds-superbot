@@ -250,7 +250,7 @@ Criteria and error codes are in `docs-ready --help` and the `docs-rules` skill. 
     │   ├── assets/residents/    # placeholder faces for 仓/探/作/验
     │   └── tests/
     ├── constitution/            # @ds-superbot/constitution: ledger, policy, receipts, gate SSOT
-    ├── runtime/                 # @ds-superbot/runtime: Steward / Event Bus / subscribe / Watchdog / observe
+    ├── runtime/                 # @ds-superbot/runtime: Steward / Compiler / routeModel / Event Bus / Watchdog / observe
     └── im/                      # @ds-superbot/im: three cards, speak rules, presenceOf
 ```
 
@@ -267,7 +267,7 @@ Tests drive `apply()` with a fake `ctx` and run the `client.js` factory through 
 - `packages/dsh-plugin/tests/docs-ready.test.mjs`: end-to-end docs-ready behaviour and exit codes (via the plugin shim)
 - `packages/dsh-plugin/tests/docs-governance.test.mjs`: documentation governance gates and snapshots
 - `packages/constitution/tests/`: work-item ledger, Mandate, Policy, Receipt, cards, and CLI
-- `packages/runtime/tests/`, `packages/im/tests/`: Event Bus, subscribe, Watchdog, would-accept, Steward candidates, `presenceOf`
+- `packages/runtime/tests/`, `packages/im/tests/`: Event Bus, subscribe, Watchdog, would-accept, auto grayscale, Compiler, routeModel, Steward candidates, `presenceOf`
 
 Details are in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Architecture is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Contracts are in [docs/product/CONTRACT.md](docs/product/CONTRACT.md). Interaction is in [docs/product/INTERACTION.md](docs/product/INTERACTION.md).
 
