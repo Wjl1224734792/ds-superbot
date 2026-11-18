@@ -1,0 +1,21 @@
+# .superbot/policy/default.yaml
+rules:
+  - id: auto-low
+    when: "risk <= R1 && reversible == true"
+    requireHuman: false
+    allow: [explore, plan, build, verify, deliver]
+    gates: [validate-plan, verify]
+    speak: [result-ready, failed]
+  - id: human-default
+    when: "risk >= R2 || intent.ambiguous"
+    requireHuman: true
+    allow: [explore, plan]
+    gates: [validate-plan, docs-ready, verify, review]
+    speak: [needs-decision, result-ready, failed]
+  - id: human-critical
+    when: "risk == R3 || touches(prod|billing|delete|secrets)"
+    requireHuman: true
+    allow: [explore]
+    gates: [validate-plan, docs-ready, docs-gate, verify, browser-ac, review]
+    speak: [needs-decision, result-ready, failed]
+    merge: human-only

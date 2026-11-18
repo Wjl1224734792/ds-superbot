@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ds-superbot.local/schema/receipt.json",
+  "title": "Receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "workItem",
+    "gate",
+    "script",
+    "exitCode",
+    "status",
+    "issuedAt",
+    "constitution_snapshot",
+    "artifacts",
+    "hashes"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^RC-[a-z0-9-]+-[0-9a-f]{8}$"
+    },
+    "workItem": {
+      "type": "string",
+      "pattern": "^WI-[0-9]{4}-[0-9]{3,}$"
+    },
+    "gate": {
+      "enum": [
+        "validate-plan",
+        "docs-ready",
+        "docs-gate",
+        "verify",
+        "browser-ac",
+        "review",
+        "naming-guard"
+      ]
+    },
+    "script": {
+      "type": "string"
+    },
+    "exitCode": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2
+    },
+    "status": {
+      "enum": [
+        "pass",
+        "fail",
+        "stale",
+        "unverified"
+      ]
+    },
+    "issuedAt": {
+      "type": "string"
+    },
+    "constitution_snapshot": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^CS-[0-9a-f]{12}$"
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "hashes": {
+      "type": "object"
+    }
+  }
+}

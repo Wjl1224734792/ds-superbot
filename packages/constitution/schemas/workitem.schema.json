@@ -1,0 +1,225 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ds-superbot.local/schema/workitem.json",
+  "title": "WorkItem",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "thread",
+    "origin",
+    "intent",
+    "ac",
+    "nonGoals",
+    "scope",
+    "risk",
+    "reversible",
+    "authority",
+    "gates",
+    "state",
+    "constitution_snapshot",
+    "mandate",
+    "plan",
+    "receipts",
+    "createdAt",
+    "updatedAt"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^WI-[0-9]{4}-[0-9]{3,}$"
+    },
+    "thread": {
+      "type": "string",
+      "pattern": "^TH-[a-z0-9-]{1,64}$"
+    },
+    "origin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "ref",
+        "evidence"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "human",
+            "trigger"
+          ]
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "intent": {
+      "type": "string",
+      "minLength": 1
+    },
+    "intentAmbiguous": {
+      "type": "boolean"
+    },
+    "touches": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "ac": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "text",
+          "coveredBy"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^AC-[A-Za-z0-9._-]+$"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "coveredBy": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "nonGoals": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "files",
+        "newFiles",
+        "owners"
+      ],
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "newFiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "owners": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "risk": {
+      "enum": [
+        "R0",
+        "R1",
+        "R2",
+        "R3"
+      ]
+    },
+    "reversible": {
+      "type": "boolean"
+    },
+    "authority": {
+      "type": "string",
+      "pattern": "^(human-approval|policy:[A-Za-z0-9._-]+)$"
+    },
+    "gates": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "validate-plan",
+          "docs-ready",
+          "docs-gate",
+          "verify",
+          "browser-ac",
+          "review",
+          "naming-guard"
+        ]
+      }
+    },
+    "state": {
+      "enum": [
+        "Signal",
+        "Candidate",
+        "Dropped",
+        "Explored",
+        "Proposed",
+        "AwaitingApproval",
+        "Authorized",
+        "Parked",
+        "Planned",
+        "Approved",
+        "Building",
+        "Verifying",
+        "Delivered",
+        "Failed"
+      ]
+    },
+    "constitution_snapshot": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^CS-[0-9a-f]{12}$"
+    },
+    "mandate": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^MD-WI-[0-9]{4}-[0-9]{3,}$"
+    },
+    "plan": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "receipts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "createdAt": {
+      "type": "string",
+      "minLength": 10
+    },
+    "updatedAt": {
+      "type": "string",
+      "minLength": 10
+    }
+  }
+}

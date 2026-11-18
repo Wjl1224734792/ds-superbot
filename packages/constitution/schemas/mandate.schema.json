@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ds-superbot.local/schema/mandate.json",
+  "title": "Mandate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "workItem",
+    "issuedBy",
+    "issuedAt",
+    "expiresAt",
+    "constitution_snapshot",
+    "goal",
+    "ac",
+    "nonGoals",
+    "scope",
+    "toolsWhitelist",
+    "budget",
+    "evidenceRequired",
+    "revokedAt",
+    "revokeReason"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^MD-WI-[0-9]{4}-[0-9]{3,}$"
+    },
+    "workItem": {
+      "type": "string",
+      "pattern": "^WI-[0-9]{4}-[0-9]{3,}$"
+    },
+    "issuedBy": {
+      "type": "string",
+      "minLength": 1
+    },
+    "issuedAt": {
+      "type": "string"
+    },
+    "expiresAt": {
+      "type": "string"
+    },
+    "constitution_snapshot": {
+      "type": "string",
+      "pattern": "^CS-[0-9a-f]{12}$"
+    },
+    "goal": {
+      "type": "string",
+      "minLength": 1
+    },
+    "ac": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "text",
+          "coveredBy"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^AC-[A-Za-z0-9._-]+$"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "coveredBy": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "nonGoals": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "files",
+        "newFiles",
+        "owners"
+      ],
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "newFiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "owners": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "toolsWhitelist": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tokens",
+        "minutes"
+      ],
+      "properties": {
+        "tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "minutes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "evidenceRequired": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "validate-plan",
+          "docs-ready",
+          "docs-gate",
+          "verify",
+          "browser-ac",
+          "review",
+          "naming-guard"
+        ]
+      }
+    },
+    "revokedAt": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "revokeReason": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "human-stop",
+        "expired",
+        "snapshot-stale",
+        null
+      ]
+    }
+  }
+}

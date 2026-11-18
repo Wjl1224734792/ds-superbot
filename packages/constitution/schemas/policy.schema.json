@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ds-superbot.local/schema/policy.json",
+  "title": "PolicyFile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "rules"
+  ],
+  "properties": {
+    "rules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "when",
+          "requireHuman",
+          "allow",
+          "gates",
+          "speak"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "when": {
+            "type": "string"
+          },
+          "requireHuman": {
+            "type": "boolean"
+          },
+          "allow": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "explore",
+                "plan",
+                "build",
+                "verify",
+                "deliver"
+              ]
+            }
+          },
+          "gates": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "validate-plan",
+                "docs-ready",
+                "docs-gate",
+                "verify",
+                "browser-ac",
+                "review",
+                "naming-guard"
+              ]
+            }
+          },
+          "speak": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "result-ready",
+                "needs-decision",
+                "failed"
+              ]
+            }
+          },
+          "merge": {
+            "enum": [
+              "human-only",
+              "policy"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
