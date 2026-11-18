@@ -12,6 +12,7 @@
 - 放入仓 / 探 / 作 / 验占位头像（`packages/dsh-plugin/assets/residents/`，资产 README 标明「占位」）。P0 不重做左 / 顶 / 右界面；P2 槽位清单见 `docs/DEVELOPMENT.md` 与 `docs/product/INTERACTION.md`。
 - 文档同步更新：中英文 README、仓库根 `AGENTS.md`、`docs/ARCHITECTURE.md`、`docs/DEVELOPMENT.md`、`docs/product/CONTRACT.md`、`docs/product/INTERACTION.md`。插件版本 `0.2.0`。产品名保持 ds-superbot。
 - 默认 Policy 将 `human-critical` 调到 `human-default` 之前（`auto-low` 仍最前），使纯 R3 与未命中 `auto-low` 的 `touches(prod|billing|delete|secrets)` 走到更严规则（含 `merge: human-only`）。R2 且未 touches 仍命中 `human-default`。
+- 收紧默认 `auto-low`：`when` 增加 `!touches(prod|billing|delete|secrets)`。R1 且可逆、未 touches 仍走 `auto-low`；触及 prod / billing / delete / secrets 的工作项落到 `human-critical`（`requireHuman`、`merge: human-only`、更严门禁）。表达式语言支持 `!` 取反。
 
 ### Notes
 

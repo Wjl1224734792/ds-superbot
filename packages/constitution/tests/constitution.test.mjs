@@ -88,7 +88,10 @@ test('policy YAML parses and first-match semantics are deterministic', () => {
   const doc = parsePolicyYaml(DEFAULT_POLICY);
   assert.deepEqual(doc.rules.map((r) => r.id), ['auto-low', 'human-critical', 'human-default']);
   assert.equal(matchWhen(doc.rules[0].when, { risk: 'R1', reversible: true }), true);
+  assert.equal(matchWhen(doc.rules[0].when, { risk: 'R1', reversible: true, touches: ['secrets'] }), false);
   assert.equal(matchWhen(doc.rules[0].when, { risk: 'R2', reversible: true }), false);
+  assert.equal(matchWhen('!touches(prod|billing|delete|secrets)', { touches: ['secrets'] }), false);
+  assert.equal(matchWhen('!touches(prod|billing|delete|secrets)', { risk: 'R1', reversible: true }), true);
   assert.equal(matchWhen(doc.rules[1].when, { risk: 'R3', reversible: true }), true);
   assert.equal(matchWhen(doc.rules[1].when, { risk: 'R2', reversible: true }), false);
   assert.equal(matchWhen(doc.rules[1].when, { risk: 'R0', reversible: false, touches: ['secrets'] }), true);
@@ -122,6 +125,30 @@ test('default policy: R3 hits human-critical; R2 without touches hits human-defa
   const evTouch = evalPolicy(root, getWorkItem(root, r2touch.id));
   assert.equal(evTouch.id, 'human-critical');
   assert.equal(evTouch.merge, 'human-only');
+});
+
+test('default policy: R1 reversible without touches stays auto-low; touches falls to human-critical', (t) => {
+  const root = tmpRoot(t);
+  const low = seedItem(root, {
+    id: 'WI-2026-020', risk: 'R1', reversible: true, authority: 'policy:auto-low',
+  });
+  const evLow = evalPolicy(root, getWorkItem(root, low.id));
+  assert.equal(evLow.id, 'auto-low');
+  assert.equal(evLow.requireHuman, false);
+  assert.equal(evLow.merge, null);
+
+  const touched = seedItem(root, {
+    id: 'WI-2026-021',
+    risk: 'R1',
+    reversible: true,
+    authority: 'policy:auto-low',
+    touches: ['secrets'],
+  });
+  const evCrit = evalPolicy(root, getWorkItem(root, touched.id));
+  assert.equal(evCrit.id, 'human-critical');
+  assert.equal(evCrit.requireHuman, true);
+  assert.equal(evCrit.merge, 'human-only');
+  assert.ok(evCrit.gates.includes('docs-gate'));
 });
 
 test('creates a thread and work item, then walks legal transitions', (t) => {

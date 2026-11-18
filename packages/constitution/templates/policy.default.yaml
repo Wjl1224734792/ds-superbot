@@ -1,7 +1,7 @@
 # .superbot/policy/default.yaml
 rules:
   - id: auto-low
-    when: "risk <= R1 && reversible == true"
+    when: "risk <= R1 && reversible == true && !touches(prod|billing|delete|secrets)"
     requireHuman: false
     allow: [explore, plan, build, verify, deliver]
     gates: [validate-plan, verify]

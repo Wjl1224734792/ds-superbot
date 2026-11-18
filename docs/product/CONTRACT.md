@@ -42,10 +42,11 @@
 - `reversible == true` 读工作项布尔字段。
 - `intent.ambiguous` 读 `intentAmbiguous`，缺省 false。
 - `touches(prod|billing|delete|secrets)` 与 `touches` 数组做集合相交。
+- `!expr` 对原子条件取反，例如 `!touches(prod|billing|delete|secrets)`；空的 `touches` 视为未命中该集合。
 - `requireHuman: true` 时，`authority` 必须是 `human-approval`，不得自动进入 Authorized。
 - `merge: human-only` 在 P0 只记录在匹配结果里。
 
-注意：默认文件按「先匹配到的规则生效」解释，规则顺序是 `auto-low` → `human-critical` → `human-default`。因此纯 R3，以及 `touches(prod|billing|delete|secrets)` 且未命中 `auto-low` 的工作项（例如 R2 + touches），会命中 `human-critical`（含 `merge: human-only` 与更严门禁）。R2 且未 touches 仍命中 `human-default`。R1 且可逆仍先命中 `auto-low`，即使 touches 敏感范围。
+注意：默认文件按「先匹配到的规则生效」解释，规则顺序是 `auto-low` → `human-critical` → `human-default`。`auto-low` 仅匹配 R1 及以下、可逆、且未 `touches(prod|billing|delete|secrets)` 的工作项。纯 R3，以及 touches 敏感范围（含 R1 且可逆但 touches）的工作项，会命中 `human-critical`（含 `requireHuman`、`merge: human-only` 与更严门禁）。R2 且未 touches 仍命中 `human-default`。
 
 ## 目标项目落盘
 

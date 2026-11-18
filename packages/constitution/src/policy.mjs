@@ -78,6 +78,11 @@ function evalAnd(expr, workItem) {
 }
 
 function evalAtom(atom, workItem) {
+  if (atom.startsWith('!')) {
+    const inner = atom.slice(1).trim();
+    if (!inner) fail('POLICY', `unsupported policy expression: ${atom}`);
+    return !evalAtom(inner, workItem);
+  }
   const riskCmp = atom.match(/^risk\s*(<=|>=|==|<|>)\s*(R[0-3])$/);
   if (riskCmp) {
     const left = RISK_RANK[workItem.risk];
