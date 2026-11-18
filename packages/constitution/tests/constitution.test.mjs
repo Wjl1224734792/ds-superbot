@@ -86,12 +86,42 @@ test('schemas reject additional properties and accept a valid work item', () => 
 
 test('policy YAML parses and first-match semantics are deterministic', () => {
   const doc = parsePolicyYaml(DEFAULT_POLICY);
-  assert.deepEqual(doc.rules.map((r) => r.id), ['auto-low', 'human-default', 'human-critical']);
+  assert.deepEqual(doc.rules.map((r) => r.id), ['auto-low', 'human-critical', 'human-default']);
   assert.equal(matchWhen(doc.rules[0].when, { risk: 'R1', reversible: true }), true);
   assert.equal(matchWhen(doc.rules[0].when, { risk: 'R2', reversible: true }), false);
-  assert.equal(matchWhen(doc.rules[1].when, { risk: 'R2', reversible: true }), true);
-  assert.equal(matchWhen(doc.rules[1].when, { risk: 'R0', reversible: true, intentAmbiguous: true }), true);
-  assert.equal(matchWhen(doc.rules[2].when, { risk: 'R0', reversible: false, touches: ['secrets'] }), true);
+  assert.equal(matchWhen(doc.rules[1].when, { risk: 'R3', reversible: true }), true);
+  assert.equal(matchWhen(doc.rules[1].when, { risk: 'R2', reversible: true }), false);
+  assert.equal(matchWhen(doc.rules[1].when, { risk: 'R0', reversible: false, touches: ['secrets'] }), true);
+  assert.equal(matchWhen(doc.rules[2].when, { risk: 'R2', reversible: true }), true);
+  assert.equal(matchWhen(doc.rules[2].when, { risk: 'R0', reversible: true, intentAmbiguous: true }), true);
+});
+
+test('default policy: R3 hits human-critical; R2 without touches hits human-default', (t) => {
+  const root = tmpRoot(t);
+  const r3 = seedItem(root, {
+    id: 'WI-2026-010', risk: 'R3', reversible: false, authority: 'human-approval',
+  });
+  const evR3 = evalPolicy(root, getWorkItem(root, r3.id));
+  assert.equal(evR3.id, 'human-critical');
+  assert.equal(evR3.merge, 'human-only');
+  assert.equal(evR3.requireHuman, true);
+  assert.ok(evR3.gates.includes('docs-gate'));
+
+  const r2 = seedItem(root, {
+    id: 'WI-2026-011', risk: 'R2', reversible: true, authority: 'human-approval',
+  });
+  const evR2 = evalPolicy(root, getWorkItem(root, r2.id));
+  assert.equal(evR2.id, 'human-default');
+  assert.equal(evR2.merge, null);
+  assert.equal(evR2.requireHuman, true);
+  assert.equal(evR2.gates.includes('docs-gate'), false);
+
+  const r2touch = seedItem(root, {
+    id: 'WI-2026-012', risk: 'R2', reversible: true, authority: 'human-approval', touches: ['prod'],
+  });
+  const evTouch = evalPolicy(root, getWorkItem(root, r2touch.id));
+  assert.equal(evTouch.id, 'human-critical');
+  assert.equal(evTouch.merge, 'human-only');
 });
 
 test('creates a thread and work item, then walks legal transitions', (t) => {

@@ -45,7 +45,7 @@
 - `requireHuman: true` 时，`authority` 必须是 `human-approval`，不得自动进入 Authorized。
 - `merge: human-only` 在 P0 只记录在匹配结果里。
 
-注意：默认文件按「先匹配到的规则生效」解释。`risk == R3` 会先命中 `human-default`（`risk >= R2`）；`human-critical`（含 `merge: human-only`）在默认顺序下主要由 `touches(...)` 且未命中前两条的工作项触发。
+注意：默认文件按「先匹配到的规则生效」解释，规则顺序是 `auto-low` → `human-critical` → `human-default`。因此纯 R3，以及 `touches(prod|billing|delete|secrets)` 且未命中 `auto-low` 的工作项（例如 R2 + touches），会命中 `human-critical`（含 `merge: human-only` 与更严门禁）。R2 且未 touches 仍命中 `human-default`。R1 且可逆仍先命中 `auto-low`，即使 touches 敏感范围。
 
 ## 目标项目落盘
 

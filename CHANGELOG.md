@@ -11,6 +11,7 @@
 - 新增姊妹包 `@ds-superbot/constitution`（账本 / Policy / Mandate / Receipt / 卡片 / CLI）、`@ds-superbot/runtime`（P0 接口；bus / watchdog / subscribe 为 `NOT_IMPLEMENTED` 占位）、`@ds-superbot/im`（三种卡、发言允许表、`presenceOf`）。
 - 放入仓 / 探 / 作 / 验占位头像（`packages/dsh-plugin/assets/residents/`，资产 README 标明「占位」）。P0 不重做左 / 顶 / 右界面；P2 槽位清单见 `docs/DEVELOPMENT.md` 与 `docs/product/INTERACTION.md`。
 - 文档同步更新：中英文 README、仓库根 `AGENTS.md`、`docs/ARCHITECTURE.md`、`docs/DEVELOPMENT.md`、`docs/product/CONTRACT.md`、`docs/product/INTERACTION.md`。插件版本 `0.2.0`。产品名保持 ds-superbot。
+- 默认 Policy 将 `human-critical` 调到 `human-default` 之前（`auto-low` 仍最前），使纯 R3 与未命中 `auto-low` 的 `touches(prod|billing|delete|secrets)` 走到更严规则（含 `merge: human-only`）。R2 且未 touches 仍命中 `human-default`。
 
 ### Notes
 
