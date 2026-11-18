@@ -16,7 +16,7 @@ npm test         # node --test：dsh-plugin / constitution / runtime / im
 - `packages/dsh-plugin/tests/dsh-plugin.test.mjs`：工具注册、章程注入、路由、文档硬门、命令 / 技能、面板与设置页
 - `packages/dsh-plugin/tests/docs-ready.test.mjs`、`docs-governance.test.mjs`：通过插件 shim 跑原脚本（退出码与 `--help` 必须与 SSOT 一致）
 - `packages/constitution/tests/`：schema、状态机、Mandate、Policy、Receipt / revalidate、卡片、CLI、shim 回归
-- `packages/runtime/tests/`：导出形状、L1 / curator / assignment、`NOT_IMPLEMENTED`
+- `packages/runtime/tests/`：导出形状、L1 / L2、curator / assignment、Event Bus、订阅直通、Watchdog、observe / would-accept、Steward 候选提案
 - `packages/im/tests/`：三种卡、发言允许表、每种状态 × 四张脸的 `presenceOf`、占位 SVG
 
 改了 `packages/constitution/scripts/` 后，至少再跑一遍插件包路径上的 `--help` 和 docs-ready / docs-gate 用例。
@@ -27,7 +27,7 @@ npm test         # node --test：dsh-plugin / constitution / runtime / im
 | --- | --- |
 | `packages/dsh-plugin` | 行为保持 0.1.0 兼容。P0 不注册新的左栏主面板，不改顶部和右侧栏。`scripts/` 只是 shim。 |
 | `packages/constitution` | 不要重写门禁脚本判定逻辑。落盘必须 `--write`。Receipt 手改后必须能被 `revalidate` 识破。 |
-| `packages/runtime` | `bus` / `watchdog` / `subscribe` 文件头标明 `// P1: not implemented`，抛 `code = NOT_IMPLEMENTED`。 |
+| `packages/runtime` | 文件型 Event Bus、订阅直通（不授权）、Watchdog（进度 / 空转 / 费用）、Steward 轻量规则 + 预留 `createModelPort`。默认 observe，只记录 would-accept，不执行、不自动合并、不开 HTTP。 |
 | `packages/im` | 面板和字幕只调用 `presenceOf`。同一时刻全场 `high` 不得超过 1 个。 |
 
 Curator 打分权重（写在 `packages/runtime/src/curator.mjs` 的 `WEIGHTS` 常量里）：

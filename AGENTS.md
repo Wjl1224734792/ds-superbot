@@ -11,7 +11,7 @@
 | `packages/dsh-plugin/` | DSH 插件（`name`: `ds-superbot`）：`index.js`、`client.js`、角色、技能、占位头像 | 影响宿主安装与 0.1.0 兼容路径（7 角色派单、右侧栏、硬门） |
 | `packages/dsh-plugin/scripts/` | 转发 shim | 必须保持 `node <插件包根>/scripts/docs-ready.mjs` 的退出码与 `--help` |
 | `packages/constitution/` | `@ds-superbot/constitution`：账本、Policy、Mandate、Receipt、门禁脚本 SSOT | 影响工作项状态机与收据；不要重写门禁脚本的判定逻辑 |
-| `packages/runtime/` | `@ds-superbot/runtime`：Steward / filter / curator / assignment；bus / watchdog / subscribe 为 P1 占位 | P0 不得把占位实现成「假装成功」 |
+| `packages/runtime/` | `@ds-superbot/runtime`：Steward（轻量规则 + 预留模型接口）、filter、curator、assignment、文件型 Event Bus、订阅直通、Watchdog、observe / would-accept | 默认授权 observe；订阅直通不授权；不得空实现成「假装成功」；不要开 HTTP |
 | `packages/im/` | `@ds-superbot/im`：三种卡、发言允许表、`presenceOf` | 面板与字幕只能调用 `presenceOf`，不要在 `client.js` 另写一套 |
 | `docs/product/` | 对象契约与交互说明 | 与 `packages/constitution/schemas/`、卡片模板保持一致 |
 | `docs/ARCHITECTURE.md` / `docs/DEVELOPMENT.md` | 架构与开发循环 | 改目录或命令时必须同步 |

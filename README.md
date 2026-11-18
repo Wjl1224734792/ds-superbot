@@ -250,7 +250,7 @@ node <插件>/scripts/docs-ready.mjs <root> status                              
     │   ├── assets/residents/    # 仓/探/作/验占位头像
     │   └── tests/
     ├── constitution/            # @ds-superbot/constitution：账本、Policy、Receipt、门禁 SSOT
-    ├── runtime/                 # @ds-superbot/runtime：P0 接口；bus/watchdog/subscribe 为占位
+    ├── runtime/                 # @ds-superbot/runtime：Steward / Event Bus / 订阅直通 / Watchdog / observe
     └── im/                      # @ds-superbot/im：三种卡、发言规则、presenceOf
 ```
 
@@ -267,7 +267,7 @@ npm test         # 各包 node:test
 - `packages/dsh-plugin/tests/docs-ready.test.mjs`：文档就绪脚本（经 shim）的端到端行为与错误码
 - `packages/dsh-plugin/tests/docs-governance.test.mjs`：文档治理门禁与快照行为
 - `packages/constitution/tests/`：工作项账本、Mandate、Policy、Receipt、卡片与 CLI
-- `packages/runtime/tests/`、`packages/im/tests/`：导出形状、`NOT_IMPLEMENTED`、`presenceOf`
+- `packages/runtime/tests/`、`packages/im/tests/`：Event Bus、订阅直通、Watchdog、would-accept、Steward 候选提案、`presenceOf`
 
 细节见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)，架构见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)，契约见 [docs/product/CONTRACT.md](docs/product/CONTRACT.md)，交互见 [docs/product/INTERACTION.md](docs/product/INTERACTION.md)。
 

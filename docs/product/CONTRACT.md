@@ -8,7 +8,7 @@
 | --- | --- |
 | 工作项 | `WI-YYYY-NNN`（年 + 仓库内递增数字，宽度至少 3） |
 | Thread | `TH-<slug>`，slug 为 `[a-z0-9-]{1,64}` |
-| Mandate | `MD-<workItemId>`（同一工作项同时只能有一份未吊销 Mandate；重签须先吊销） |
+| Mandate | `MD-<workItemId>`；吊销后重签为 `MD-<workItemId>-N`（N≥2）。同一工作项同时只能有一份未吊销 Mandate；重签须先吊销。已吊销记录作为历史副本保留，不得覆盖。 |
 | Receipt | `RC-<gate>-<8位hex>` |
 | Snapshot | `CS-<12位hex>` |
 
@@ -28,7 +28,7 @@
 
 ## Mandate
 
-签发后除 `revokedAt` / `revokeReason` 外任何字段都不得被更新。吊销只允许 `human-stop`、`expired`、`snapshot-stale`。过期 Mandate 不得再授权施工。
+签发后除 `revokedAt` / `revokeReason` 外任何字段都不得被更新。吊销只允许 `human-stop`、`expired`、`snapshot-stale`。过期 Mandate 不得再授权施工。第一次签发仍使用 Goal 规定的 `MD-<workItemId>`；若该 id 已被一份已吊销记录占用，新签发使用 `MD-<workItemId>-2`、`-3`……，历史文件保持原样。`schemaVersion` 仍为 1（只放宽了 id 模式，既有 id 仍然合法）。
 
 ## Receipt
 
@@ -62,6 +62,9 @@
       mandates/MD-*.json
       receipts/RC-*.json
       snapshots/CS-*.json
+      events.jsonl
+      subscriptions/<channel>.json
+      watchdog/<id>.json
   tmp/superbot/<run>/
     03-plan.json
 ```

@@ -7,7 +7,7 @@
 ## 三层一块
 
 1. **制度层（`packages/constitution`）**：工作项账本、Policy as Code、Claim / Evidence / Receipt、现有零依赖门禁脚本。模型越强，这一层越值钱。Constitution Service 是薄包装：调用同一套脚本、沿用退出码，再落 Receipt。手改收据无效，使用时必须重算哈希。
-2. **运行时层（`packages/runtime`）**：Steward 只分派、不执行、不做判定；L1 程序快筛；Curator 按显式字段打出 Top-K；Assignment 只描述隔离边界。Event Bus、Watchdog、订阅直通在 P0 导出占位，调用必须得到 `NOT_IMPLEMENTED`，不得假装成功。
+2. **运行时层（`packages/runtime`）**：Steward 只分派、不执行、不做判定，决策用轻量规则并预留模型接口；L1 程序快筛，L2 按书面 Policy 做规则慢判；Curator 按显式字段打出 Top-K；Assignment 只描述隔离边界。Event Bus 接文件型事件（`.superbot/ledger/events.jsonl`）；订阅直通只把外部信号写入账本，不授予任何新权限；Watchdog 循环跟踪进度 / 空转 / 费用。默认授权档位 observe：只记录 would-accept，不执行，不自动合并。
 3. **交互层（`packages/im` + `packages/dsh-plugin`）**：群聊是注意力总线（三种卡、PASS、Goal = 计划批准门）。DSH 原生会话是群聊主控；过程状态走顶部迷你脸、右侧舞台和左侧控制台，不走聊天。P0 实现卡片渲染、发言允许表和 `presenceOf`，并放置可区分的占位头像；P0 **不**重做左 / 顶 / 右界面。
 
 交互层必须走 DSH 官方加法槽位：左栏用 `sidebar.panellist` + `main` 做控制台，顶部用会话标题栏的 utilities / corner 放迷你眼神条，右侧现有 tab（id `ds-superbot`）做四张脸的舞台，中栏原生会话做成克制的群聊。禁止整栏替换 `sidebar` / `rightbar` / `conversation.session.header`，禁止自建 HTTP 控制台。细节以 `docs/product/INTERACTION.md` 为准。
@@ -24,7 +24,7 @@ Discover / Build / Verify 三类能力态 + 按需编译的 Mandate。Scout、Ex
 
 ## 治理函数
 
-`governance = f(risk, reversible)`。R0–R3 与默认 Policy 见 `docs/product/CONTRACT.md`。默认授权档位 observe，auto 不在 P0 打开。
+`governance = f(risk, reversible)`。R0–R3 与默认 Policy 见 `docs/product/CONTRACT.md`。默认授权档位 observe，auto 自动合并不打开。
 
 ## 注意力税
 
