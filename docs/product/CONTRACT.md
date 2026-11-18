@@ -35,7 +35,7 @@
 | `pm`, `architect` | Discover | Scout（只读感知）/ Explorer（只读 Fact Pack）/ Curator（只交 Top-K） |
 | `backend-dev`, `frontend-dev` | Build | 由现有章程模板编译的 Worker，工具可含 shell / read / edit / git，范围不得扩大 |
 | `qa-engineer`, `browser-tester`, `reviewer` | Verify | 独立上下文 Verifier + 确定性脚本；Critic 对抗性终审 |
-| （非 role id） | Cartographer | 任务结束后只写知识库（Decision / Invariant），不得改业务代码；完整回写是 P4 |
+| （非 role id） | Cartographer | 任务结束后只写知识库（Decision / Invariant），不得改业务代码。回写 API 是 `cartographer.writeBack`；默认 observe 只记 would-accept。允许写入的路径只有 `docs/project/DECISIONS.md` 与 `docs/project/INVARIANTS.md` |
 
 缺 owners（或 owners 都不是已知角色 id）时的推断：规划 / 文档类 gates → Discover；`scope.files` / `newFiles` 非空 → Build；`verify` / `browser-ac` / `review` → Verify；以上都没有但 intent 存在 → 仅 Discover。成功编译始终附上 Cartographer。未知 owner id 被忽略，永不发明新角色 id。推断结果只影响装配，不回写到 `scope.owners`。
 
@@ -51,9 +51,19 @@ Capability Compiler（`compileMandate` / `compileIntent`）只产出与 Mandate 
 
 只有脚本可签发。`exitCode !== 0` 不得签 `pass`。`status` 为 `pass` | `fail` | `stale`（`browser-ac` 额外允许 `unverified`）。`.superbot/docs-state.json` 仍是 docs-ready 的原生口径；Receipt 是统一包装，不取代它。手改收据后 `revalidate` 必须重算哈希，发现不一致则 `status=stale` 或报错，不许静默相信文件。
 
+## Thread（跨通道）
+
+一个 Thread（`schemaVersion: 1`）可以绑定多个通道 URI（`scheme://…`，例如 `group://repo-ops`、`github://owner/repo`），并下挂多个工作项。P4 在创建 / 按 id 读取 / 追加 `workItems` 之外提供：
+
+- `bindChannel(root, threadId, channel)`：向已有 Thread 追加通道，幂等，不叉出第二份对象。
+- `findThreadsByChannel(root, channel)`：按通道查找。
+- `resolveThread({ root, channels, slug, title })`：任一已绑定通道命中则复用该 Thread 并联合通道；若通道分属两个已有 Thread 则失败，不合并对象。
+
+工作项和结果卡通过 Thread 关联到全部已绑定通道。这只是数据模型与 API，并不真正连接 GitHub、群聊或其它 IM。订阅直通仍不授予任何权限。
+
 ## Policy
 
-默认文件：目标仓库 `.superbot/policy/default.yaml`（模板在 `packages/constitution/templates/policy.default.yaml`）。先匹配到的规则生效，返回 `requireHuman` / `allow` / `gates` / `speak` / `merge`。
+默认文件：目标仓库 `.superbot/policy/default.yaml`（模板在 `packages/constitution/templates/policy.default.yaml`）。先匹配到的规则生效，返回 `requireHuman` / `allow` / `gates` / `speak` / `merge`。`planSteps` / `intensity` 在此基础上给出 `steps`（该规则的门禁个数）。同一套代码换一份更松的策略文档，R0/R1 可逆工作的步骤数应少于 R3 / 敏感 `touches`，不要靠删除门禁实现下调。`merge: human-only` 仍被记录并执行；策略里写 `merge: auto-merge` 会被拒绝。
 
 - `risk <= R1` / `risk >= R2` / `risk == R3`：R0 < R1 < R2 < R3。
 - `reversible == true` 读工作项布尔字段。

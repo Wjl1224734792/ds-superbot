@@ -76,7 +76,9 @@ test('compiler assembles a Mandate draft from the work item and does not issue i
   const states = out.assembly.states;
   assert.ok(states.includes('Build'));
   assert.ok(states.includes('Cartographer'));
-  assert.equal(out.assembly.capabilities.find((c) => c.state === 'Cartographer').writeBack, false);
+  const carto = out.assembly.capabilities.find((c) => c.state === 'Cartographer');
+  assert.equal(carto.writeBack, false);
+  assert.equal(carto.writeBackCapable, true);
   const cartoTools = out.assembly.capabilities.find((c) => c.state === 'Cartographer').tools;
   assert.equal(cartoTools.includes('edit'), false);
   assert.equal(cartoTools.includes('git'), false);

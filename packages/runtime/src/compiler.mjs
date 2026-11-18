@@ -202,7 +202,7 @@ export function mapOwnersToCapabilities(owners = []) {
  * 3. gates include verify / browser-ac / review → Verify
  * 4. if nothing matched but intent is present → Discover only
  * 5. Cartographer is always assembled as a post-task capability
- *    (write-back loop is P4; this only puts it on the draft)
+ *    (write-back is cartographer.writeBack; the compiler only drafts)
  * 6. never invent a new role id; inferred assemblies keep scope.owners as given
  *
  * @param {object} workItem
@@ -318,8 +318,9 @@ function buildAssembly(workItem, inferred, chartersByRole = []) {
       entry.notes = 'Verifier runs in an independent context with deterministic scripts; Critic does adversarial final review';
     }
     if (state === 'Cartographer') {
-      entry.notes = 'Post-task knowledge-base (Decision / Invariant) only; must not touch business code. Full write-back loop is P4 and is not executed here.';
+      entry.notes = 'Post-task knowledge-base (Decision / Invariant) only; must not touch business code. Write-back is implemented by cartographer.writeBack and is not executed by the compiler.';
       entry.writeBack = false;
+      entry.writeBackCapable = true;
     }
     return entry;
   });

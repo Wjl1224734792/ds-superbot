@@ -6,6 +6,8 @@
 
 ### Added
 
+- P4 制度 / 运行时：存算分离加固（`assertStoragePath` / `assertComputePath` / `separate`；账本只写 `.superbot/ledger/`，执行目录只在 `tmp/superbot/<run>/`，计算路径不能当账本根）。跨通道 Thread（`bindChannel` / `findThreadsByChannel` / `resolveThread`，同一 Thread 对象联合多个 `scheme://` 通道，不叉出第二份）。Cartographer 回写（`cartographer.writeBack`）只追加 `docs/project/DECISIONS.md` 与 `docs/project/INVARIANTS.md`；默认 observe 只记 would-accept、不写文件，禁止改业务代码或账本。动态治理强度（`planSteps` / `intensity`）：`governance = f(risk, reversible)` 由 Policy 决定流程步骤数，验证信号是改策略即可下调门禁步数，而不是改代码删门。默认授权仍是 observe，禁止 auto-merge，插件不开 HTTP，不改 0.1.0 `superbot_dispatch`。
+
 - P3 运行时：Capability Compiler（`compileMandate` / `compileIntent`）按工作项即时编译 Mandate 草稿，按能力态装配 Discover / Build / Verify，并附上 Cartographer（不执行 P4 回写）。`roles/*.md` 仅在编译失败时作为 fallback。`routeModel` 按能力态 × 风险选择轻量 / 强档模型，`modelRouting.<role>` 保留为 fallback。`evaluateAuto` / `canEnterAuto` 要求先有落盘的 would-accept 观察记录才能进入 auto 执行灰度；默认仍是 observe，auto-merge 仍然禁用。
 - P2 界面：用已核对的官方加法槽接上左栏控制台（`sidebar.panellist` + `main`，同一 id `ds-superbot-console`）、顶部迷你脸（`conversation.session.header.corner`）、输入区一行字幕（`conversation.input.dock`）和「待你决定」计数；右侧现有 tab（id `ds-superbot` / kind `superbot`）改为大舞台 + 工作项详情，0.1.0 工作流树降为详情里的 DAG。眼神与动作只走 `presenceOf`，尊重 `prefers-reduced-motion`，同一时刻最多一个高能量头像。默认授权仍是 observe，不自动合并。槽位已对照安装的 DeepSeek Harness 0.2.2-rc.2 校验。
 - P1 运行时：文件型 Event Bus（`.superbot/ledger/events.jsonl`）、Steward 轻量规则 + 预留 `createModelPort` 模型接口、订阅直通（不授予任何新权限，不能扩大 Mandate 的 toolsWhitelist / scope / budget）、Watchdog 循环（进度 / 空转 / 费用）。默认授权档位仍是 observe：只记录 would-accept，不执行，不自动合并。无人 @ 时也可以提出 Candidate 工作项，但不进入 Authorized / Building，也不启动 Worker。

@@ -10,8 +10,8 @@
 |---|---|---|
 | `packages/dsh-plugin/` | DSH 插件（`name`: `ds-superbot`）：`index.js`、`client.js`、角色、技能、占位头像 | 影响宿主安装与 0.1.0 兼容路径（7 角色派单、右侧栏、硬门） |
 | `packages/dsh-plugin/scripts/` | 转发 shim | 必须保持 `node <插件包根>/scripts/docs-ready.mjs` 的退出码与 `--help` |
-| `packages/constitution/` | `@ds-superbot/constitution`：账本、Policy、Mandate、Receipt、门禁脚本 SSOT | 影响工作项状态机与收据；不要重写门禁脚本的判定逻辑 |
-| `packages/runtime/` | `@ds-superbot/runtime`：Steward（轻量规则 + 预留模型接口）、Capability Compiler、`routeModel`、filter、curator、assignment、文件型 Event Bus、订阅直通、Watchdog、observe / would-accept / auto 灰度 | 默认授权 observe；订阅直通不授权；编译器只出草稿不签发；auto 灰度必须先有观察记录；不得空实现成「假装成功」；不要开 HTTP |
+| `packages/constitution/` | `@ds-superbot/constitution`：账本、Policy、跨通道 Thread、动态治理 `planSteps`、Mandate、Receipt、门禁脚本 SSOT | 影响工作项状态机与收据；不要重写门禁脚本的判定逻辑；账本不得写出 `.superbot/ledger/` |
+| `packages/runtime/` | `@ds-superbot/runtime`：Steward（轻量规则 + 预留模型接口）、Capability Compiler、`routeModel`、filter、curator、assignment、存算分离、Cartographer 回写、文件型 Event Bus、订阅直通、Watchdog、observe / would-accept / auto 灰度 | 默认授权 observe；订阅直通不授权；编译器只出草稿不签发；Cartographer 默认不写文件；auto 灰度必须先有观察记录；不得空实现成「假装成功」；不要开 HTTP |
 | `packages/im/` | `@ds-superbot/im`：三种卡、发言允许表、`presenceOf` | 面板与字幕只能调用 `presenceOf`，不要在 `client.js` 另写一套 |
 | `docs/product/` | 对象契约与交互说明 | 与 `packages/constitution/schemas/`、卡片模板保持一致 |
 | `docs/ARCHITECTURE.md` / `docs/DEVELOPMENT.md` | 架构与开发循环 | 改目录或命令时必须同步 |
@@ -24,7 +24,7 @@
 4. **工具名、右侧 tab id、配置命名空间、`.stwd-` 前缀一律不改。**
 5. **界面只做加法槽位**：禁止整栏替换 `sidebar` / `rightbar` / `conversation.session.header` / `conversation.header`。P2 已用官方加法槽接上左栏控制台、顶部迷你脸和右侧舞台（槽位对照 DeepSeek Harness 0.2.2-rc.2）。
 6. **现有门禁脚本的判定逻辑不重写。** Constitution Service 是薄包装：调用同一套脚本、沿用退出码（0 通过 / 1 判定失败 / 2 用法或 IO 错误），再落 Receipt。
-7. **`.superbot/ledger/` 是目标项目运行时账本，不要强制提交。** 见 `docs/examples/gitignore`。
+7. **`.superbot/ledger/` 是目标项目运行时账本，不要强制提交。** 执行目录在 `tmp/superbot/<run>/`，二者不得混用。见 `docs/examples/gitignore`。
 
 ## 每次改动都要跑
 

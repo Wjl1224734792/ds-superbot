@@ -5,11 +5,12 @@
  */
 import { formatIso } from './time.mjs';
 import { ConstitutionError } from './errors.mjs';
-import { addItemToThread, createThread, getThread } from './thread.mjs';
+import { addItemToThread, bindChannel, createThread, findThreadsByChannel, getThread, resolveThread } from './thread.mjs';
 import { createWorkItem, getWorkItem, listWorkItems, transitionWorkItem } from './workitem.mjs';
 import { getMandate, issueMandate, revokeMandate, REVOKE_REASONS } from './mandate.mjs';
 import { checkSnapshot, createSnapshot, getSnapshot } from './snapshot.mjs';
 import { evalPolicy } from './policy.mjs';
+import { planSteps } from './governance.mjs';
 import { getReceipt, listReceipts, revalidateReceipt } from './receipt.mjs';
 import { renderCard } from './cards.mjs';
 import { runGate } from './gates/adapter.mjs';
@@ -23,10 +24,10 @@ Usage:
 
 Resources and actions:
   workitem   create|get|list|transition
-  thread     create|get|add-item
+  thread     create|get|add-item|bind-channel|find|resolve
   mandate    issue|revoke|get
   snapshot   create|get|check
-  policy     eval
+  policy     eval|plan
   receipt    list|get|revalidate
   gate       <gate-name> [script-args...]
   card       workitem|approval|result
@@ -47,6 +48,9 @@ workitem transition --id WI-… --to STATE [--plan PATH] [--plan-valid] [--appro
 thread create     --id|--slug SLUG --title TEXT [--channel REF]
 thread get        --id TH-…
 thread add-item   --id TH-… --work-item WI-…
+thread bind-channel --id TH-… --channel URI
+thread find       --channel URI
+thread resolve    --channel URI [--slug SLUG --title TEXT]
 
 mandate issue     --work-item WI-… --issued-by WHO --expires-at ISO
                   --snapshot CS-… [--goal TEXT] [--tools shell,read] [--tokens N] [--minutes N]
@@ -58,6 +62,7 @@ snapshot get      --id CS-…
 snapshot check    --id CS-…
 
 policy eval       --work-item WI-…
+policy plan       --work-item WI-…
 
 receipt list      [--work-item WI-…]
 receipt get       --id RC-…
@@ -233,6 +238,25 @@ function cmdThread(root, action, f, opts) {
   if (action === 'add-item' || action === 'addItem') {
     return addItemToThread(root, f.id, f.workItem, opts);
   }
+  if (action === 'bind-channel' || action === 'bindChannel' || action === 'bind') {
+    const channel = f.channel ?? (Array.isArray(f.channels) ? f.channels[0] : f.channels);
+    return bindChannel(root, f.id, channel, opts);
+  }
+  if (action === 'find' || action === 'find-channel' || action === 'findChannel') {
+    const channel = f.channel ?? (Array.isArray(f.channels) ? f.channels[0] : f.channels);
+    return findThreadsByChannel(root, channel);
+  }
+  if (action === 'resolve') {
+    const channels = f.channel ? [f.channel].flat() : (f.channels ? String(f.channels).split(',') : []);
+    return resolveThread({
+      root,
+      channels,
+      slug: f.slug ?? f.id,
+      title: f.title,
+      id: f.id,
+      write: opts.write,
+    });
+  }
   failUsage(`unknown thread action: ${action}`);
 }
 
@@ -269,8 +293,11 @@ function cmdSnapshot(root, action, f, opts) {
 }
 
 function cmdPolicy(root, action, f) {
-  if (action !== 'eval') failUsage(`unknown policy action: ${action}`);
   const item = must(getWorkItem(root, f.workItem), `work item not found: ${f.workItem}`);
+  if (action === 'plan' || action === 'steps') {
+    return planSteps(item, { root });
+  }
+  if (action !== 'eval') failUsage(`unknown policy action: ${action}`);
   const ev = evalPolicy(root, item);
   return {
     workItem: item.id,
@@ -280,6 +307,7 @@ function cmdPolicy(root, action, f) {
     gates: ev.gates,
     speak: ev.speak,
     merge: ev.merge,
+    steps: ev.steps,
     file: ev.file,
   };
 }

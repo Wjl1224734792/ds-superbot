@@ -37,24 +37,55 @@ export function loadPolicy(root) {
 }
 
 /**
+ * Normalize a policy document (object with `rules`, a YAML string, or
+ * `{ policy: { rules } }` from loadPolicy).
+ */
+export function asPolicyDocument(policy) {
+  if (typeof policy === 'string') return parsePolicyYaml(policy);
+  if (policy && Array.isArray(policy.rules)) return policy;
+  if (policy && policy.policy && Array.isArray(policy.policy.rules)) return policy.policy;
+  fail('POLICY', 'policy document must have a rules array');
+}
+
+function matchedResult(rule, file = null) {
+  const merge = rule.merge ?? null;
+  if (merge === 'auto' || merge === 'auto-merge' || merge === 'autoMerge') {
+    fail('POLICY', 'auto-merge is disabled; merge remains human-only');
+  }
+  const gates = [...(rule.gates ?? [])];
+  return {
+    id: rule.id,
+    rule,
+    requireHuman: Boolean(rule.requireHuman),
+    allow: [...(rule.allow ?? [])],
+    gates,
+    speak: [...(rule.speak ?? [])],
+    merge,
+    steps: gates.length,
+    file,
+  };
+}
+
+/**
+ * Evaluate the first matching rule against an in-memory policy document.
+ * @returns {{ id: string, rule: object, requireHuman: boolean, allow: string[], gates: string[], speak: string[], merge: string|null, steps: number, file: string|null }}
+ */
+export function evalPolicyDocument(policy, workItem) {
+  const doc = asPolicyDocument(policy);
+  for (const rule of doc.rules) {
+    if (matchWhen(rule.when, workItem)) return matchedResult(rule, null);
+  }
+  fail('POLICY', `no policy rule matched work item ${workItem?.id ?? '?'}`, { when: workItem });
+}
+
+/**
  * Evaluate the first matching rule for a work item.
- * @returns {{ rule: object, requireHuman: boolean, allow: string[], gates: string[], speak: string[], merge: string|null, file: string }}
+ * @returns {{ id: string, rule: object, requireHuman: boolean, allow: string[], gates: string[], speak: string[], merge: string|null, steps: number, file: string }}
  */
 export function evalPolicy(root, workItem) {
   const { file, policy } = loadPolicy(root);
   for (const rule of policy.rules) {
-    if (matchWhen(rule.when, workItem)) {
-      return {
-        id: rule.id,
-        rule,
-        requireHuman: Boolean(rule.requireHuman),
-        allow: [...(rule.allow ?? [])],
-        gates: [...(rule.gates ?? [])],
-        speak: [...(rule.speak ?? [])],
-        merge: rule.merge ?? null,
-        file,
-      };
-    }
+    if (matchWhen(rule.when, workItem)) return matchedResult(rule, file);
   }
   fail('POLICY', `no policy rule matched work item ${workItem?.id ?? '?'}`, { when: workItem });
 }

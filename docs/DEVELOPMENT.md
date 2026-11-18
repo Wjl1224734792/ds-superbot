@@ -15,8 +15,8 @@ npm test         # node --test：dsh-plugin / constitution / runtime / im
 
 - `packages/dsh-plugin/tests/dsh-plugin.test.mjs`：工具注册、章程注入、路由、文档硬门、命令 / 技能、面板与设置页
 - `packages/dsh-plugin/tests/docs-ready.test.mjs`、`docs-governance.test.mjs`：通过插件 shim 跑原脚本（退出码与 `--help` 必须与 SSOT 一致）
-- `packages/constitution/tests/`：schema、状态机、Mandate、Policy、Receipt / revalidate、卡片、CLI、shim 回归
-- `packages/runtime/tests/`：导出形状、L1 / L2、curator / assignment、Event Bus、订阅直通、Watchdog、observe / would-accept、auto 灰度、Capability Compiler、能力态 × 风险路由、Steward 候选提案
+- `packages/constitution/tests/`：schema、状态机、Mandate、Policy、Receipt / revalidate、卡片、CLI、shim 回归、账本路径禁闭、跨通道 Thread、动态治理 `planSteps`
+- `packages/runtime/tests/`：导出形状、L1 / L2、curator / assignment、存算分离、Cartographer 回写、Event Bus、订阅直通、Watchdog、observe / would-accept、auto 灰度、Capability Compiler、能力态 × 风险路由、Steward 候选提案
 - `packages/im/tests/`：三种卡、发言允许表、每种状态 × 四张脸的 `presenceOf`、占位 SVG
 
 改了 `packages/constitution/scripts/` 后，至少再跑一遍插件包路径上的 `--help` 和 docs-ready / docs-gate 用例。
@@ -26,8 +26,8 @@ npm test         # node --test：dsh-plugin / constitution / runtime / im
 | 包 | 开发时注意 |
 | --- | --- |
 | `packages/dsh-plugin` | 行为保持 0.1.0 兼容。P2 已用官方加法槽接上左栏控制台、顶部迷你脸和右侧舞台；禁止注册 `sidebar` / `rightbar` / `conversation.session.header` / `conversation.header`。`scripts/` 只是 shim。 |
-| `packages/constitution` | 不要重写门禁脚本判定逻辑。落盘必须 `--write`。Receipt 手改后必须能被 `revalidate` 识破。 |
-| `packages/runtime` | 文件型 Event Bus、订阅直通（不授权）、Watchdog（进度 / 空转 / 费用）、Steward 轻量规则 + 预留 `createModelPort`、Capability Compiler（只出 Mandate 草稿）、`routeModel`。默认 observe，只记录 would-accept，不执行、不自动合并、不开 HTTP。auto 灰度必须先有观察记录。 |
+| `packages/constitution` | 不要重写门禁脚本判定逻辑。落盘必须 `--write`。Receipt 手改后必须能被 `revalidate` 识破。账本只写 `.superbot/ledger/`；`planSteps` 的步骤数随策略变，不要删门。 |
+| `packages/runtime` | 文件型 Event Bus、订阅直通（不授权）、Watchdog（进度 / 空转 / 费用）、Steward 轻量规则 + 预留 `createModelPort`、Capability Compiler（只出 Mandate 草稿）、`routeModel`、存算分离、Cartographer 回写。默认 observe，只记录 would-accept，不执行、不自动合并、不开 HTTP。auto 灰度必须先有观察记录。 |
 | `packages/im` | 面板和字幕只调用 `presenceOf`。同一时刻全场 `high` 不得超过 1 个。 |
 
 Curator 打分权重（写在 `packages/runtime/src/curator.mjs` 的 `WEIGHTS` 常量里）：
@@ -39,11 +39,20 @@ score = 4 * value + 2 * (reversible ? 1 : 0) + 1 * evidenceCount - 3 * attention
 ## 3. P3 运行时约定
 
 - **Capability Compiler**（`packages/runtime/src/compiler.mjs`）：输入工作项 + 可选 snapshot / 章程加载器，输出 Mandate **草稿**和能力态装配。成功时 `via: 'compiler'`；缺 intent / 缺 AC / AC 不可判定（「体验好」「功能正常」）/ 范围越出仓库根时 `via: 'fallback'`，回落匹配的 `roles/*.md`，且不得扩大 toolsWhitelist 或 scope。编译器不签发、不改门禁、不起进程、不合并、不访问网络。`compileIntent` 走同一套实现。
-- **Owner → 能力态**：`pm` / `architect` → Discover（Scout / Explorer / Curator，只读）；`backend-dev` / `frontend-dev` → Build（由现有章程模板编译 Worker）；`qa-engineer` / `browser-tester` / `reviewer` → Verify（独立 Verifier + 确定性脚本，Critic 终审）。缺 owners 时按 gates / 文件范围 / intent 推断，不发明新角色 id。Cartographer 始终装配为任务后能力，但不执行 P4 回写。
+- **Owner → 能力态**：`pm` / `architect` → Discover（Scout / Explorer / Curator，只读）；`backend-dev` / `frontend-dev` → Build（由现有章程模板编译 Worker）；`qa-engineer` / `browser-tester` / `reviewer` → Verify（独立 Verifier + 确定性脚本，Critic 终审）。缺 owners 时按 gates / 文件范围 / intent 推断，不发明新角色 id。Cartographer 始终装配为任务后能力，并标成 `writeBackCapable`；编译器本身仍把 `writeBack` 设为 false，不写知识库。真正的回写走 `cartographer.writeBack`。
 - **模型路由**（`routeModel`）：轻量档给 Discover / Steward / Scout / Explorer / Curator / Cartographer / Build；强档给 Capability Compiler 与 Verify / Critic。R2 / R3 升到强档，避免编译与终验停在最便宜的 Discover 模型。`superbot.config.json` 的 `modelRouting.<role>` 是更低优先级 fallback；0.1.0 的 `superbot_dispatch` 路由行为不改。默认 `createModelPort()` 仍是 rules-only。
 - **auto 灰度**（`evaluateAuto` / `canEnterAuto`）：默认仍是 observe。请求 `auto`（执行灰度，不是合并）仅在已有一条落盘的、可比对的 would-accept 记录时允许（至少同一 `action`，请求带风险时还要同一风险档）。R2 / R3、`human-approval`、`requireHuman`、touches 敏感范围、不可逆，一律拒绝并留在 observe。即使允许进入灰度，`would.merge` 仍为 false，且不执行合并。`resolveAuthority('auto')` 只表示「请求了灰度」，不是授权；`resolveAuthority('auto-merge')` 与 `assertNoAutoMerge` 仍抛 `AUTO_MERGE_DISABLED`。`assign` / `consider` / `watchdog` 默认路径仍是 observe，不会因为灰度资格为真就开工。
 
-## 4. P2 已接线的官方加法槽位
+
+## 4. P4 约定
+
+- **存算分离**：账本与事件只在目标仓库 `.superbot/ledger/`（threads / work-items / mandates / receipts / snapshots，以及已有的 `events.jsonl`），写入必须走 constitution 账本 API（幂等、路径禁闭，不得逃出仓库根）。执行 / Assignment 的 `workDir` 只在 `tmp/superbot/<run>/`。API：`assertStoragePath` / `assertComputePath` / `separate`（`packages/runtime/src/separation.mjs`，账本禁闭在 `packages/constitution/src/ledger.mjs`）。计算路径不能当账本根；账本 API 不会写进 `tmp/superbot` 或业务源码。执行助手 `writeLedgerDocument` 必须拒绝直接写账本。不要用插件 HTTP / BFF / 独立端口控制台来「加固」这一边界。
+- **跨通道 Thread**：`bindChannel`、`findThreadsByChannel`、`resolveThread`。一个 Thread 对象联合多个 `scheme://` 通道（如 `group://`、`github://`），不叉出第二份。工作项通过 Thread 关联到全部已绑定通道。只做数据模型，不接真实 IM / GitHub。
+- **Cartographer 回写**：`packages/runtime/src/cartographer.mjs` 的 `writeBack`。只追加 `docs/project/DECISIONS.md`（Decision / ADR）和 `docs/project/INVARIANTS.md`（不变量；模板在 `packages/constitution/scripts/templates/INVARIANTS.md`）。允许名单之外的路径（`src/`、`packages/`、业务文件、`.superbot/ledger/`、门禁脚本）一律拒绝。默认授权仍是 observe：只记录 would-accept，`executed: false`，不写文件。真正落盘必须同时满足：`write: true`、`authority` 解析为 `execute`、工作项状态为 `Delivered`。不自动合并，不启动 Worker，不新增 `roles/cartographer.md`。
+- **动态治理强度**：`planSteps` / `intensity`（`packages/constitution/src/governance.mjs`）。`governance = f(risk, reversible)` 由 Policy 决定，返回匹配规则的 `gates`、`allow`、`requireHuman`、`speak`、`merge` 和 `steps`（门禁个数）。验证信号：同一套代码换更松的策略文档，步骤数下降，而不是改代码删门。默认策略里 `auto-low`（R0/R1 可逆）是 2 步，`human-critical`（R3 / 敏感 touches）是 6 步。插件兼容路径上，`docTier=3` 对 `backend-dev` / `frontend-dev` 的硬门不要拆掉。一旦绑定 snapshot，即使步骤里没有 `docs-ready`，哈希失效仍然生效。`merge: human-only` 照常记录并执行；不要打开 auto-merge。
+
+## 5. P2 已接线的官方加法槽位
+
 
 
 以下槽位已对照本机安装的 DeepSeek Harness **0.2.2-rc.2**（桌面版 `E:\\DSH`，官方契约来自 `ui-sidebar` / `ui-layout` / `ui-conversation`）核对后接入。官方加法槽都在；禁止占用的整栏 / 单例槽只避开，不改名、不发明新槽。若后续宿主版本缺失某槽，降级到仍存在的加法槽，不得改去自建页面或 HTTP 控制台。
@@ -58,7 +67,7 @@ score = 4 * value + 2 * (reversible ? 1 : 0) + 1 * evidenceCount - 3 * attention
 
 禁止注册 `sidebar` / `rightbar` / `conversation.session.header` 做整栏替换。动画只用 `.stwd-` 作用域样式 + 宿主 token + 分层 SVG，并尊重 `prefers-reduced-motion`。同一时刻最多一个高能量头像。
 
-## 5. 目标项目账本
+## 6. 目标项目账本
 
 `.superbot/ledger/` 与 `tmp/superbot/` 属于被治理的业务仓库，不要强制提交进本仓库或目标仓库。gitignore 示例见 `docs/examples/gitignore`。
 
@@ -71,7 +80,7 @@ node packages/constitution/bin/constitution.mjs <root> workitem create --thread 
 
 默认 dry-run，落盘加 `--write`，`--json` 保持机读结构稳定。门禁脚本仍可通过插件包根调用：`node packages/dsh-plugin/scripts/docs-ready.mjs --help`。
 
-## 6. 发布流程
+## 7. 发布流程
 
 1. 更新 `packages/dsh-plugin/package.json` 的 `version`（SemVer；1.0.0 之前允许破坏性变更，但必须写进 CHANGELOG）。姊妹包版本与之对齐。
 2. 把 `CHANGELOG.md` 的 `[Unreleased]` 条目移入新版本小节。

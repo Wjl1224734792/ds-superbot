@@ -35,6 +35,17 @@ test('runtime export shape includes P0 APIs and P1 implementations', () => {
   assert.equal(typeof runtime.canEnterAuto, 'function');
   assert.equal(typeof runtime.compiler.compileMandate, 'function');
   assert.equal(typeof runtime.routing.routeModel, 'function');
+  assert.equal(typeof runtime.assertStoragePath, 'function');
+  assert.equal(typeof runtime.assertComputePath, 'function');
+  assert.equal(typeof runtime.separate, 'function');
+  assert.equal(typeof runtime.writeBack, 'function');
+  assert.equal(typeof runtime.planSteps, 'function');
+  assert.equal(typeof runtime.intensity, 'function');
+  assert.equal(typeof runtime.writeLedgerDocument, 'function');
+  assert.equal(typeof runtime.cartographer.writeBack, 'function');
+  assert.equal(typeof runtime.separation.separate, 'function');
+  assert.equal(typeof runtime.governance.planSteps, 'function');
+  assert.equal(runtime.DEFAULT_AUTHORITY, 'observe');
 });
 
 test('speakAllowed allows the three taxed events only', () => {

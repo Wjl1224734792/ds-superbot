@@ -9,6 +9,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { createHash, randomBytes } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { formatIso } from './time.mjs';
+import { confineLedgerFile } from '../../constitution/src/ledger.mjs';
 
 export const EVENTS_REL = '.superbot/ledger/events.jsonl';
 export const EVENT_ID = /^EV-[0-9a-f]{12}$/;
@@ -30,7 +31,7 @@ const listeners = new Map();
 
 export function eventsPath(root) {
   if (!root) throw new Error('bus requires a repository root');
-  return join(root, EVENTS_REL);
+  return confineLedgerFile(root, join(root, EVENTS_REL));
 }
 
 export function isEventId(id) {
