@@ -2,9 +2,11 @@
  * Mandate issue / revoke / get.
  * After issue, every field except revokedAt / revokeReason is frozen.
  * Re-issue requires revoke first. One unrevoked mandate per work item.
+ * Revoked records are historical copies: they keep their unique id and
+ * are never overwritten by a later issue.
  */
 import { fail } from './errors.mjs';
-import { isMandateId, isWorkItemId, mandateIdFor } from './ids.mjs';
+import { isMandateId, isWorkItemId, mandateIdFor, nextMandateId } from './ids.mjs';
 import { listDocuments, readDocument, saveDocument } from './ledger.mjs';
 import { loadSchema, assertValid } from './schema.mjs';
 import { formatIso, isExpired } from './time.mjs';
@@ -26,11 +28,16 @@ export function listMandates(root) {
   return listDocuments(root, 'mandate');
 }
 
+export function mandatesFor(root, workItemId) {
+  return listMandates(root).filter((doc) => doc.workItem === workItemId);
+}
+
 export function activeMandateFor(root, workItemId) {
-  const id = mandateIdFor(workItemId);
-  const doc = getMandate(root, id);
-  if (!doc || doc.revokedAt) return null;
-  return doc;
+  const found = mandatesFor(root, workItemId).filter((doc) => !doc.revokedAt);
+  if (found.length > 1) {
+    fail('MANDATE', `multiple active mandates for ${workItemId}: ${found.map((d) => d.id).join(', ')}`);
+  }
+  return found[0] ?? null;
 }
 
 export function assertUsableMandate(root, workItemId, now = new Date()) {
@@ -54,12 +61,23 @@ function cloneScope(scope) {
  * Issue a mandate. `workItem` must already exist in the caller's mind; this
  * module only writes the mandate document. The work-item binder updates the
  * work item row separately so we don't create a circular import.
+ *
+ * A new issue after revoke gets a unique id (`MD-<workItemId>-N`) and does
+ * not overwrite the revoked historical file.
  */
 export function issueMandate(root, input, { write = false, now = new Date() } = {}) {
   const workItemId = input.workItem;
   if (!isWorkItemId(workItemId)) fail('MANDATE', `invalid work item id: ${workItemId}`);
-  const id = input.id ?? mandateIdFor(workItemId);
+
+  const history = mandatesFor(root, workItemId);
+  const active = history.filter((doc) => !doc.revokedAt);
+
+  let id = input.id;
+  if (id && !isMandateId(id)) fail('MANDATE', `invalid mandate id: ${id}`);
+  if (!id) id = nextMandateId(history.map((doc) => doc.id), workItemId);
+
   const existing = getMandate(root, id);
+
   if (existing && !existing.revokedAt) {
     // Idempotent re-issue of an identical active mandate is allowed.
     const candidate = buildMandate(id, input, existing, now);
@@ -68,13 +86,15 @@ export function issueMandate(root, input, { write = false, now = new Date() } = 
     }
     return saveDocument(root, 'mandate', existing, { write });
   }
+
   if (existing && existing.revokedAt) {
-    // Same id file is frozen history; a new mandate after revoke must not
-    // overwrite frozen fields in place. The ID scheme is MD-<workItemId>, so
-    // the file is reused only after a full revoke, replacing the document.
-    // Frozen-field enforcement applies to *unrevoked* updates and to any
-    // attempt to patch fields other than revoke*.
+    fail('MANDATE', `mandate id ${id} is a revoked historical record and cannot be overwritten`);
   }
+
+  if (active.length && active[0].id !== id) {
+    fail('MANDATE', `active mandate ${active[0].id} already exists; revoke it before re-issuing`);
+  }
+
   const document = buildMandate(id, input, null, now);
   assertValid(document, loadSchema('mandate'), 'mandate');
   if (isExpired(document.expiresAt, now)) {

@@ -8,8 +8,8 @@ export {
   createWorkItem, getWorkItem, listWorkItems, transitionWorkItem, STATES, TERMINAL,
 } from './workitem.mjs';
 export {
-  issueMandate, revokeMandate, getMandate, activeMandateFor, assertUsableMandate,
-  assertFrozen, REVOKE_REASONS,
+  issueMandate, revokeMandate, getMandate, listMandates, mandatesFor,
+  activeMandateFor, assertUsableMandate, assertFrozen, REVOKE_REASONS,
 } from './mandate.mjs';
 export { createSnapshot, getSnapshot, listSnapshots, checkSnapshot, collectBindings } from './snapshot.mjs';
 export { evalPolicy, loadPolicy, matchWhen, parsePolicyYaml, policyRev } from './policy.mjs';
