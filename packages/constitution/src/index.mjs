@@ -12,7 +12,8 @@ export {
   bindChannel, findThreadsByChannel, resolveThread, assertChannelUri, CHANNEL_URI,
 } from './thread.mjs';
 export {
-  createWorkItem, getWorkItem, listWorkItems, transitionWorkItem, STATES, TERMINAL,
+  createWorkItem, getWorkItem, listWorkItems, transitionWorkItem, saveWorkItem,
+  STATES, TERMINAL, PARK_FROM, isLegalTransition,
 } from './workitem.mjs';
 export {
   issueMandate, revokeMandate, getMandate, listMandates, mandatesFor,

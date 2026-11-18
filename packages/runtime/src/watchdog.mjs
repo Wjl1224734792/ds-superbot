@@ -1,12 +1,26 @@
 /**
- * External control loop for progress, idle (空转), and cost (费用).
- * In the default observe mode it records would-accept actions
- * (revoke / park / halt) but does not mutate work items or mandates
- * and never auto-merges. No HTTP, no background network.
+ * External control loop for progress, idle (空转), cost (费用), and
+ * document drift. In the default observe mode (and hands-off `auto`)
+ * it records would-accept actions (revoke / park / halt) but does not
+ * mutate work items or mandates and never auto-merges.
+ *
+ * When a tick is explicitly run with `authority: 'execute'`, timeout /
+ * idle / document drift may actually `revokeMandate` and transition the
+ * work item to `Parked` (legal P5 edges only). A missing snapshot is
+ * not treated as drift. No HTTP, no background network, no git merge.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { listWorkItems, listMandates, isExpired } from '../../constitution/src/index.mjs';
+import {
+  checkSnapshot,
+  isExpired,
+  isLegalTransition,
+  listMandates,
+  listWorkItems,
+  revokeMandate,
+  TERMINAL,
+  transitionWorkItem,
+} from '../../constitution/src/index.mjs';
 import * as bus from './bus.mjs';
 import { DEFAULT_AUTHORITY, recordWouldAccept, settleAuthority, isHandsOffAuthority } from './observe.mjs';
 import { formatIso, parseIso } from './time.mjs';
@@ -34,6 +48,64 @@ function writeLoop(root, doc) {
 
 function minutesBetween(from, to) {
   return (parseIso(to).getTime() - parseIso(from).getTime()) / 60000;
+}
+
+function boundSnapshotId(item, mandate) {
+  return item?.constitution_snapshot || mandate?.constitution_snapshot || null;
+}
+
+/**
+ * Reuse constitution snapshot hash staleness. If no snapshot is bound,
+ * return null — do not invent a drift failure.
+ */
+export function detectDocumentDrift(root, item, mandate) {
+  const id = boundSnapshotId(item, mandate);
+  if (!id) return null;
+  try {
+    const check = checkSnapshot(root, id);
+    if (check.ok) return null;
+    return { snapshot: id, reason: 'snapshot-stale', check };
+  } catch (err) {
+    // A bound id that cannot be loaded is stale, not a reason to invent a new hash.
+    return { snapshot: id, reason: 'snapshot-stale', check: { ok: false, error: err.message } };
+  }
+}
+
+function pickRevokeReason({ drift, expired, idle }) {
+  if (drift) return 'snapshot-stale';
+  if (expired) return 'expired';
+  if (idle) return 'timeout';
+  return null;
+}
+
+function revokeAndPark(root, item, mandate, reason, now) {
+  const actions = [];
+  let revoked = null;
+  let parked = null;
+  if (mandate && !mandate.revokedAt) {
+    revoked = revokeMandate(root, mandate.id, reason, { write: true, now }).document;
+    actions.push({ type: 'revoke', workItem: item.id, mandate: mandate.id, reason });
+    bus.append({
+      root,
+      type: bus.EVENT_TYPES.WATCHDOG_REVOKE,
+      source: 'watchdog',
+      workItem: item.id,
+      payload: { mandate: mandate.id, reason },
+    });
+  }
+  if (!TERMINAL.includes(item.state) && isLegalTransition(item.state, 'Parked')) {
+    const from = item.state;
+    parked = transitionWorkItem(root, item.id, 'Parked', { write: true, now }).document;
+    actions.push({ type: 'park', workItem: item.id, from, reason });
+    bus.append({
+      root,
+      type: bus.EVENT_TYPES.WATCHDOG_PARK,
+      source: 'watchdog',
+      workItem: item.id,
+      payload: { from, reason },
+    });
+  }
+  return { revoked, parked, actions };
 }
 
 /**
@@ -102,12 +174,20 @@ export function tick(state = {}) {
   const idle = [];
   const cost = [];
   const wouldAccept = [];
+  const actions = [];
+  const drift = [];
 
   for (const item of items) {
     const mandate = activeByItem.get(item.id) ?? null;
     const last = item.updatedAt ?? item.createdAt;
     const idleMinutes = last ? minutesBetween(last, at) : 0;
     const inFlight = ACTIVE_STATES.has(item.state);
+    const requestedForItem = input.itemAuthorities?.[item.id] ?? input.workItemAuthority?.[item.id] ?? authority;
+    const itemAuthority = settleAuthority(requestedForItem, {
+      root,
+      action: 'watchdog',
+    }).authority;
+    const handsOff = isHandsOffAuthority(itemAuthority);
     const row = {
       workItem: item.id,
       state: item.state,
@@ -117,16 +197,17 @@ export function tick(state = {}) {
     };
     progress.push(row);
 
-    if (inFlight && idleMinutes >= idleAfter) {
+    const isIdle = inFlight && idleMinutes >= idleAfter;
+    if (isIdle) {
       const idleRow = { ...row, reason: 'idle-timeout' };
       idle.push(idleRow);
-      if (isHandsOffAuthority(authority)) {
+      if (handsOff) {
         wouldAccept.push(recordWouldAccept(root, {
           action: 'park',
           workItem: item.id,
           risk: item.risk ?? null,
           reason: `idle for ${idleMinutes.toFixed(1)} minutes (threshold ${idleAfter})`,
-          authority,
+          authority: itemAuthority,
           would: { park: true, execute: false, merge: false },
           source: 'watchdog',
           details: idleRow,
@@ -134,17 +215,33 @@ export function tick(state = {}) {
       }
     }
 
-    if (mandate && isExpired(mandate.expiresAt, now)) {
-      if (isHandsOffAuthority(authority)) {
+    const expired = Boolean(mandate && isExpired(mandate.expiresAt, now));
+    if (expired && handsOff) {
+      wouldAccept.push(recordWouldAccept(root, {
+        action: 'revoke',
+        workItem: item.id,
+        risk: item.risk ?? null,
+        reason: `mandate ${mandate.id} expired at ${mandate.expiresAt}`,
+        authority: itemAuthority,
+        would: { revoke: true, execute: false, merge: false },
+        source: 'watchdog',
+        details: { mandate: mandate.id },
+      }));
+    }
+
+    const driftHit = detectDocumentDrift(root, item, mandate);
+    if (driftHit) {
+      drift.push({ workItem: item.id, ...driftHit });
+      if (handsOff) {
         wouldAccept.push(recordWouldAccept(root, {
           action: 'revoke',
           workItem: item.id,
           risk: item.risk ?? null,
-          reason: `mandate ${mandate.id} expired at ${mandate.expiresAt}`,
-          authority,
-          would: { revoke: true, execute: false, merge: false },
+          reason: `constitution snapshot ${driftHit.snapshot} is stale`,
+          authority: itemAuthority,
+          would: { revoke: true, park: true, execute: false, merge: false },
           source: 'watchdog',
-          details: { mandate: mandate.id },
+          details: driftHit,
         }));
       }
     }
@@ -172,16 +269,26 @@ export function tick(state = {}) {
           workItem: item.id,
           risk: item.risk ?? null,
           reason: 'over budget',
-          authority,
+          authority: itemAuthority,
           would: { halt: true, execute: false, merge: false },
           source: 'watchdog',
           details: costRow,
         }));
       }
     }
+
+    if (!handsOff && itemAuthority === 'execute') {
+      const reason = pickRevokeReason({ drift: driftHit, expired, idle: isIdle });
+      if (reason) {
+        const acted = revokeAndPark(root, item, mandate, reason, now);
+        actions.push(...acted.actions);
+        if (acted.revoked) activeByItem.delete(item.id);
+      }
+    }
   }
 
-  const snapshot = { id, at, progress, idle, cost, wouldAccept, authority, executed: false };
+  const executed = actions.length > 0;
+  const snapshot = { id, at, progress, idle, cost, wouldAccept, drift, actions, authority, executed };
   bus.append({ root, type: bus.EVENT_TYPES.WATCHDOG_TICK, source: 'watchdog', payload: { id, progress: progress.length, idle: idle.length, cost: cost.length } });
   for (const row of progress) {
     if (row.inFlight) {

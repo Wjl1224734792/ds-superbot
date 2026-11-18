@@ -22,6 +22,18 @@ export const STATES = Object.freeze([
 
 export const TERMINAL = Object.freeze(['Dropped', 'Parked', 'Delivered', 'Failed']);
 
+/**
+ * States that may legally enter Parked.
+ * Goal §5 lists AwaitingApproval → Parked (人否决) and Building → Parked
+ * (人叫停，同时吊销 Mandate). P5 extends Parked to the other in-flight
+ * states so Watchdog (execute) and a human stop can Park without a
+ * silent illegal transition: Proposed (console 否决), Authorized,
+ * Planned, Approved, and Verifying.
+ */
+export const PARK_FROM = Object.freeze([
+  'Proposed', 'AwaitingApproval', 'Authorized', 'Planned', 'Approved', 'Building', 'Verifying',
+]);
+
 const VAGUE_AC = [/体验好/, /功能正常/];
 
 /** from -> to -> optional checker. Missing edge = illegal. */
@@ -29,14 +41,24 @@ const TRANSITIONS = {
   Signal: { Candidate: allow },
   Candidate: { Dropped: allow, Explored: allow },
   Explored: { Proposed: requireProposed },
-  Proposed: { Authorized: requireAutoAuthorize, AwaitingApproval: allow },
+  Proposed: { Authorized: requireAutoAuthorize, AwaitingApproval: allow, Parked: allow },
   AwaitingApproval: { Authorized: requireHumanAuthorize, Parked: allow },
-  Authorized: { Planned: requirePlanned },
-  Planned: { Approved: requireApproved, AwaitingApproval: allow },
-  Approved: { Building: requireBuilding },
+  Authorized: { Planned: requirePlanned, Parked: allow },
+  Planned: { Approved: requireApproved, AwaitingApproval: allow, Parked: allow },
+  Approved: { Building: requireBuilding, Parked: allow },
   Building: { Verifying: allow, Failed: allow, Parked: allow },
-  Verifying: { Delivered: requireDelivered, Building: allow, Failed: allow },
+  Verifying: { Delivered: requireDelivered, Building: allow, Failed: allow, Parked: allow },
 };
+
+/**
+ * Whether a state change is in the legal table (same-state is always legal).
+ * Terminal states cannot leave themselves.
+ */
+export function isLegalTransition(from, to) {
+  if (from === to) return true;
+  if (TERMINAL.includes(from) && from !== to) return false;
+  return Boolean(TRANSITIONS[from]?.[to]);
+}
 
 function allow() {}
 

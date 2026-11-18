@@ -24,7 +24,7 @@
 - 进入 `Authorized` 时绑定 `constitution_snapshot`；之后口径类文档哈希变更，则该工作项所有未结 Receipt 立即 `stale`。口径集合与哈希算法复用 `docs-state.mjs`（`listDocs` + `hashExclude` + CRLF 归一）。
 - 可选字段 `intentAmbiguous`（缺省 false）与 `touches: string[]`（缺省空）供 Policy 表达式使用。
 
-完整状态迁移表见实施 Goal 第 5 节，由 `packages/constitution/src/workitem.mjs` 执行。
+完整状态迁移表见实施 Goal 第 5 节，由 `packages/constitution/src/workitem.mjs` 执行。P5 有意扩展 `Proposed` / `Authorized` / `Planned` / `Approved` / `Verifying` → `Parked`（加上 Goal 已有的 `AwaitingApproval` / `Building` → `Parked`），供人否决 / 叫停与 Watchdog execute 使用；见 `PARK_FROM` / `isLegalTransition`。其它非法迁移仍然失败。
 
 ## Owner → 能力态（P3）
 
@@ -45,11 +45,11 @@ Capability Compiler（`compileMandate` / `compileIntent`）只产出与 Mandate 
 
 ## Mandate
 
-签发后除 `revokedAt` / `revokeReason` 外任何字段都不得被更新。吊销只允许 `human-stop`、`expired`、`snapshot-stale`。过期 Mandate 不得再授权施工。第一次签发仍使用 Goal 规定的 `MD-<workItemId>`；若该 id 已被一份已吊销记录占用，新签发使用 `MD-<workItemId>-2`、`-3`……，历史文件保持原样。`schemaVersion` 仍为 1（只放宽了 id 模式，既有 id 仍然合法）。
+签发后除 `revokedAt` / `revokeReason` 外任何字段都不得被更新。吊销允许 `human-stop`、`expired`、`snapshot-stale`，以及 P5 文档化扩展的 `timeout`（Watchdog 在 execute 下对空转 / 超时吊销）。过期或已吊销的 Mandate 不得再授权施工。人批签发之后，该工作项可在 Mandate 范围内进入 execute；全局默认授权仍是 observe。第一次签发仍使用 Goal 规定的 `MD-<workItemId>`；若该 id 已被一份已吊销记录占用，新签发使用 `MD-<workItemId>-2`、`-3`……，历史文件保持原样。`schemaVersion` 仍为 1（只放宽了 id 模式，既有 id 仍然合法）。
 
 ## Receipt
 
-只有脚本可签发。`exitCode !== 0` 不得签 `pass`。`status` 为 `pass` | `fail` | `stale`（`browser-ac` 额外允许 `unverified`）。`.superbot/docs-state.json` 仍是 docs-ready 的原生口径；Receipt 是统一包装，不取代它。手改收据后 `revalidate` 必须重算哈希，发现不一致则 `status=stale` 或报错，不许静默相信文件。
+只有脚本可签发。`exitCode !== 0` 不得签 `pass`。`status` 为 `pass` | `fail` | `stale`（`browser-ac` 额外允许 `unverified`）。`.superbot/docs-state.json` 仍是 docs-ready 的原生口径；Receipt 是统一包装，不取代它。手改收据后 `revalidate` 必须重算哈希，发现不一致则 `status=stale` 或报错，不许静默相信文件。Delivered / Failed 结果卡（`renderResultCard`）必须可核对，列出 AC、Receipt 与产物路径（可复数；提供账本 root 时可从 ledger 加载 Receipt）。「合并」仍由人决定；本轮只通过 `recordMergeIntent` 记录意图，不自动执行 git merge / push。
 
 ## Thread（跨通道）
 

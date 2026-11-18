@@ -1,8 +1,10 @@
 /**
  * Pure-function renderers for the three group-chat cards.
  * Format is locked by contracts/templates and GOAL §8.3. These functions
- * never send a message.
+ * never send a message. When a ledger `root` is provided, result cards
+ * may *read* receipts (and their artifact paths) from the ledger.
  */
+import { listReceipts } from './receipt.mjs';
 
 function yn(value) {
   return value ? '是' : '否';
@@ -62,13 +64,47 @@ export function renderApprovalCard(workItem) {
   ].join('\n');
 }
 
+function flattenArtifacts(...values) {
+  const out = [];
+  for (const value of values) {
+    if (value == null || value === '') continue;
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item == null || item === '') continue;
+        out.push(String(item));
+      }
+    } else {
+      out.push(String(value));
+    }
+  }
+  return out.filter((item, i, arr) => arr.indexOf(item) === i);
+}
+
+function receiptsFromOptions(workItem, options) {
+  if (options.receipts != null) return options.receipts;
+  if (Array.isArray(workItem.receiptRecords) && workItem.receiptRecords.length) {
+    return workItem.receiptRecords;
+  }
+  if (options.root) {
+    try {
+      const listed = listReceipts(options.root, workItem.id);
+      if (listed.length) return listed;
+    } catch {
+      // ledger unreadable: fall through to ids / empty
+    }
+  }
+  return workItem.receipts ?? [];
+}
+
 /**
  * @param {object} workItem
  * @param {object} [options]
  * @param {string} [options.conclusion]
  * @param {Array<{ id: string, status: string, evidence?: string }>} [options.acResults]
- * @param {Array<{ gate: string, status: string }>} [options.receipts]
- * @param {string} [options.artifact]
+ * @param {Array<{ gate: string, status: string, id?: string, artifacts?: string[] }|string>} [options.receipts]
+ * @param {string|string[]} [options.artifact]
+ * @param {string[]} [options.artifacts]
+ * @param {string} [options.root]  ledger root; when set, load receipts if not provided
  */
 export function renderResultCard(workItem, options = {}) {
   const conclusion = String(options.conclusion ?? workItem.conclusion ?? workItem.intent ?? '').slice(0, 100);
@@ -80,14 +116,29 @@ export function renderResultCard(workItem, options = {}) {
   const acText = acResults
     .map((row) => `${row.id} ${row.status}${row.evidence ? ` — ${row.evidence}` : ''}`)
     .join('；') || '（无）';
-  const receipts = options.receipts
-    ?? (workItem.receiptRecords ?? []).map((r) => `${r.gate} ${r.status}`);
+  const receipts = receiptsFromOptions(workItem, options);
   const receiptLine = Array.isArray(receipts)
     ? (receipts.length
-      ? receipts.map((r) => (typeof r === 'string' ? r : `${r.gate} ${r.status}`)).join(', ')
+      ? receipts.map((r) => {
+        if (typeof r === 'string') return r;
+        const id = r.id ? ` ${r.id}` : '';
+        const gate = r.gate ?? 'receipt';
+        const status = r.status ?? '';
+        return `${gate} ${status}${id}`.trim();
+      }).join(', ')
       : '（无）')
     : String(receipts);
-  const artifact = options.artifact ?? workItem.artifact ?? '（无）';
+  const fromReceipts = Array.isArray(receipts)
+    ? receipts.flatMap((r) => (r && typeof r === 'object' ? (r.artifacts ?? []) : []))
+    : [];
+  const artifacts = flattenArtifacts(
+    options.artifacts,
+    options.artifact,
+    workItem.artifacts,
+    workItem.artifact,
+    fromReceipts,
+  );
+  const artifact = artifacts.length ? artifacts.join(', ') : '（无）';
   return [
     `【结果】${workItem.id}  状态：${workItem.state}`,
     `结论：${conclusion}`,

@@ -27,7 +27,7 @@ npm test         # node --test：dsh-plugin / constitution / runtime / im
 | --- | --- |
 | `packages/dsh-plugin` | 行为保持 0.1.0 兼容。P2 已用官方加法槽接上左栏控制台、顶部迷你脸和右侧舞台；禁止注册 `sidebar` / `rightbar` / `conversation.session.header` / `conversation.header`。`scripts/` 只是 shim。 |
 | `packages/constitution` | 不要重写门禁脚本判定逻辑。落盘必须 `--write`。Receipt 手改后必须能被 `revalidate` 识破。账本只写 `.superbot/ledger/`；`planSteps` 的步骤数随策略变，不要删门。 |
-| `packages/runtime` | 文件型 Event Bus、订阅直通（不授权）、Watchdog（进度 / 空转 / 费用）、Steward 轻量规则 + 预留 `createModelPort`、Capability Compiler（只出 Mandate 草稿）、`routeModel`、存算分离、Cartographer 回写。默认 observe，只记录 would-accept，不执行、不自动合并、不开 HTTP。auto 灰度必须先有观察记录。 |
+| `packages/runtime` | 文件型 Event Bus、订阅直通（不授权）、Watchdog（进度 / 空转 / 费用 / 文档漂移）、Steward 轻量规则 + 预留 `createModelPort`、Capability Compiler（只出 Mandate 草稿）、`routeModel`、存算分离、Cartographer 回写、P5 闭环（`approveDecision` / `rejectDecision` / `canExecute` / `dispatchWorkItem` / `recordMergeIntent`）。默认 observe，只记录 would-accept，不执行、不自动合并、不开 HTTP。auto 灰度必须先有观察记录。人批 Mandate 之后该工作项才可 execute。 |
 | `packages/im` | 面板和字幕只调用 `presenceOf`。同一时刻全场 `high` 不得超过 1 个。 |
 
 Curator 打分权重（写在 `packages/runtime/src/curator.mjs` 的 `WEIGHTS` 常量里）：
@@ -51,7 +51,16 @@ score = 4 * value + 2 * (reversible ? 1 : 0) + 1 * evidenceCount - 3 * attention
 - **Cartographer 回写**：`packages/runtime/src/cartographer.mjs` 的 `writeBack`。只追加 `docs/project/DECISIONS.md`（Decision / ADR）和 `docs/project/INVARIANTS.md`（不变量；模板在 `packages/constitution/scripts/templates/INVARIANTS.md`）。允许名单之外的路径（`src/`、`packages/`、业务文件、`.superbot/ledger/`、门禁脚本）一律拒绝。默认授权仍是 observe：只记录 would-accept，`executed: false`，不写文件。真正落盘必须同时满足：`write: true`、`authority` 解析为 `execute`、工作项状态为 `Delivered`。不自动合并，不启动 Worker，不新增 `roles/cartographer.md`。
 - **动态治理强度**：`planSteps` / `intensity`（`packages/constitution/src/governance.mjs`）。`governance = f(risk, reversible)` 由 Policy 决定，返回匹配规则的 `gates`、`allow`、`requireHuman`、`speak`、`merge` 和 `steps`（门禁个数）。验证信号：同一套代码换更松的策略文档，步骤数下降，而不是改代码删门。默认策略里 `auto-low`（R0/R1 可逆）是 2 步，`human-critical`（R3 / 敏感 touches）是 6 步。插件兼容路径上，`docTier=3` 对 `backend-dev` / `frontend-dev` 的硬门不要拆掉。一旦绑定 snapshot，即使步骤里没有 `docs-ready`，哈希失效仍然生效。`merge: human-only` 照常记录并执行；不要打开 auto-merge。
 
-## 5. P2 已接线的官方加法槽位
+## 5. P5 闭环约定
+
+- **控制台批准 / 否决**（`packages/runtime/src/loop.mjs`）：`approveDecision` 取 Capability Compiler 草稿（`compileMandate` / `compileIntent`），调用 constitution `issueMandate` 签发不可变 Mandate。`issuedBy` 必须是人的 id 或名字，缺省或 watchdog / observe / auto 来源一律拒绝。批准不得把 tools / scope / budget 扩大到草稿之外。`rejectDecision` 只在账本事件里记录否决，不签发 Mandate；若当前状态在 `PARK_FROM` 内则迁到 `Parked`。控制台不自动合并。插件 `console-model.mjs` 保持纯函数，副作用都在 runtime。
+- **工作项执行权**：全局 `DEFAULT_AUTHORITY` 仍是 `observe`。人签发、仍然有效（未过期、未吊销）的 Mandate 存在后，该工作项可在 Mandate 范围内进入 execute（`canExecute` / `assertCanExecute`）。没有这样的 Mandate 不得 execute。`assign` / `consider` / `watchdog` 不会因为 Mandate 存在就把默认改成 execute。`assertNoAutoMerge` 与 `resolveAuthority('auto-merge')` 仍抛 `AUTO_MERGE_DISABLED`。
+- **工作项派单**：`dispatchWorkItem` 按工作项 / 能力态调用 `routeModel`，并返回 `assignment.create` 的隔离结构（`workDir` 仍在 `tmp/superbot/<run>/`）。不起进程，不访问网络，不改 `createModelPort()` 的 rules-only 默认。0.1.0 `superbot_dispatch`（含 `docTier=3` 对 `backend-dev` / `frontend-dev` 的硬门）保持兼容路径，行为不改。
+- **Watchdog execute**：默认 observe 与 hands-off `auto` 仍只记 would-accept（`executed: false`），不吊销、不 Park、不合并。仅当 tick 显式带 `authority: 'execute'`（或该工作项的 itemAuthority 为 execute）时，超时 / 空转 / 文档漂移才会真正 `revokeMandate` 并把工作项迁到 `Parked`。漂移复用已绑定 snapshot 的哈希 stale 检查；未绑定 snapshot 时不虚构漂移失败。空转吊销原因是文档化扩展的 `timeout`；过期仍用 `expired`；漂移仍用 `snapshot-stale`。
+- **状态机扩展**（有意、有测试）：Goal §5 原表只有 `AwaitingApproval` / `Building` → `Parked`。P5 增加 `Proposed`、`Authorized`、`Planned`、`Approved`、`Verifying` → `Parked`，供人否决 / 叫停与 Watchdog execute 使用。其它非法迁移仍然失败。见 `PARK_FROM` / `isLegalTransition`。
+- **结果卡与合并意图**：`renderResultCard` 列出 AC、Receipt 与产物路径（支持复数，提供 ledger `root` 时可从账本加载 Receipt）。`recordMergeIntent` 只记录「合并」/「打回」意图，不执行 `git merge` / `git push`；`auto-merge` 仍抛 `AUTO_MERGE_DISABLED`。
+
+## 6. P2 已接线的官方加法槽位
 
 
 
@@ -67,7 +76,7 @@ score = 4 * value + 2 * (reversible ? 1 : 0) + 1 * evidenceCount - 3 * attention
 
 禁止注册 `sidebar` / `rightbar` / `conversation.session.header` 做整栏替换。动画只用 `.stwd-` 作用域样式 + 宿主 token + 分层 SVG，并尊重 `prefers-reduced-motion`。同一时刻最多一个高能量头像。
 
-## 6. 目标项目账本
+## 7. 目标项目账本
 
 `.superbot/ledger/` 与 `tmp/superbot/` 属于被治理的业务仓库，不要强制提交进本仓库或目标仓库。gitignore 示例见 `docs/examples/gitignore`。
 
@@ -80,7 +89,7 @@ node packages/constitution/bin/constitution.mjs <root> workitem create --thread 
 
 默认 dry-run，落盘加 `--write`，`--json` 保持机读结构稳定。门禁脚本仍可通过插件包根调用：`node packages/dsh-plugin/scripts/docs-ready.mjs --help`。
 
-## 7. 发布流程
+## 8. 发布流程
 
 1. 更新 `packages/dsh-plugin/package.json` 的 `version`（SemVer；1.0.0 之前允许破坏性变更，但必须写进 CHANGELOG）。姊妹包版本与之对齐。
 2. 把 `CHANGELOG.md` 的 `[Unreleased]` 条目移入新版本小节。
@@ -89,7 +98,7 @@ node packages/constitution/bin/constitution.mjs <root> workitem create --thread 
 5. 提交并打标签：`git tag -a v0.2.0 -m "v0.2.0"`。
 6. 装进 profile 复验：`plugin_manager(action="install_bundle", target="<repo>/packages/dsh-plugin")` → 重启 DSH → 新会话。
 
-## 7. 排障
+## 9. 排障
 
 | 现象 | 原因 / 处理 |
 |---|---|

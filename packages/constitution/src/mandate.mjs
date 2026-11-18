@@ -4,6 +4,7 @@
  * Re-issue requires revoke first. One unrevoked mandate per work item.
  * Revoked records are historical copies: they keep their unique id and
  * are never overwritten by a later issue.
+ * Reasons: human-stop, expired, snapshot-stale, and timeout (P5 Watchdog idle).
  */
 import { fail } from './errors.mjs';
 import { isMandateId, isWorkItemId, mandateIdFor, nextMandateId } from './ids.mjs';
@@ -11,7 +12,7 @@ import { listDocuments, readDocument, saveDocument } from './ledger.mjs';
 import { loadSchema, assertValid } from './schema.mjs';
 import { formatIso, isExpired } from './time.mjs';
 
-export const REVOKE_REASONS = Object.freeze(['human-stop', 'expired', 'snapshot-stale']);
+export const REVOKE_REASONS = Object.freeze(['human-stop', 'expired', 'snapshot-stale', 'timeout']);
 
 const FROZEN = new Set([
   'schemaVersion', 'id', 'workItem', 'issuedBy', 'issuedAt', 'expiresAt',

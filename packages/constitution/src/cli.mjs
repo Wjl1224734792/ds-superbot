@@ -54,7 +54,7 @@ thread resolve    --channel URI [--slug SLUG --title TEXT]
 
 mandate issue     --work-item WI-… --issued-by WHO --expires-at ISO
                   --snapshot CS-… [--goal TEXT] [--tools shell,read] [--tokens N] [--minutes N]
-mandate revoke    --id MD-… --reason human-stop|expired|snapshot-stale
+mandate revoke    --id MD-… --reason human-stop|expired|snapshot-stale|timeout
 mandate get       --id MD-…
 
 snapshot create

@@ -13,6 +13,7 @@ export * as observe from './observe.mjs';
 export * as model from './model.mjs';
 export * as compiler from './compiler.mjs';
 export * as routing from './routing.mjs';
+export * as loop from './loop.mjs';
 export { speakAllowed, compileIntent, assign, consider, createModelPort, RULES_MODEL } from './steward.mjs';
 export { compileMandate, mapOwnersToCapabilities, inferCapabilities, OWNER_TO_CAPABILITY, loadRoleCharter } from './compiler.mjs';
 export { routeModel, capabilityTier } from './routing.mjs';
@@ -26,3 +27,10 @@ export {
   DEFAULT_AUTHORITY, recordWouldAccept, listWouldAccept, resolveAuthority, assertNoAutoMerge,
   evaluateAuto, canEnterAuto, settleAuthority, isHandsOffAuthority, SENSITIVE_TOUCHES,
 } from './observe.mjs';
+export {
+  approveDecision, rejectDecision, canExecute, assertCanExecute,
+  dispatchWorkItem, recordMergeIntent, clampToDraft, isHumanIssuer,
+  isWithinMandateScope, loadResultEvidence, assertHumanApprovalPath,
+  DEFAULT_MANDATE_TTL_MS, EXECUTE_NOT_GRANTED, HUMAN_ISSUER_REQUIRED,
+  HUMAN_APPROVAL_REQUIRED,
+} from './loop.mjs';

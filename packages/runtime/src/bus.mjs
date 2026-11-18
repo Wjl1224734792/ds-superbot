@@ -24,6 +24,11 @@ export const EVENT_TYPES = Object.freeze({
   WATCHDOG_IDLE: 'watchdog.idle',
   WATCHDOG_COST: 'watchdog.cost',
   WATCHDOG_TICK: 'watchdog.tick',
+  WATCHDOG_REVOKE: 'watchdog.revoke',
+  WATCHDOG_PARK: 'watchdog.park',
+  DECISION_APPROVED: 'decision.approved',
+  DECISION_REJECTED: 'decision.rejected',
+  MERGE_INTENT: 'merge.intent',
 });
 
 /** root -> Set<handler> */

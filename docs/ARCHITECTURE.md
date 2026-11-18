@@ -24,7 +24,7 @@ Discover / Build / Verify 三类能力态 + 按需编译的 Mandate 草稿。Sco
 
 ## 治理函数
 
-`governance = f(risk, reversible)`，由 Policy 决定，不写死在角色章程里。`planSteps` / `intensity` 返回匹配规则的 `gates` / `allow` / `requireHuman` / `speak` / `merge` 以及由该规则得出的步骤数；改策略即可下调流程步数，不要靠删门禁实现。一旦绑定 `constitution_snapshot`，即使步骤里没有 `docs-ready`，哈希失效规则仍然生效。R0–R3 与默认 Policy 见 `docs/product/CONTRACT.md`。默认授权档位 observe，auto 自动合并不打开。auto 执行灰度（不是合并）由 `evaluateAuto` / `canEnterAuto` 判断，必须先有一条已落盘的、同一 action（及风险档，若请求带了风险）的 would-accept 记录；R2 / R3、`human-approval`、`requireHuman` 以及 touches prod / billing / delete / secrets 不得进入 auto。模型路由见 `packages/runtime/src/routing.mjs` 的 `routeModel({ capability, risk, role, config })`。
+`governance = f(risk, reversible)`，由 Policy 决定，不写死在角色章程里。`planSteps` / `intensity` 返回匹配规则的 `gates` / `allow` / `requireHuman` / `speak` / `merge` 以及由该规则得出的步骤数；改策略即可下调流程步数，不要靠删门禁实现。一旦绑定 `constitution_snapshot`，即使步骤里没有 `docs-ready`，哈希失效规则仍然生效。R0–R3 与默认 Policy 见 `docs/product/CONTRACT.md`。默认授权档位 observe，auto 自动合并不打开。auto 执行灰度（不是合并）由 `evaluateAuto` / `canEnterAuto` 判断，必须先有一条已落盘的、同一 action（及风险档，若请求带了风险）的 would-accept 记录；R2 / R3、`human-approval`、`requireHuman` 以及 touches prod / billing / delete / secrets 不得进入 auto。模型路由见 `packages/runtime/src/routing.mjs` 的 `routeModel({ capability, risk, role, config })`。P5 把控制台批准 / 否决、按工作项的 execute 授权、工作项派单和合并意图接到 `packages/runtime/src/loop.mjs`（`approveDecision` / `rejectDecision` / `canExecute` / `dispatchWorkItem` / `recordMergeIntent`）：批准用编译器草稿签发不可变 Mandate，否决不签发；全局默认仍是 observe，execute 是人批之后的按项授权；派单走 `routeModel`，不改 0.1.0 `superbot_dispatch`；合并只记账，不自动跑 git。Watchdog 仅在显式 execute 下才真正吊销并 Park。
 
 ## 注意力税
 
