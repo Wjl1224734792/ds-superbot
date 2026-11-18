@@ -6,6 +6,8 @@
 
 ### Added
 
+- 左栏「待你决定」接线：主按钮改为「批准」，经 client `onDecide` 调用宿主命令 `/superbot-decide`，再由薄适配层 `packages/dsh-plugin/lib/decide-adapter.mjs` 转到 runtime `approveDecision`（签发 Mandate）与 `rejectDecision`（需确认，不签发）。`console-model.mjs` 仍是纯函数。0.1.0 `superbot_dispatch` 与 `docTier=3` 硬门未改。默认仍 observe，禁止 auto-merge，插件不开 HTTP。未合进 main，未 push。
+
 - P5 闭环接通：左栏「待你决定」的批准走 Capability Compiler 草稿 + constitution `issueMandate` 签发不可变 Mandate（`approveDecision`）；否决只记账、不签发（`rejectDecision`）。R2/R3、`human-approval` 与 Policy `requireHuman` 必须由人批准，watchdog / observe / auto 不得签发。全局 `DEFAULT_AUTHORITY` 仍是 observe；人批且未过期、未吊销的 Mandate 之后，该工作项可在 Mandate 范围内 `canExecute` / `assertCanExecute`。工作项派单 `dispatchWorkItem` 走 `routeModel` 并返回 assignment 隔离结构，不起进程、不访问网络。0.1.0 `superbot_dispatch` 与 `docTier=3` 硬门保持兼容路径。Watchdog 在显式 `authority: 'execute'` 下，超时 / 空转 / 文档漂移会真正 `revokeMandate` 并 Park；observe / auto 仍只记 would-accept。结果卡列出 AC、Receipt 与产物路径；`recordMergeIntent` 只记录合并 / 打回意图，不执行 git merge / push。默认仍禁止 auto-merge。吊销原因在既有 `human-stop` / `expired` / `snapshot-stale` 上文档化扩展 `timeout`（空转）。状态机有意扩展 `Proposed` / `Authorized` / `Planned` / `Approved` / `Verifying` → `Parked`，避免 Watchdog 或人叫停走非法迁移。
 
 - P4 制度 / 运行时：存算分离加固（`assertStoragePath` / `assertComputePath` / `separate`；账本只写 `.superbot/ledger/`，执行目录只在 `tmp/superbot/<run>/`，计算路径不能当账本根）。跨通道 Thread（`bindChannel` / `findThreadsByChannel` / `resolveThread`，同一 Thread 对象联合多个 `scheme://` 通道，不叉出第二份）。Cartographer 回写（`cartographer.writeBack`）只追加 `docs/project/DECISIONS.md` 与 `docs/project/INVARIANTS.md`；默认 observe 只记 would-accept、不写文件，禁止改业务代码或账本。动态治理强度（`planSteps` / `intensity`）：`governance = f(risk, reversible)` 由 Policy 决定流程步骤数，验证信号是改策略即可下调门禁步数，而不是改代码删门。默认授权仍是 observe，禁止 auto-merge，插件不开 HTTP，不改 0.1.0 `superbot_dispatch`。

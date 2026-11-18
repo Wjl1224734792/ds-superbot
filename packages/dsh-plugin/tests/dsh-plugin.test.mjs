@@ -2,7 +2,7 @@
  * DSH 侧 Super Bot 插件的宿主契约测试（直接导入包内 index.js / client.js）。
  *
  * 覆盖 DSH 原生机制：
- *  - host-only：两个工具（`superbot_dispatch` / `superbot_board`）+ `/superbot-roster` 名册命令 + 13 个技能，没有 Config、没有浏览器半
+ *  - host-only：两个工具（`superbot_dispatch` / `superbot_board`）+ `/superbot-roster` 名册命令 + `/superbot-decide` 决定命令 + 13 个技能，没有 Config、没有浏览器半
  *  - docTier=3 时 `superbot_dispatch` 校验文档收据（`.superbot/docs-state.json`），未过门禁拒绝派开发
  *  - 角色是派单时注入的章程，**不注册 Agent Preset**（模式选择器必须保持干净）
  *  - 模型路由只来自项目 `superbot.config.json` 的 `modelRouting.<role>`，缺失则继承主代理
@@ -17,6 +17,14 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import {
+  createThread,
+  createWorkItem,
+  getWorkItem,
+  listMandates,
+  transitionWorkItem,
+} from '../../constitution/src/index.mjs';
+import { tmpRoot } from '../../runtime/tests/lib/helpers.mjs';
 
 const PLUGIN = new URL('../index.js', import.meta.url);
 const ROLES = new URL('../roles/', import.meta.url);
@@ -215,10 +223,10 @@ function execFor() {
   return { agent: { id: 'session-parent' }, signal: new AbortController().signal };
 }
 
-test('apply registers the two tools, one command and the bundled skills — nothing else', async () => {
+test('apply registers the two tools, the human commands and the bundled skills — nothing else', async () => {
   const bucket = await boot();
   assert.deepEqual(bucket.state.tools.map((tool) => tool.name).sort(), ['superbot_board', 'superbot_dispatch']);
-  assert.deepEqual(bucket.state.commands.map((command) => command.name), ['superbot-roster']);
+  assert.deepEqual(bucket.state.commands.map((command) => command.name), ['superbot-roster', 'superbot-decide']);
   assert.deepEqual(bucket.state.skills.map((skill) => skill.name).sort(), [
     'agent-settings',
     'docs-feature',
@@ -646,6 +654,78 @@ test('/superbot-roster reports the roster and the routing rule without publishin
   assert.match(result.text, /superbot_dispatch/);
   assert.match(result.text, /不注册 Agent Preset/);
   assert.doesNotMatch(result.text, /superbot-architect/);
+});
+
+function seedAwaiting(root, overrides = {}) {
+  try {
+    createThread(root, { slug: 'repo-ops-ci', title: 'CI', channels: [] }, { write: true });
+  } catch {
+    // already exists
+  }
+  const item = createWorkItem(root, {
+    thread: 'TH-repo-ops-ci',
+    intent: '把 CI 红灯率降到 0',
+    risk: 'R2',
+    reversible: true,
+    authority: 'human-approval',
+    ac: [{ id: 'AC-1', text: '主干最近 20 次 CI 全绿', coveredBy: ['T1'] }],
+    nonGoals: ['不改发布流程'],
+    scope: { files: ['scripts/ci.sh'], newFiles: [], owners: ['pm'] },
+    gates: ['validate-plan', 'docs-ready'],
+    origin: { kind: 'human', ref: 'manual', evidence: [] },
+    ...overrides,
+  }, { write: true }).document;
+  transitionWorkItem(root, item.id, 'Candidate', { write: true });
+  transitionWorkItem(root, item.id, 'Explored', { write: true });
+  transitionWorkItem(root, item.id, 'Proposed', { write: true });
+  return transitionWorkItem(root, item.id, 'AwaitingApproval', { write: true }).document;
+}
+
+test('/superbot-decide approve issues a Mandate; reject does not', async (t) => {
+  const root = tmpRoot(t);
+  const approvedItem = seedAwaiting(root);
+  const rejectedItem = seedAwaiting(root, { intent: '另一条待否决的工作项' });
+  const bucket = await boot({
+    services: {
+      workingDirectory: { ensure: async () => root },
+    },
+  });
+  const command = bucket.state.commands.find((entry) => entry.name === 'superbot-decide');
+  assert.ok(command, 'superbot-decide must be registered');
+
+  const approved = await command.handler({
+    rawInput: `approve ${approvedItem.id}`,
+    agent: { id: 'session-parent', user: { displayName: '建霖' } },
+    signal: new AbortController().signal,
+  });
+  assert.equal(approved.kind, 'success');
+  assert.match(approved.text, /已签发/);
+  assert.equal(getWorkItem(root, approvedItem.id).state, 'Authorized');
+  assert.equal(listMandates(root).some((entry) => entry.workItem === approvedItem.id), true);
+
+  const rejected = await command.handler({
+    rawInput: `reject ${rejectedItem.id} 范围过大`,
+    agent: { id: 'session-parent', user: { displayName: '建霖' } },
+    signal: new AbortController().signal,
+  });
+  assert.equal(rejected.kind, 'success');
+  assert.match(rejected.text, /未签发/);
+  assert.equal(getWorkItem(root, rejectedItem.id).state, 'Parked');
+  assert.equal(listMandates(root).some((entry) => entry.workItem === rejectedItem.id), false);
+});
+
+test('/superbot-decide is not a public tool and refuses a bad line', async (t) => {
+  const root = tmpRoot(t);
+  const bucket = await boot({
+    services: {
+      workingDirectory: { ensure: async () => root },
+    },
+  });
+  assert.deepEqual(bucket.state.tools.map((tool) => tool.name).sort(), ['superbot_board', 'superbot_dispatch']);
+  const command = bucket.state.commands.find((entry) => entry.name === 'superbot-decide');
+  const result = await command.handler({ rawInput: 'help', agent: { id: 'session-parent' } });
+  assert.equal(result.kind, 'error');
+  assert.match(result.text, /用法/);
 });
 
 test('registered command names never shadow a skill name (client-side token claim)', async () => {

@@ -181,9 +181,14 @@ window.__ModuleLoader__.load({
         consoleNav: '打开 ds-superbot 控制台',
         decideTitle: '待你决定',
         decideEmpty: '现在没有需要你决定的工作项',
-        decideApprove: '查看',
+        decideApprove: '批准',
         decideReject: '否决',
         decideRejectConfirm: '确定否决这个工作项？此操作需要你确认。',
+        decideApproved: '已批准并签发 Mandate',
+        decideRejected: '已否决，未签发 Mandate',
+        decideNeedSession: '请先打开一个会话，再批准或否决工作项。',
+        decideNeedCommand: '当前宿主没有提供命令通道，无法把决定送到 approveDecision / rejectDecision。',
+        decideUnwired: '控制台还没有接到决定通道。',
         decidePendingMerge: '待合并',
         decideFailed: '失败待处理',
         decideAwaiting: '待批准',
@@ -369,9 +374,14 @@ window.__ModuleLoader__.load({
         consoleNav: 'Open the ds-superbot console',
         decideTitle: 'Needs your decision',
         decideEmpty: 'Nothing needs your decision right now',
-        decideApprove: 'Review',
+        decideApprove: 'Approve',
         decideReject: 'Reject',
         decideRejectConfirm: 'Reject this work item? This needs your confirmation.',
+        decideApproved: 'Approved, Mandate issued',
+        decideRejected: 'Rejected, no Mandate issued',
+        decideNeedSession: 'Open a session first, then approve or reject the work item.',
+        decideNeedCommand: 'The host does not expose commands, so the decision cannot reach approveDecision / rejectDecision.',
+        decideUnwired: 'The console is not wired to a decide handler.',
         decidePendingMerge: 'Pending merge',
         decideFailed: 'Failed, needs handling',
         decideAwaiting: 'Awaiting approval',
@@ -3475,6 +3485,34 @@ window.__ModuleLoader__.load({
         subscribeEnabled: props.subscribeEnabled,
       });
       const [pendingReject, setPendingReject] = useState(null);
+      const [decideStatus, setDecideStatus] = useState(null);
+      const runDecide = (item, action) => {
+        if (typeof props.onDecide !== 'function') {
+          setDecideStatus({ tone: 'error', text: text.decideUnwired || '' });
+          return;
+        }
+        return Promise.resolve()
+          .then(() => props.onDecide(item, action))
+          .then((result) => {
+            const body = result && result.result ? result.result : result;
+            const kind = body && body.kind;
+            const failed = result && (result.ok === false || kind === 'error');
+            if (failed) {
+              const message = (body && body.text) || result.error || result.text || text.decideUnwired;
+              setDecideStatus({ tone: 'error', text: message });
+              return result;
+            }
+            setDecideStatus({
+              tone: 'ok',
+              text: action === 'approve' ? (text.decideApproved || '') : (text.decideRejected || ''),
+            });
+            if (typeof props.onDecided === 'function') props.onDecided(item, action, result);
+            return result;
+          })
+          .catch((error) => {
+            setDecideStatus({ tone: 'error', text: error && error.message ? error.message : String(error) });
+          });
+      };
       const confirmReject = (item) => {
         const ask = typeof props.confirm === 'function'
           ? props.confirm
@@ -3485,7 +3523,7 @@ window.__ModuleLoader__.load({
             return false;
           };
         if (ask(text.decideRejectConfirm || '')) {
-          if (typeof props.onDecide === 'function') props.onDecide(item, 'reject');
+          runDecide(item, 'reject');
           setPendingReject(null);
         }
       };
@@ -3504,13 +3542,20 @@ window.__ModuleLoader__.load({
             ? h('p', { className: 'stwd-console-empty' }, text.decideEmpty)
             : h('ul', { className: 'stwd-console-list' },
               sections.decisions.map((item) => h('li', { key: item.id, className: 'stwd-console-row' },
-                h('div', { className: 'stwd-console-row-main' },
+                h('div', {
+                  className: 'stwd-console-row-main',
+                  onClick: () => openItem(item),
+                },
                   h('span', { className: 'stwd-console-id' }, item.id),
                   h('span', { className: 'stwd-console-state' }, decisionKindLabel(item, text)),
                   item.title ? h('span', { className: 'stwd-console-title-line' }, item.title) : null,
                 ),
                 h('div', { className: 'stwd-console-actions' },
-                  h('button', { type: 'button', className: 'stwd-console-btn', onClick: () => openItem(item) }, text.decideApprove),
+                  h('button', {
+                    type: 'button',
+                    className: 'stwd-console-btn stwd-console-btn-approve',
+                    onClick: () => runDecide(item, 'approve'),
+                  }, text.decideApprove),
                   h('button', {
                     type: 'button',
                     className: 'stwd-console-btn stwd-console-btn-danger',
@@ -3519,6 +3564,9 @@ window.__ModuleLoader__.load({
                 ),
               )),
             ),
+          decideStatus ? h('p', {
+            className: 'stwd-console-decide-status' + (decideStatus.tone === 'error' ? ' stwd-console-decide-status-error' : ''),
+          }, decideStatus.text) : null,
         ),
         h('section', {
           className: 'stwd-console-block stwd-console-health' + (health.compact ? ' stwd-console-health-compact' : ''),
@@ -4409,6 +4457,76 @@ window.__ModuleLoader__.load({
     const STYLE_ELEMENT = h('style', { key: 'stwd-css' }, STYLESHEET);
     // --- plugin ---------------------------------------------------------------------
 
+    /**
+     * Pick a session/agent id the Host command executor will accept.
+     * The left console is not session-scoped, so this uses the mounted
+     * session, then the sessions list, then the workspace.
+     */
+    function resolveCommandAgent(ctx) {
+      const right = ctx ? ctx.sidebarRight : undefined;
+      if (right && right.mounted && typeof right.mounted.getSnapshot === 'function') {
+        try {
+          const mounted = right.mounted.getSnapshot();
+          if (mounted) return String(mounted);
+        } catch {
+          // fall through
+        }
+      }
+      const list = ctx && ctx.sessions ? ctx.sessions.list : undefined;
+      if (list && typeof list.getSnapshot === 'function') {
+        try {
+          const state = list.getSnapshot();
+          const active = state && (state.active || state.current || state.focused || state.selected || state.mounted);
+          if (active) return String(active);
+          const byId = state && state.byId;
+          if (byId && typeof byId === 'object') {
+            const ids = Object.keys(byId);
+            if (ids.length > 0) return ids[0];
+          }
+        } catch {
+          // fall through
+        }
+      }
+      const workspace = ctx ? ctx.uiWorkspace : undefined;
+      if (workspace && workspace.sessionId) return String(workspace.sessionId);
+      if (workspace && workspace.activeSession) {
+        const active = typeof workspace.activeSession === 'function' ? workspace.activeSession() : workspace.activeSession;
+        if (active) return String(active);
+      }
+      return null;
+    }
+
+    /**
+     * Wire left-console onDecide to the Host `/superbot-decide` command, which
+     * calls runtime approveDecision / rejectDecision. Approval is user-only:
+     * this is not a public tool.
+     */
+    function createConsoleOnDecide(ctx, text) {
+      const copy = text || {};
+      return async (item, action) => {
+        const commands = ctx && ctx.remote ? ctx.remote.commands : undefined;
+        if (!commands || typeof commands.execute !== 'function') {
+          return { ok: false, kind: 'error', text: copy.decideNeedCommand || '' };
+        }
+        const id = item && typeof item === 'object' ? item.id : item;
+        const verb = action === 'reject' ? 'reject' : 'approve';
+        const line = '/superbot-decide ' + verb + ' ' + id;
+        const agent = resolveCommandAgent(ctx);
+        if (!agent) {
+          return { ok: false, kind: 'error', text: copy.decideNeedSession || '' };
+        }
+        const result = await commands.execute(agent, line);
+        const body = result && result.result ? result.result : result;
+        if (!result) {
+          return { ok: false, kind: 'error', text: copy.decideNeedSession || '' };
+        }
+        if (body && body.kind === 'error') {
+          return { ok: false, kind: 'error', text: body.text || '' };
+        }
+        return result;
+      };
+    }
+
     /** Open this Session's board tab; false when the host offers no right Sidebar. */
     function openPanel(ctx) {
       const right = ctx ? ctx.sidebarRight : undefined;
@@ -4495,6 +4613,8 @@ window.__ModuleLoader__.load({
         stageField,
         stageCaption,
         resolveWorkItems,
+        resolveCommandAgent,
+        createConsoleOnDecide,
         AUTO_MERGE_DISABLED,
         CONSOLE_SLOT_ID,
         FACES,
@@ -4544,6 +4664,7 @@ window.__ModuleLoader__.load({
             authority: DEFAULT_AUTHORITY,
             openPanel: () => { openPanel(ctx); },
             openConsole: () => { openConsole(ctx); },
+            onDecide: createConsoleOnDecide(ctx, textOf()),
           }),
         }, SuperBotConsole)), 'superbot: left console panel');
 

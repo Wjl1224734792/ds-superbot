@@ -68,7 +68,7 @@ score = 4 * value + 2 * (reversible ? 1 : 0) + 1 * evidenceCount - 3 * attention
 
 | 位置 | 槽 | 用途 |
 | --- | --- | --- |
-| 左栏控制台 | `sidebar.panellist` + `main`，同一 id `ds-superbot-console` | superagent 式控制台：先「待你决定」，再健康 / 授权摘要（默认 observe），再单条历史 |
+| 左栏控制台 | `sidebar.panellist` + `main`，同一 id `ds-superbot-console` | superagent 式控制台：先「待你决定」（批准走 `/superbot-decide` → `approveDecision` 签发 Mandate，否决需确认后走 `rejectDecision`、不签发），再健康 / 授权摘要（默认 observe），再单条历史 |
 | 顶部迷你脸 | 优先 `conversation.session.header.corner`，否则 `utilities`；可用 `conversation.session.header.actions` 放次要计数 | 四张脸的迷你眼神条，点击打开右侧舞台 |
 | 补充全屏 | `conversation.view` | 可选「舞台 / 控制台」标签，默认仍留在 Chat |
 | 右侧舞台 | 现有 `sidebar.right.pane.tab`，id 仍是 `ds-superbot` | 大舞台 + 工作项详情；0.1.0 工作流树降为详情里的 DAG |

@@ -23,6 +23,11 @@
  *    `scripts/lib/docs-state.mjs`). Documentation becomes a precondition of
  *    implementation instead of a prompt-level promise.
  *  - `/superbot-roster` is registered on the native human-command registry.
+ *  - `/superbot-decide` is the Host entry for the left-console decision
+ *    buttons: approve calls runtime `approveDecision` (issues a Mandate);
+ *    reject calls `rejectDecision` (records only, does not issue). This is
+ *    a human command, not a new public tool; `superbot_dispatch` and the
+ *    docTier=3 hard gate are unchanged.
  *  - Skills are registered on the native `ctx.skills` registry (13 skills:
  *    main + inline / docs-rules / docs-governance + docs-new / docs-takeover /
  *    docs-feature / docs-review + four generic light skills).
@@ -804,9 +809,59 @@ function renderRoster(topic) {
   return lines.join('\n');
 }
 
+function decideIssuerFrom(invocation) {
+  const agent = invocation?.agent;
+  const candidates = [
+    invocation?.issuedBy,
+    agent?.user?.displayName,
+    agent?.user?.name,
+    agent?.account?.displayName,
+    agent?.identity?.displayName,
+    agent?.owner,
+  ];
+  for (const value of candidates) {
+    const raw = String(value ?? '').trim();
+    if (raw) return raw;
+  }
+  return 'human';
+}
+
+async function handleDecideCommand(ctx, invocation) {
+  const { handleConsoleDecide, parseDecideInput } = await import('./lib/decide-adapter.mjs');
+  const parsed = parseDecideInput(invocation?.rawInput);
+  if (!parsed) {
+    return {
+      kind: 'error',
+      text: '用法：/superbot-decide approve <工作项id> 或 /superbot-decide reject <工作项id> [原因]',
+    };
+  }
+  try {
+    const startDir = await resolveBaseDirectory(ctx, invocation?.agent, {});
+    const root = findProjectRoot(startDir);
+    const out = handleConsoleDecide(root, parsed.workItemId, parsed.action, {
+      issuedBy: decideIssuerFrom(invocation),
+      reason: parsed.reason,
+      write: true,
+      source: 'console',
+    });
+    if (parsed.action === 'approve') {
+      const mandateId = out?.mandate?.id ?? '';
+      return {
+        kind: 'success',
+        text: mandateId
+          ? `已批准 ${parsed.workItemId}，Mandate ${mandateId} 已签发。`
+          : `已批准 ${parsed.workItemId}，Mandate 已签发。`,
+      };
+    }
+    return { kind: 'success', text: `已否决 ${parsed.workItemId}，未签发 Mandate。` };
+  } catch (error) {
+    return { kind: 'error', text: `无法完成决定：${errorMessage(error)}` };
+  }
+}
+
 function registerCommands(ctx) {
   ctx.inject(['commands'], (sctx) => {
-    const definition = {
+    const roster = {
       name: 'superbot-roster',
       description: '显示 Super Bot 团队名册、子代理组合与路由口径（DSH 原生 Skills；不注册 Agent Preset）',
       input: { hint: '[roles|models|help]' },
@@ -818,7 +873,14 @@ function registerCommands(ctx) {
         }
       },
     };
-    sctx.effect(() => sctx.commands.register(definition), 'superbot: /superbot-roster command');
+    const decide = {
+      name: 'superbot-decide',
+      description: '批准或否决「待你决定」中的工作项：批准签发 Mandate，否决只记账、不签发',
+      input: { hint: 'approve <id> | reject <id> [reason]' },
+      handler: (invocation) => handleDecideCommand(sctx, invocation),
+    };
+    sctx.effect(() => sctx.commands.register(roster), 'superbot: /superbot-roster command');
+    sctx.effect(() => sctx.commands.register(decide), 'superbot: /superbot-decide command');
   });
 }
 
