@@ -124,7 +124,7 @@ The panel lives in the session's **right sidebar**. DSH stores the sidebar layou
 2. the "Super Bot team" entry on the **right-sidebar guide** page;
 3. **automatically** on the session's first Super Bot dispatch (labels look like `backend-dev · T1 export endpoint`); once the user closes it, it does not come back.
 
-**Upgrade compatibility**: a right-sidebar layout saved before the rename still opens this panel (the old tab identity is registered as a compatibility alias), and filter / layout / zoom preferences stored under the old keys are migrated on first read.
+**Upgrade compatibility**: filter / layout / zoom preferences stored under the older keys (`steward.panel.*` / `dsh-steward.panel.*`) are migrated to `ds-superbot.panel.*` on first read. DS Super Bot and the Steward plugin can be installed side by side: their tool names, skill names and right-sidebar tab identities do not collide.
 
 **The panel answers exactly one question: which agent, with which model, doing what, and how far along.** Top to bottom:
 

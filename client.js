@@ -10,14 +10,7 @@ window.__ModuleLoader__.load({
     /** Right-Sidebar tab type: `id` keys the body/title slots, `kind` is what openTab() names. */
     const TAB_ID = 'ds-superbot';
     const TAB_KIND = 'superbot';
-    /**
-     * Tab identity this panel used before the standalone rename. A per-session
-     * right-Sidebar layout saved by an older build still names this kind, so the
-     * same body is registered under the old identity too: an existing panel stays
-     * visible instead of degrading to a tab with no type.
-     */
-    const LEGACY_TAB_ID = 'dsh-steward';
-    const LEGACY_TAB_KIND = 'steward';
+
     const FIELDS = ['provider', 'model', 'effort'];
     /** Workspace-relative roots a Super Bot run can live at (skill contract, in this order). */
     const RUN_ROOTS = ['tmp/superbot', '.superbot'];
@@ -3630,28 +3623,6 @@ window.__ModuleLoader__.load({
             locale: NS,
             inject: () => ({ text: textOf(), openPanel: () => { openPanel(sctx); } }),
           }, HeaderButton)), 'superbot: header button');
-
-          // Compatibility with per-session sidebar layouts saved before the rename:
-          // those tabs name the old kind, so the same type, body and chip title are
-          // registered under the old identity as well. No guide entry is attached, so
-          // the add-tab page keeps offering exactly one Super Bot entry.
-          sctx.effect(() => sctx.sidebarRightTabs.register({
-            id: LEGACY_TAB_ID,
-            kind: LEGACY_TAB_KIND,
-            title: () => textOf().tabTitle,
-          }), 'superbot: legacy board tab type');
-
-          sctx.effect(() => sctx.slots.inject('sidebar.right.pane.tab', () => sctx.slots.register({
-            name: 'sidebar.right.pane.tab',
-            key: LEGACY_TAB_ID,
-            locale: NS,
-            inject: (sessionId) => makePanelFace(sctx, sessionId, textOf(), lang()),
-          }, SuperBotPanel)), 'superbot: legacy board body');
-
-          sctx.effect(() => sctx.slots.inject('sidebar.right.pane.tab.title', () => sctx.slots.register({
-            name: 'sidebar.right.pane.tab.title',
-            key: LEGACY_TAB_ID,
-          }, (props) => h(TabTitle, { text: textOf() }))), 'superbot: legacy board title');
 
           // Auto-open: the first Super Bot dispatch in a Session opens the board once,
           // so the user watches the run live without asking for it. Closing the tab

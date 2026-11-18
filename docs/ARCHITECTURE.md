@@ -49,7 +49,7 @@ client.js（Web 端模块，由 DSH 模块加载器加载）
 | 槽位 / 服务 | 用法 |
 |---|---|
 | `settings.section` | 「设置 → Super Bot」分区：逐角色模型与思考强度表格（`ctx.configForms.get('superbot')`） |
-| `sidebar.right.pane.tab` | 右侧栏面板主体（`id: ds-superbot`；旧布局用的 `dsh-steward` 身份注册为兼容别名，同一个组件） |
+| `sidebar.right.pane.tab` | 右侧栏面板主体（`id: ds-superbot`，与 Steward 插件的 `dsh-steward` 互不冲突） |
 | `sidebar.right.pane.tab.title` | 面板标题栏 |
 | `conversation.session.header.utilities` | 会话标题栏的 Super Bot 图标（`right.openTab('superbot')`） |
 | `sidebar.right.pane.tab` 的 guide | 右侧栏引导页里的「Super Bot 团队」入口 |

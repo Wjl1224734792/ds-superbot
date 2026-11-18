@@ -1001,8 +1001,6 @@ test('the client registers a right-sidebar board, its title, a header button and
     'sidebar.right.pane.tab',
     'sidebar.right.pane.tab.title',
     'conversation.session.header.utilities',
-    'sidebar.right.pane.tab',
-    'sidebar.right.pane.tab.title',
   ]);
   assert.deepEqual(
     registered.filter((entry) => entry.options.name === 'main' || entry.options.name === 'sidebar.panellist'),
@@ -1015,20 +1013,13 @@ test('the client registers a right-sidebar board, its title, a header button and
   assert.equal(registered[2].options.key, 'ds-superbot', 'the chip title uses the same key');
   assert.equal(registered[3].options.id, 'superbot-board');
   assert.ok(registered[3].options.order < 0, 'the header button sits left of the overflow menu');
-  assert.equal(registered[4].options.key, 'dsh-steward', 'the pre-rename tab body still resolves saved layouts');
-  assert.equal(registered[5].options.key, 'dsh-steward', 'the pre-rename chip title uses the same key');
 
-  assert.equal(tabTypes.length, 2);
+  assert.equal(tabTypes.length, 1);
   assert.equal(tabTypes[0].id, 'ds-superbot');
   assert.equal(tabTypes[0].kind, 'superbot', 'openTab() names the kind');
   assert.match(tabTypes[0].title('sidebar://superbot'), /团队/);
   assert.equal(tabTypes[0].guide.length, 1, 'the guide page offers a way in');
   assert.equal(tabTypes[0].guide[0].id, 'superbot-board');
-
-  assert.equal(tabTypes[1].id, 'dsh-steward', 'the pre-rename tab type keeps old layouts working');
-  assert.equal(tabTypes[1].kind, 'steward', 'the legacy kind is untouched');
-  assert.equal(tabTypes[1].guide, undefined, 'the legacy identity adds no second guide entry');
-  assert.ok(tabTypes[1].title('sidebar://steward').length > 0, 'the legacy chip title renders');
 
   // The empty panel explains itself instead of throwing.
   const renderEmpty = panelRender(registered, 'session-empty', {});
