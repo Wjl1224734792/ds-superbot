@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="仓 占位头像">
+  <title>仓（占位）</title>
+  <rect width="64" height="64" rx="12" fill="#e8f1f2"/>
+  <!-- roof-like hair / silhouette -->
+  <path d="M10 30 L32 8 L54 30 L54 36 L10 36 Z" fill="#2c4a52"/>
+  <ellipse cx="32" cy="38" rx="18" ry="20" fill="#f3e0c8"/>
+  <path d="M14 32 C18 18, 46 18, 50 32 L50 30 C46 16, 18 16, 14 30 Z" fill="#2c4a52"/>
+  <!-- calm half-open eyes, larger than realistic -->
+  <ellipse cx="24" cy="38" rx="5.2" ry="3.4" fill="#fff"/>
+  <ellipse cx="40" cy="38" rx="5.2" ry="3.4" fill="#fff"/>
+  <ellipse cx="24" cy="38.4" rx="2.2" ry="2.2" fill="#1c3136"/>
+  <ellipse cx="40" cy="38.4" rx="2.2" ry="2.2" fill="#1c3136"/>
+  <path d="M19 33 Q24 31 29 33" fill="none" stroke="#2c4a52" stroke-width="1.2" stroke-linecap="round"/>
+  <path d="M35 33 Q40 31 45 33" fill="none" stroke="#2c4a52" stroke-width="1.2" stroke-linecap="round"/>
+  <path d="M28 47 Q32 49 36 47" fill="none" stroke="#b08060" stroke-width="1.2" stroke-linecap="round"/>
+  <!-- teal collar -->
+  <path d="M18 54 Q32 46 46 54 L46 64 L18 64 Z" fill="#3d6b73"/>
+  <path d="M30 52 L32 64 L34 52" fill="#c9a227"/>
+</svg>

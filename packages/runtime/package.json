@@ -1,0 +1,18 @@
+{
+  "name": "@ds-superbot/runtime",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "ds-superbot runtime substrate interfaces (Steward, filters, curator, assignment). P0 ships signatures; bus/watchdog/subscribe are not implemented.",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "scripts": {
+    "test": "node --test tests/*.mjs",
+    "check": "node --check src/index.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
