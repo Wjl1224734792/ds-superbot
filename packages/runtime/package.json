@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "ds-superbot runtime substrate interfaces (Steward, filters, curator, assignment). P0 ships signatures; bus/watchdog/subscribe are not implemented.",
+  "description": "ds-superbot runtime substrate: Steward, filters, curator, assignment, file-backed event bus, subscription pass-through, Watchdog, and observe / would-accept.",
   "license": "MIT",
   "exports": {
     ".": "./src/index.mjs"

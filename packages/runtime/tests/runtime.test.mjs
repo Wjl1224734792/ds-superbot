@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as runtime from '../src/index.mjs';
-import { NotImplementedError } from '../src/errors.mjs';
 
-test('runtime export shape includes P0 APIs and P1 placeholders', () => {
+test('runtime export shape includes P0 APIs and P1 implementations', () => {
   assert.equal(typeof runtime.steward.speakAllowed, 'function');
   assert.equal(typeof runtime.steward.compileIntent, 'function');
   assert.equal(typeof runtime.steward.assign, 'function');
@@ -19,6 +18,17 @@ test('runtime export shape includes P0 APIs and P1 placeholders', () => {
   assert.equal(typeof runtime.fastPath, 'function');
   assert.equal(typeof runtime.rank, 'function');
   assert.equal(typeof runtime.createAssignment, 'function');
+  assert.equal(typeof runtime.consider, 'function');
+  assert.equal(typeof runtime.assign, 'function');
+  assert.equal(typeof runtime.slowPath, 'function');
+  assert.equal(typeof runtime.recordWouldAccept, 'function');
+  assert.equal(typeof runtime.listWouldAccept, 'function');
+  assert.equal(typeof runtime.createModelPort, 'function');
+  assert.equal(typeof runtime.bus.subscribe, 'function');
+  assert.equal(typeof runtime.watchdog.tick, 'function');
+  assert.equal(typeof runtime.watchdog.stop, 'function');
+  assert.equal(typeof runtime.subscribe.ingest, 'function');
+  assert.equal(runtime.DEFAULT_AUTHORITY, 'observe');
 });
 
 test('speakAllowed allows the three taxed events only', () => {
@@ -78,22 +88,3 @@ test('assignment.create returns an isolation structure and does not start a proc
   assert.ok(!('pid' in a));
 });
 
-function expectNotImplemented(fn, name) {
-  assert.throws(fn, (err) => {
-    assert.equal(err.code, 'NOT_IMPLEMENTED');
-    assert.ok(err instanceof NotImplementedError || err.name === 'NotImplementedError');
-    assert.match(err.message, /not implemented/i);
-    return true;
-  }, name);
-}
-
-test('P1 placeholders throw NOT_IMPLEMENTED and never pretend to succeed', () => {
-  expectNotImplemented(() => runtime.steward.assign({}), 'assign');
-  expectNotImplemented(() => runtime.filter.slowPath({}), 'slowPath');
-  expectNotImplemented(() => runtime.bus.append({}), 'bus.append');
-  expectNotImplemented(() => runtime.bus.read({}), 'bus.read');
-  expectNotImplemented(() => runtime.watchdog.start({}), 'watchdog.start');
-  expectNotImplemented(() => runtime.watchdog.tick({}), 'watchdog.tick');
-  expectNotImplemented(() => runtime.subscribe.connect({}), 'subscribe.connect');
-  expectNotImplemented(() => runtime.subscribe.ingest({}), 'subscribe.ingest');
-});
