@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 958 286" width="958" height="286" role="img" aria-label="DS Super Bot pipeline schematic: Lead dispatches → pm spec → architect plan and task DAG → G1 plan approval gate → task implementation → qa-engineer quality gate → G2 → browser-tester acceptance → G3 final review → delivery">
+  <title>DS Super Bot pipeline schematic (not a screenshot)</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8b949e"/>
+    </marker>
+    <style>
+      .box { fill: #f6f8fa; stroke: #c9d1d9; stroke-width: 1.5; }
+      .gate { fill: #fff8e1; stroke: #d4a72c; stroke-width: 1.5; }
+      .done { fill: #eaf7ee; stroke: #2ea44f; stroke-width: 1.5; }
+      .name { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; font-weight: 600; fill: #1f2328; }
+      .sub  { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 11.5px; fill: #57606a; }
+      .link { stroke: #8b949e; stroke-width: 1.6; fill: none; marker-end: url(#arrow); }
+      .ret  { stroke: #8b949e; stroke-width: 1.6; fill: none; stroke-dasharray: 5 4; marker-end: url(#arrow); }
+      .cap  { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 11px; fill: #8b949e; }
+    </style>
+  </defs>
+
+  <rect x="1" y="1" width="956" height="284" rx="10" fill="#ffffff" stroke="#d0d7de"/>
+
+  <!-- row 1 -->
+  <g>
+    <rect class="box" x="40" y="40" width="150" height="60" rx="8"/>
+    <text class="name" x="115" y="66" text-anchor="middle">Lead</text>
+    <text class="sub"  x="115" y="85" text-anchor="middle">this session's agent</text>
+
+    <rect class="box" x="212" y="40" width="150" height="60" rx="8"/>
+    <text class="name" x="287" y="66" text-anchor="middle">pm</text>
+    <text class="sub"  x="287" y="85" text-anchor="middle">request → testable spec</text>
+
+    <rect class="box" x="384" y="40" width="150" height="60" rx="8"/>
+    <text class="name" x="459" y="66" text-anchor="middle">architect</text>
+    <text class="sub"  x="459" y="85" text-anchor="middle">plan + task DAG</text>
+
+    <rect class="gate" x="556" y="40" width="150" height="60" rx="8"/>
+    <text class="name" x="631" y="66" text-anchor="middle">G1 plan approval</text>
+    <text class="sub"  x="631" y="85" text-anchor="middle">you approve + critic</text>
+
+    <rect class="box" x="728" y="40" width="190" height="60" rx="8"/>
+    <text class="name" x="823" y="66" text-anchor="middle">backend / frontend-dev</text>
+    <text class="sub"  x="823" y="85" text-anchor="middle">implement within file ownership</text>
+  </g>
+
+  <path class="link" d="M 190 70 H 208"/>
+  <path class="link" d="M 362 70 H 380"/>
+  <path class="link" d="M 534 70 H 552"/>
+  <path class="link" d="M 706 70 H 724"/>
+
+  <!-- return path into row 2 -->
+  <path class="ret" d="M 823 100 V 131 Q 823 137 817 137 H 121 Q 115 137 115 143 V 166"/>
+
+  <!-- row 2 -->
+  <g>
+    <rect class="box" x="40" y="170" width="150" height="60" rx="8"/>
+    <text class="name" x="115" y="196" text-anchor="middle">qa-engineer</text>
+    <text class="sub"  x="115" y="215" text-anchor="middle">independent gate re-run</text>
+
+    <rect class="gate" x="212" y="170" width="150" height="60" rx="8"/>
+    <text class="name" x="287" y="196" text-anchor="middle">G2 quality gate</text>
+    <text class="sub"  x="287" y="215" text-anchor="middle">green before handoff</text>
+
+    <rect class="box" x="384" y="170" width="150" height="60" rx="8"/>
+    <text class="name" x="459" y="196" text-anchor="middle">browser-tester</text>
+    <text class="sub"  x="459" y="215" text-anchor="middle">real-browser acceptance</text>
+
+    <rect class="gate" x="556" y="170" width="150" height="60" rx="8"/>
+    <text class="name" x="631" y="196" text-anchor="middle">G3 final review</text>
+    <text class="sub"  x="631" y="215" text-anchor="middle">reviewer, no blockers</text>
+
+    <rect class="done" x="728" y="170" width="190" height="60" rx="8"/>
+    <text class="name" x="823" y="196" text-anchor="middle">Delivered</text>
+    <text class="sub"  x="823" y="215" text-anchor="middle">report + 05-record + memory</text>
+  </g>
+
+  <path class="link" d="M 190 200 H 208"/>
+  <path class="link" d="M 362 200 H 380"/>
+  <path class="link" d="M 534 200 H 552"/>
+  <path class="link" d="M 706 200 H 724"/>
+
+  <text class="cap" x="40" y="252">Schematic: S-class work may skip pm and the approval gate; a change without UI may skip browser acceptance.</text>
+  <text class="cap" x="40" y="268">Failures bounce back to the owning role, at most 2 rounds.</text>
+</svg>

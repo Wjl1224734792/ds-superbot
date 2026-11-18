@@ -148,7 +148,7 @@ The panel lives in the session's **right sidebar**, which DSH stores per session
 2. the "Super Bot team" entry on the **right-sidebar guide** page;
 3. **automatically** on the session's first Super Bot dispatch (once; closing it keeps it closed).
 
-![pipeline schematic](docs/assets/pipeline.svg)
+![pipeline schematic](docs/assets/pipeline.en.svg)
 
 **The panel answers exactly one question: which agent, with which model, doing what, and how far along.** Top to bottom:
 
