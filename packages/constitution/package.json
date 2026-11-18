@@ -1,0 +1,22 @@
+{
+  "name": "@ds-superbot/constitution",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Work-item ledger, policy, snapshots, receipts, and gate scripts for ds-superbot.",
+  "license": "MIT",
+  "bin": {
+    "constitution": "./bin/constitution.mjs"
+  },
+  "exports": {
+    ".": "./src/index.mjs",
+    "./scripts/*": "./scripts/*"
+  },
+  "scripts": {
+    "test": "node --test tests/*.mjs",
+    "check": "node --check bin/constitution.mjs && node --check src/cli.mjs && node --check src/index.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

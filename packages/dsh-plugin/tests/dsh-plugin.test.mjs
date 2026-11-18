@@ -308,6 +308,10 @@ test('the runtime normalizes CRLF role charters (Windows checkout state)', async
   // the LF baseline the host contract compares against.
   const crlfPkg = join(workDir, 'crlf-pkg');
   cpSync(fileURLToPath(new URL('../', import.meta.url)), crlfPkg, { recursive: true });
+  // Script shims resolve ../../../constitution from scripts/lib, i.e. a sibling
+  // of the copied plugin directory. Provide the SSOT so index.js can load.
+  const constitutionScripts = fileURLToPath(new URL('../../constitution/scripts/', import.meta.url));
+  cpSync(constitutionScripts, join(workDir, 'constitution', 'scripts'), { recursive: true });
   for (const id of ROLE_IDS) {
     const file = join(crlfPkg, 'roles', `${id}.md`);
     const lf = readFileSync(file, 'utf8').replace(/\r\n/g, '\n');

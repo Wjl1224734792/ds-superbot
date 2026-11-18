@@ -4,9 +4,12 @@ npm-debug.log*
 pnpm-debug.log*
 yarn-error.log*
 
-# Super Bot / superbot 运行与收据目录（属于被治理的项目，不进本仓库）
+# Super Bot / superbot 运行与收据目录（属于被治理的目标项目，不进本仓库）
+# .superbot/ledger/ is the target-repo runtime ledger; do not force-commit it.
 tmp/
 .superbot/
+node_modules/
+
 
 # 编辑器与系统
 .vscode/

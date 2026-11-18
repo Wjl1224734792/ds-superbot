@@ -1,0 +1,73 @@
+{
+  "name": "ds-superbot",
+  "version": "0.2.0",
+  "type": "module",
+  "description": "DS Super Bot for DeepSeek Harness: a long-lived engineering team behind one lead agent. Seven role charters (pm / architect / backend-dev / frontend-dev / qa-engineer / browser-tester / reviewer) are injected at dispatch time instead of registering user-selectable agent presets; `superbot_dispatch` starts every child on the shipped `standard` composition, routes models from <project>/superbot.config.json over the Settings page, and refuses backend-dev / frontend-dev dispatch until a docTier=3 project holds a valid documentation receipt. `superbot_board` mirrors the plan onto the Agent Teams shared task board. The client half adds a per-session right-sidebar team panel (layer graph by default, artifacts collapsed, native task-progress counter, no copied task list), a Settings → Super Bot table for per-role model and reasoning effort, and the /superbot-roster command. The package also ships 13 native skills — the Tech Lead playbook, four documentation entry points behind a hard readiness gate, documentation governance, and five light discipline skills.",
+  "license": "MIT",
+  "author": "Lin",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Wjl1224734792/ds-superbot.git"
+  },
+  "homepage": "https://github.com/Wjl1224734792/ds-superbot#readme",
+  "bugs": {
+    "url": "https://github.com/Wjl1224734792/ds-superbot/issues"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "subagent",
+    "multi-agent",
+    "engineering-team",
+    "documentation-pipeline"
+  ],
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "icon.svg",
+    "locale/*.json",
+    "skills/**",
+    "roles/**",
+    "scripts/**",
+    "assets/**",
+    "AGENTS.md"
+  ],
+  "scripts": {
+    "test": "node ../../scripts/ensure-schemastery-stub.mjs && node --test tests/*.mjs",
+    "check": "node --check index.js && node --check client.js && node --check scripts/docs-ready.mjs && node --check scripts/lib/docs-state.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/schemastery": ">=3.18.4 <4"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/schemastery": {
+      "optional": true
+    }
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings"
+      ]
+    },
+    "engines": {
+      "dsh": ">=0.2.1-rc.2 <0.4.0-0"
+    }
+  }
+}
