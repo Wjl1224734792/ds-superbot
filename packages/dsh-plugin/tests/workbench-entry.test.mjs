@@ -149,7 +149,12 @@ test('icon.svg is an SVG plugin logo with a 64×64 viewBox', () => {
   assert.match(svg, /<svg\b/);
   assert.match(svg, /viewBox="0 0 64 64"/);
   assert.match(svg, /#4D6BFE|#4C6EF5/i);
-  assert.match(svg, /stwd-sclera|ellipse/);
+  assert.match(svg, /#243A6E/);
+  assert.match(svg, /#0E1528/);
+  const irises = svg.match(/<circle\b[^>]*r="[0-9.]+"[^>]*fill="#243A6E"/g) || svg.match(/<circle\b[^>]*fill="#243A6E"/g) || [];
+  assert.equal(irises.length, 2, 'logo must have two glossy iris circles');
+  assert.doesNotMatch(svg, /stwd-sclera/);
+  assert.doesNotMatch(svg, /#14C16F/i);
 });
 
 test('client copy uses 工作台 / Workbench and never Super Bot 团队面板 or 舞台', () => {
