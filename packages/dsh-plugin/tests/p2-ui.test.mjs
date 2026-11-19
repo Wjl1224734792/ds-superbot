@@ -210,22 +210,21 @@ test('the workbench lists AwaitingApproval work items first under 待你决定',
   assert.doesNotMatch(decideText, /WI-117/, 'Verifying must not appear in 待你决定');
   const ids = harness.collect([decide], harness.byClass('stwd-console-id')).map((node) => harness.textOf(node));
   assert.deepEqual(ids.slice(0, 3), ['WI-114', 'WI-116', 'WI-115']);
-  assert.match(text, /授权：observe/);
-  assert.match(text, /自动合并不启用/);
+  assert.doesNotMatch(text, /授权：observe/);
+  assert.doesNotMatch(text, /自动合并不启用/);
   assert.doesNotMatch(text, /Ticket/i);
-  const health = harness.collect(host, harness.byClass('stwd-console-health'))[0];
-  assert.ok(String(health.props.className).includes('stwd-console-health-compact'), 'healthy summary stays compact');
+  assert.equal(harness.collect(host, harness.byClass('stwd-console-health')).length, 0, 'healthy observe hides health copy');
 });
 
-test('the right stage uses presenceOf, aria-labels, and caps high energy at one', async () => {
+test('the workbench view uses presenceOf, aria-labels, and caps high energy at one', async () => {
   const { factory } = await loadClientFactory();
   const harness = createRenderHarness();
   const instance = factory((name) => (name === 'react' ? harness.stub : {}));
   const { ctx, registered } = createClientContext();
   instance.apply(ctx);
   const awaiting = ITEMS.filter((item) => item.id === 'WI-114');
-  const entry = registered.find((item) => item.options.name === 'sidebar.right.pane.tab');
-  const face = entry.options.inject('session-stage');
+  const entry = registered.find((item) => item.options.name === 'conversation.view');
+  const face = typeof entry.options.inject === 'function' ? entry.options.inject('session-stage') : {};
   const render = () => entry.component({
     ...face,
     sessionId: 'session-stage',
@@ -237,22 +236,19 @@ test('the right stage uses presenceOf, aria-labels, and caps high energy at one'
   });
   const host = await harness.settle(render);
   const residents = harness.collect(host, harness.byClass('stwd-resident'));
-  assert.ok(residents.length >= 4, `expected four stage faces, got ${residents.length}`);
+  assert.ok(residents.length >= 4, `expected four faces on the workbench, got ${residents.length}`);
   const highs = residents.filter((node) => String(node.props.className).includes('stwd-energy-high'));
   assert.ok(highs.length <= 1, `at most one high-energy face, got ${highs.length}`);
   const mixedHighs = instance.__test.stageField(ITEMS).filter((entry) => entry.energy === 'high');
   assert.ok(mixedHighs.length <= 1, `mixed field highs: ${mixedHighs.map((entry) => entry.face)}`);
   const cang = residents.find((node) => String(node.props.className).includes('stwd-resident--cang'));
-  assert.ok(cang, '仓 is on the stage');
+  assert.ok(cang, '仓 is on the workbench');
   assert.match(String(cang.props['aria-label']), /仓，正在看你，待批 WI-114/);
   assert.match(String(cang.props.className), /stwd-eye-await/);
   assert.match(String(cang.props.className), /stwd-motion-gaze/);
   const caption = harness.collect(host, harness.byClass('stwd-stage-caption'))[0];
   assert.match(harness.textOf(caption), /仓正在看你 · 待批 WI-114/);
-  // 0.1.0 DAG is still present, but demoted into the work-item detail section.
-  const detail = harness.collect(host, harness.byClass('stwd-detail-section'))[0];
-  assert.ok(detail, 'work-item details wrap the DAG');
-  assert.ok(harness.collect([detail], harness.byClass('stwd-graph-view')).length >= 0);
+  assert.equal(harness.collect(host, harness.byClass('stwd-graph-view')).length, 0, 'TeamGraph stays off the workbench tab');
 });
 
 test('prefers-reduced-motion freezes loops to still while status text remains', async () => {
@@ -261,8 +257,8 @@ test('prefers-reduced-motion freezes loops to still while status text remains', 
   const instance = factory((name) => (name === 'react' ? harness.stub : {}));
   const { ctx, registered } = createClientContext();
   instance.apply(ctx);
-  const entry = registered.find((item) => item.options.name === 'sidebar.right.pane.tab');
-  const face = entry.options.inject('session-motion');
+  const entry = registered.find((item) => item.options.name === 'conversation.view');
+  const face = typeof entry.options.inject === 'function' ? entry.options.inject('session-motion') : {};
   const host = await harness.settle(() => entry.component({
     ...face,
     sessionId: 'session-motion',
@@ -284,18 +280,19 @@ test('prefers-reduced-motion freezes loops to still while status text remains', 
   assert.match(panelText, /待批准|AwaitingApproval|请批 Mandate/);
 });
 
-test('header corner stays visible when idle, and utilities still open the workbench', async () => {
+test('header corner stays visible when idle, opens the workbench, and utilities open the canvas', async () => {
   const { factory } = await loadClientFactory();
   const harness = createRenderHarness();
   const instance = factory((name) => (name === 'react' ? harness.stub : {}));
   const { ctx, registered } = createClientContext();
   instance.apply(ctx);
   const corner = slot(registered, 'conversation.session.header.corner');
-  let opened = 0;
+  const opened = [];
   const empty = await harness.settle(() => corner.component({
     workItems: [],
-    text: { stageTitle: '工作台', openPanel: '打开工作台' },
-    openPanel: () => { opened += 1; },
+    text: { tabTitle: '工作台', openWorkbench: '打开工作台', openPanel: '打开工作台', canvasTitle: '画布', openCanvas: '打开画布' },
+    openView: (view) => { opened.push(['view', view]); },
+    openPanel: () => { opened.push(['panel']); },
   }));
   assert.ok(empty.length > 0, 'an empty corner must keep the workbench entry visible');
   const entry = harness.collect(empty, harness.byClass('stwd-mini-entry'));
@@ -303,18 +300,21 @@ test('header corner stays visible when idle, and utilities still open the workbe
   assert.equal(entry[0].props['aria-label'], '打开工作台');
   assert.doesNotMatch(String(entry[0].props['aria-label'] || ''), /舞台|Super Bot 团队面板/);
   entry[0].props.onClick();
-  assert.equal(opened, 1, 'the idle entry opens the workbench');
-  const live = await harness.settle(() => corner.component({ workItems: ITEMS, text: { stageTitle: '工作台' } }));
+  assert.deepEqual(opened, [['view', 'superbot-workbench']], 'the idle entry opens the workbench');
+  const live = await harness.settle(() => corner.component({ workItems: ITEMS, text: { stageTitle: '仓 / 探 / 作 / 验' } }));
   assert.ok(harness.collect(live, harness.byClass('stwd-resident-mini')).length >= 4);
   assert.equal(harness.collect(live, harness.byClass('stwd-mini-entry')).length, 0);
 
   const utilities = slot(registered, 'conversation.session.header.utilities', (entry) => entry.options.id === 'superbot-board');
   let utilityOpened = 0;
-  const buttonHost = harness.expand(utilities.component({ text: { openPanel: '打开工作台', stageTitle: '工作台' }, openPanel: () => { utilityOpened += 1; } }));
+  const buttonHost = harness.expand(utilities.component({
+    text: { canvasTitle: '画布', openCanvas: '打开画布' },
+    openPanel: () => { utilityOpened += 1; },
+  }));
   const buttons = harness.collect(buttonHost, harness.byClass('stwd-headbtn'));
   assert.equal(buttons.length, 1);
-  assert.equal(buttons[0].props['aria-label'], '打开工作台');
-  assert.equal(harness.textOf(harness.collect(buttonHost, harness.byClass('stwd-headbtn-label'))[0]), '工作台');
+  assert.equal(buttons[0].props['aria-label'], '打开画布');
+  assert.equal(harness.textOf(harness.collect(buttonHost, harness.byClass('stwd-headbtn-label'))[0]), '画布');
   buttons[0].props.onClick();
   assert.equal(utilityOpened, 1);
 });

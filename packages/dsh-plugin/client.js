@@ -11,6 +11,7 @@ window.__ModuleLoader__.load({
     const TAB_ID = 'ds-superbot';
     const TAB_KIND = 'superbot';
     const WORKBENCH_VIEW_ID = 'superbot-workbench';
+    const HISTORY_LIMIT = 8;
     const LOGO_FILL = '#4D6BFE';
     const LOGO_EYES = Object.freeze([
       { cx: '37.490', cy: '26.870', rx: '2.436', ry: '3.840' },
@@ -54,8 +55,12 @@ window.__ModuleLoader__.load({
         nav: 'Super Bot',
         tabTitle: '工作台',
         title: '工作台',
+        canvasTitle: '画布',
+        canvasSubtitle: '角色 · 模型 · 任务 · 状态',
         subtitle: '角色 · 模型 · 任务 · 状态',
         openPanel: '打开工作台',
+        openWorkbench: '打开工作台',
+        openCanvas: '打开画布',
         refresh: '刷新',
         viewGroup: '视图',
         viewGraph: '图',
@@ -151,8 +156,8 @@ window.__ModuleLoader__.load({
         emptySteps: [
           '让 Lead 调 superbot_dispatch(role=..., description=..., prompt=...)。',
           '节点出现后点它就能进入子会话。',
-          '任务进度看原生任务列表（共享任务板 / 会话任务列表）。',
         ],
+        workItemFallback: '工作项',
         artifactsTitle: '产物',
         artifactsEmpty: '在 tmp/superbot/<run>/ 下还没有找到产物。',
         artifactsMissing: '宿主没有提供工作区文件服务，读不到产物。',
@@ -252,8 +257,12 @@ window.__ModuleLoader__.load({
         nav: 'Super Bot',
         tabTitle: 'Workbench',
         title: 'Workbench',
+        canvasTitle: 'Canvas',
+        canvasSubtitle: 'Role · model · task · state',
         subtitle: 'Role · model · task · state',
         openPanel: 'Open the workbench',
+        openWorkbench: 'Open the workbench',
+        openCanvas: 'Open the canvas',
         refresh: 'Refresh',
         viewGroup: 'View',
         viewGraph: 'Graph',
@@ -349,8 +358,8 @@ window.__ModuleLoader__.load({
         emptySteps: [
           'Have the lead call superbot_dispatch(role=..., description=..., prompt=...).',
           'Click a node to open that child session.',
-          'Read task progress from the native task list (shared board or session tasks).',
         ],
+        workItemFallback: 'Work item',
         artifactsTitle: 'Artifacts',
         artifactsEmpty: 'No artifacts under tmp/superbot/<run>/ yet.',
         artifactsMissing: 'The host serves no workspace files, so artifacts are unavailable.',
@@ -2079,13 +2088,57 @@ window.__ModuleLoader__.load({
       return 'Signal';
     }
 
+    function isUuidLike(value) {
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || '').trim());
+    }
+
+    function looksLikeSystemPrompt(value) {
+      const text = String(value || '').trim();
+      if (text === '') return false;
+      return /^(你是|您是|You are\b|As an?\b|作为|扮演)/i.test(text);
+    }
+
+    function isPresentFact(value) {
+      if (value === undefined || value === null) return false;
+      if (Array.isArray(value)) return value.length > 0;
+      if (typeof value === 'object') {
+        if (isPresentFact(value.id) || isPresentFact(value.status) || isPresentFact(value.model)) return true;
+        return false;
+      }
+      const text = String(value).trim();
+      return text !== '' && text !== '无' && text !== 'None';
+    }
+
+    function isSuperBotWorkItem(item) {
+      if (!item || typeof item !== 'object') return false;
+      if (item.origin && item.origin !== 'agent-row') return true;
+      if (isPresentFact(item.mandate) || isPresentFact(item.receipt)) return true;
+      if (Array.isArray(item.gates) && item.gates.length > 0) return true;
+      if (item.workItemId && String(item.workItemId) !== String(item.id) && String(item.workItemId) !== String(item.agentId || '')) return true;
+      if (item.workItemState) return true;
+      return false;
+    }
+
+    function humanWorkItemTitle(item, text) {
+      if (!item) return '';
+      const candidates = [item.title, item.task, item.label, item.roleName, item.role];
+      for (const raw of candidates) {
+        if (raw === undefined || raw === null) continue;
+        const value = String(raw).trim();
+        if (value === '' || isUuidLike(value) || looksLikeSystemPrompt(value)) continue;
+        return value;
+      }
+      return (text && text.workItemFallback) || '';
+    }
+
     function workItemsFromAgents(rows, options) {
       const list = Array.isArray(rows) ? rows.filter(Boolean) : [];
       const authority = (options && options.authority) || DEFAULT_AUTHORITY;
-      return list.map((row) => ({
+      return list.filter(isSuperBotWorkItem).map((row) => ({
         id: row.workItemId || row.taskId || row.id,
+        agentId: row.id,
         state: row.workItemState || workItemStateFromAgent(row),
-        title: row.task || row.title || row.label || '',
+        title: humanWorkItemTitle(row, (options && options.text) || {}),
         face: faceForRole(row.role),
         role: row.role,
         model: row.model || null,
@@ -2157,26 +2210,9 @@ window.__ModuleLoader__.load({
       if (Array.isArray(src.items)) return src.items;
       const project = typeof src.useProjection === 'function' ? src.useProjection : null;
       if (!project) return [];
-      const catalog = project('subagentCatalog');
-      const children = Array.isArray(catalog) ? catalog.filter((entry) => entry && entry.mode !== 'external') : [];
-      if (children.length === 0) return [];
-      const sessions = typeof src.useSessions === 'function' ? src.useSessions : null;
-      const statuses = typeof src.useSessionStatus === 'function' ? src.useSessionStatus : null;
-      const statusState = statuses ? statuses((state) => state) : undefined;
-      const rows = children.map((entry) => {
-        const id = String(entry.id);
-        const status = statusState && typeof statusState.get === 'function' ? statusState.get(id) : null;
-        return {
-          id,
-          label: entry.label,
-          role: roleOf(entry.label),
-          running: Boolean(status && status.running),
-          waiting: Boolean(status && status.pendingInteraction),
-          state: (status && status.pendingInteraction) ? 'waiting' : (status && status.running ? 'running' : (status && status.running === false ? 'done' : 'idle')),
-          done: Boolean(status && status.running === false && !status.pendingInteraction),
-        };
-      });
-      return resolveWorkItems({ rows, authority: src.authority });
+      const fromProject = project('workItems') || project('ledger');
+      if (Array.isArray(fromProject)) return fromProject;
+      return [];
     }
 
     function workItemStateLabel(state, text) {
@@ -3596,9 +3632,11 @@ window.__ModuleLoader__.load({
       const items = collectWorkItems(props);
       const field = stageField(items);
       const text = props.text || {};
-      const groupLabel = text.stageTitle || 'ds-superbot';
-      const openLabel = text.openPanel || groupLabel;
-      const open = () => { if (typeof props.openPanel === 'function') props.openPanel(); };
+      const groupLabel = text.stageTitle || text.tabTitle || 'ds-superbot';
+      const openLabel = text.openWorkbench || text.openPanel || groupLabel;
+      const open = () => {
+        openWorkbenchView({ sessionId: props.sessionId, props, ctx: props.ctx });
+      };
       const selectFace = (presence) => {
         workbenchFocus.set(props.sessionId, { face: presence && presence.face });
         if (typeof props.onSelect === 'function') props.onSelect(presence);
@@ -3662,22 +3700,30 @@ window.__ModuleLoader__.load({
       );
     }
 
+    function factDisplay(value) {
+      if (!isPresentFact(value)) return null;
+      if (Array.isArray(value)) return value.join(', ');
+      if (typeof value === 'object') return String(value.id || value.status || value.model || '');
+      return String(value);
+    }
+
     function WorkItemFacts(props) {
       const item = props.item;
       const text = props.text || {};
       if (!item) return null;
-      const gates = Array.isArray(item.gates) ? item.gates.join(', ') : (item.gates || text.detailNone);
-      const mandate = item.mandate ? (item.mandate.id || item.mandate) : text.detailNone;
-      const receipt = item.receipt ? (item.receipt.id || item.receipt.status || item.receipt) : text.detailNone;
-      const model = item.model && typeof item.model === 'object' ? (item.model.id || item.model.model || '') : (item.model || text.detailNone);
-      const duration = item.duration || item.elapsedMs ? fmtDuration(item.duration || item.elapsedMs) : text.detailNone;
+      const model = item.model && typeof item.model === 'object' ? (item.model.id || item.model.model || item.model) : item.model;
+      const duration = item.duration || item.elapsedMs ? fmtDuration(item.duration || item.elapsedMs) : null;
+      const rows = [
+        item.state ? [text.detailState, workItemStateLabel(item.state, text)] : null,
+        isPresentFact(item.mandate) ? [text.detailMandate, factDisplay(item.mandate)] : null,
+        isPresentFact(item.gates) ? [text.detailGates, factDisplay(item.gates)] : null,
+        isPresentFact(item.receipt) ? [text.detailReceipt, factDisplay(item.receipt)] : null,
+        isPresentFact(model) ? [text.detailModel, factDisplay(model)] : null,
+        duration ? [text.detailElapsed, String(duration)] : null,
+      ].filter(Boolean);
+      if (rows.length === 0) return null;
       return h('dl', { className: 'stwd-wifacts' },
-        h('div', null, h('dt', null, text.detailState), h('dd', null, workItemStateLabel(item.state, text))),
-        h('div', null, h('dt', null, text.detailMandate), h('dd', null, String(mandate))),
-        h('div', null, h('dt', null, text.detailGates), h('dd', null, String(gates || text.detailNone))),
-        h('div', null, h('dt', null, text.detailReceipt), h('dd', null, String(receipt))),
-        h('div', null, h('dt', null, text.detailModel), h('dd', null, String(model || text.detailNone))),
-        h('div', null, h('dt', null, text.detailElapsed), h('dd', null, String(duration))),
+        rows.map((row, index) => h('div', { key: 'fact-' + index }, h('dt', null, row[0]), h('dd', null, row[1]))),
       );
     }
 
@@ -3862,11 +3908,8 @@ window.__ModuleLoader__.load({
       const sessionId = String(props.sessionId === undefined || props.sessionId === null ? '' : props.sessionId);
       const nowOf = typeof props.now === 'function' ? props.now : () => Date.now();
       const refreshChild = typeof props.refreshChild === 'function' ? props.refreshChild : null;
-      const loadRun = props.loadRun;
 
       const catalog = project('subagentCatalog');
-      const team = project('agentTeam');
-      const todos = project('todos');
       const leadModelSelection = project('modelSelection');
       const leadUsage = project('tokenUsage');
       const leadStats = project('sessionStats');
@@ -3874,33 +3917,9 @@ window.__ModuleLoader__.load({
       const projections = sessions((state) => (state && state.projectionsBySession ? state.projectionsBySession : undefined));
       const statusState = statuses((state) => state);
 
-      const [facts, setFacts] = useState({ status: 'loading', dir: '', artifacts: [] });
-      const [reload, setReload] = useState(0);
       const [tick, setTick] = useState(0);
       const [selectedId, setSelectedId] = useState(null);
-      const [artifactsOpen, setArtifactsOpen] = useState(false);
       const refreshed = useRef({});
-
-      useEffect(() => {
-        let live = true;
-        const run = () => {
-          if (typeof loadRun !== 'function') {
-            if (live) setFacts({ status: 'unsupported', dir: '', artifacts: [] });
-            return;
-          }
-          Promise.resolve()
-            .then(() => loadRun())
-            .then((next) => { if (live && next) setFacts(next); })
-            .catch(() => { if (live) setFacts({ status: 'error', dir: '', artifacts: [] }); });
-        };
-        run();
-        const timer = typeof setInterval === 'function' ? setInterval(run, RUN_POLL_MS) : null;
-        if (timer !== null && typeof timer === 'object' && typeof timer.unref === 'function') timer.unref();
-        return () => {
-          live = false;
-          if (timer !== null) clearInterval(timer);
-        };
-      }, [loadRun, reload]);
 
       const children = useMemo(
         () => (Array.isArray(catalog) ? catalog.filter((entry) => entry && entry.mode !== 'external') : []),
@@ -3954,7 +3973,6 @@ window.__ModuleLoader__.load({
       }), [sessionId, summaries, statusState, leadModelSelection, leadUsage, leadStats, text, lang, tick]);
 
       const fleet = useMemo(() => fleetFacts(rows), [rows]);
-      const progress = useMemo(() => taskProgressOf(team, todos), [team, todos]);
 
       const active = rows.some((row) => row.running || row.waiting);
       useEffect(() => {
@@ -3971,7 +3989,6 @@ window.__ModuleLoader__.load({
       };
       const toggleAgent = (id) => setSelectedId((current) => (current === id ? null : id));
       const refreshAll = () => {
-        setReload((current) => current + 1);
         if (refreshChild === null) return;
         for (const entry of children) {
           const id = String(entry.id);
@@ -3979,12 +3996,127 @@ window.__ModuleLoader__.load({
         }
       };
 
+      const rosterActions = h('span', { className: 'stwd-roster-meta' },
+        fleet.counts.running > 0 ? h(StatusPill, { tone: 'progress' }, text.laneRunning + ' ' + fleet.counts.running) : null,
+        fleet.counts.waiting > 0 ? h(StatusPill, { tone: 'warn' }, text.laneWaiting + ' ' + fleet.counts.waiting) : null,
+        fleet.counts.done > 0 ? h(StatusPill, { tone: 'done' }, text.laneDone + ' ' + fleet.counts.done) : null,
+      );
+
+      return h('div', { className: 'stwd-root stwd-panel stwd-canvas' },
+        styles(),
+        h('header', { className: 'stwd-panel-head' },
+          h('div', { className: 'stwd-panel-head-row' },
+            h('span', { className: 'stwd-panel-badge', 'aria-hidden': 'true' }, h(ProjectLogo, { size: 15 })),
+            h('h2', { className: 'stwd-panel-title' }, text.canvasTitle || text.title),
+            rosterActions,
+            h('button', {
+              type: 'button',
+              className: 'stwd-iconbtn stwd-panel-refresh',
+              title: text.refresh,
+              'aria-label': text.refresh,
+              onClick: refreshAll,
+            }, '⟳'),
+          ),
+          h('div', { className: 'stwd-panel-subrow' },
+            h('p', { className: 'stwd-panel-sub' }, text.canvasSubtitle || text.subtitle),
+          ),
+        ),
+        h('div', { className: 'stwd-roster stwd-roster-detail' },
+          h(ErrorBoundary, { fallbackTitle: text.sectionFailed }, h(TeamGraph, {
+            text,
+            lead,
+            rows,
+            selectedId,
+            sessionId,
+            onOpen: openAgent,
+            onToggle: toggleAgent,
+          })),
+          children.length === 0
+            ? h(EmptyState, { title: text.emptyTitle, note: text.emptyBody, steps: text.emptySteps })
+            : null,
+        ),
+      );
+    }
+
+    function useDecideActions(props, text) {
+      const [decideStatus, setDecideStatus] = useState(null);
+      const runDecide = (item, action) => {
+        if (typeof props.onDecide !== 'function') {
+          setDecideStatus({ tone: 'error', text: text.decideUnwired || '' });
+          return;
+        }
+        return Promise.resolve()
+          .then(() => props.onDecide(item, action))
+          .then((result) => {
+            const body = result && result.result ? result.result : result;
+            const kind = body && body.kind;
+            const failed = result && (result.ok === false || kind === 'error');
+            if (failed) {
+              const message = (body && body.text) || result.error || result.text || text.decideUnwired;
+              setDecideStatus({ tone: 'error', text: message });
+              return result;
+            }
+            setDecideStatus({
+              tone: 'ok',
+              text: action === 'approve' ? (text.decideApproved || '') : (text.decideRejected || ''),
+            });
+            if (typeof props.onDecided === 'function') props.onDecided(item, action, result);
+            return result;
+          })
+          .catch((error) => {
+            setDecideStatus({ tone: 'error', text: error && error.message ? error.message : String(error) });
+          });
+      };
+      const confirmReject = (item) => {
+        const ask = typeof props.confirm === 'function'
+          ? props.confirm
+          : (message) => {
+            const root = typeof globalThis !== 'undefined' ? globalThis : null;
+            const win = (root && root.window) ? root.window : root;
+            if (win && typeof win.confirm === 'function') return win.confirm(message);
+            return false;
+          };
+        if (ask(text.decideRejectConfirm || '')) runDecide(item, 'reject');
+      };
+      return { decideStatus, runDecide, confirmReject };
+    }
+
+    function WorkbenchPane(props) {
+      const text = props.text || {};
+      const sessionId = String(props.sessionId === undefined || props.sessionId === null ? '' : props.sessionId);
+      const loadRun = props.loadRun;
+      const [facts, setFacts] = useState({ status: 'loading', dir: '', artifacts: [] });
+      const [reload, setReload] = useState(0);
+      const [selectedId, setSelectedId] = useState(null);
+      const [artifactsOpen, setArtifactsOpen] = useState(false);
+      const { decideStatus, runDecide, confirmReject } = useDecideActions(props, text);
+
+      useEffect(() => {
+        let live = true;
+        const run = () => {
+          if (typeof loadRun !== 'function') {
+            if (live) setFacts({ status: 'unsupported', dir: '', artifacts: [] });
+            return;
+          }
+          Promise.resolve()
+            .then(() => loadRun())
+            .then((next) => { if (live && next) setFacts(next); })
+            .catch(() => { if (live) setFacts({ status: 'error', dir: '', artifacts: [] }); });
+        };
+        run();
+        const timer = typeof setInterval === 'function' ? setInterval(run, RUN_POLL_MS) : null;
+        if (timer !== null && typeof timer === 'object' && typeof timer.unref === 'function') timer.unref();
+        return () => {
+          live = false;
+          if (timer !== null) clearInterval(timer);
+        };
+      }, [loadRun, reload]);
+
       const workItems = useMemo(() => resolveWorkItems({
         workItems: props.workItems,
-        rows,
         facts,
         authority: props.authority || DEFAULT_AUTHORITY,
-      }), [props.workItems, rows, facts, props.authority]);
+      }), [props.workItems, facts, props.authority]);
 
       const focus = useWorkbenchFocus(sessionId);
       useEffect(() => {
@@ -4002,104 +4134,128 @@ window.__ModuleLoader__.load({
       const selectedWorkItem = workItems.find((item) => item && (item.id === selectedId || item.agentId === selectedId))
         || workItems[0]
         || null;
+      const sections = sortConsoleSections(workItems);
+      const history = sections.history
+        .filter((item) => !selectedWorkItem || String(item.id) !== String(selectedWorkItem.id))
+        .slice(0, HISTORY_LIMIT);
+      const health = healthSummary({
+        authority: props.authority || DEFAULT_AUTHORITY,
+        paused: props.paused,
+        healthy: props.healthy,
+        watchdogEnabled: props.watchdogEnabled,
+        subscribeEnabled: props.subscribeEnabled,
+      });
+      const healthAbnormal = !health.healthy || health.paused;
+      const currentTitle = humanWorkItemTitle(selectedWorkItem, text);
+      const artifacts = Array.isArray(facts.artifacts) ? facts.artifacts : [];
+      const openItem = (item) => {
+        if (item && item.id) {
+          setSelectedId(item.id);
+          workbenchFocus.set(sessionId, { itemId: item.id, face: item.face });
+        }
+        if (typeof props.onSelectItem === 'function') props.onSelectItem(item);
+      };
 
-      const rosterActions = h('span', { className: 'stwd-roster-meta' },
-        fleet.counts.running > 0 ? h(StatusPill, { tone: 'progress' }, text.laneRunning + ' ' + fleet.counts.running) : null,
-        fleet.counts.waiting > 0 ? h(StatusPill, { tone: 'warn' }, text.laneWaiting + ' ' + fleet.counts.waiting) : null,
-        fleet.counts.done > 0 ? h(StatusPill, { tone: 'done' }, text.laneDone + ' ' + fleet.counts.done) : null,
-      );
-
-      const rosterBody = h('div', { className: 'stwd-roster stwd-roster-detail' },
-        h(TeamGraph, {
-          text,
-          lead,
-          rows,
-          selectedId,
-          sessionId,
-          onOpen: openAgent,
-          onToggle: toggleAgent,
-        }),
-        children.length === 0
-          ? h(EmptyState, { title: text.emptyTitle, note: text.emptyBody, steps: text.emptySteps })
-          : null,
-      );
-
-      const evidence = [
-        h(ErrorBoundary, { fallbackTitle: text.sectionFailed }, h(TaskProgress, { text, progress })),
-        h('section', { className: 'stwd-section stwd-evidence-section' },
-          h(SectionHead, { title: text.evidenceTitle || text.workItemDetail }),
-          selectedWorkItem ? h(WorkItemFacts, { item: selectedWorkItem, text }) : null,
-          h(ErrorBoundary, { fallbackTitle: text.sectionFailed }, h(Artifacts, {
-            text,
-            facts,
-            open: artifactsOpen,
-            onToggle: () => setArtifactsOpen((current) => !current),
-            onOpen: (path) => { if (typeof props.openFile === 'function') props.openFile(path); },
-          })),
+      const decideBlock = sections.decisions.length === 0 ? null : h('section', {
+        className: 'stwd-console-block stwd-console-decide',
+        'aria-labelledby': 'stwd-decide-title',
+      },
+        h('h2', { id: 'stwd-decide-title', className: 'stwd-console-h' }, text.decideTitle),
+        h('ul', { className: 'stwd-console-list' },
+          sections.decisions.map((item) => h('li', { key: item.id, className: 'stwd-console-row' },
+            h('div', {
+              className: 'stwd-console-row-main',
+              onClick: () => openItem(item),
+            },
+              item.id && !isUuidLike(item.id) ? h('span', { className: 'stwd-console-id' }, item.id) : null,
+              h('span', { className: 'stwd-console-state' }, decisionKindLabel(item, text)),
+              h('span', { className: 'stwd-console-title-line' }, humanWorkItemTitle(item, text)),
+            ),
+            h('div', { className: 'stwd-console-actions' },
+              h('button', {
+                type: 'button',
+                className: 'stwd-console-btn stwd-console-btn-approve',
+                onClick: () => runDecide(item, 'approve'),
+              }, text.decideApprove),
+              h('button', {
+                type: 'button',
+                className: 'stwd-console-btn stwd-console-btn-danger',
+                onClick: () => confirmReject(item),
+              }, text.decideReject),
+              h('button', {
+                type: 'button',
+                className: 'stwd-console-btn stwd-console-btn-evidence',
+                onClick: () => openItem(item),
+              }, text.seeEvidence),
+            ),
+          )),
         ),
-      ];
-      const stage = h('section', { className: 'stwd-section stwd-stage-section stwd-workbench-mid' },
-        h(SectionHead, { title: text.stageTitle }),
+        decideStatus ? h('p', {
+          className: 'stwd-console-decide-status' + (decideStatus.tone === 'error' ? ' stwd-console-decide-status-error' : ''),
+        }, decideStatus.text) : null,
+      );
+
+      const healthBlock = !healthAbnormal ? null : h('section', {
+        className: 'stwd-console-block stwd-console-health',
+        'aria-labelledby': 'stwd-health-title',
+      },
+        h('h2', { id: 'stwd-health-title', className: 'stwd-console-h' }, text.healthTitle),
+        h('p', { className: 'stwd-console-health-line' },
+          health.healthy ? text.healthOk : text.healthPaused,
+        ),
+      );
+
+      const faces = h('section', { className: 'stwd-section stwd-stage-section stwd-workbench-faces' },
         h(ErrorBoundary, { fallbackTitle: text.sectionFailed }, h(ResidentStage, {
           items: workItems,
           text,
           reducedMotion: props.reducedMotion,
           onSelect: (presence) => {
             const match = workItems.find((item) => (item.face || faceForRole(item.role)) === presence.face);
-            if (match) {
-              setSelectedId(match.id);
-              workbenchFocus.set(sessionId, { itemId: match.id, face: presence.face });
-            }
+            if (match) openItem(match);
+            else workbenchFocus.set(sessionId, { face: presence.face });
           },
         })),
       );
-      const historyExtra = h('section', { className: 'stwd-section stwd-detail-section' },
-        h(SectionHead, {
-          title: text.workItemDetail,
-          count: workItems.length === 0 ? '' : String(workItems.length),
-          actions: rosterActions,
-        }),
-        h(SectionHead, {
-          title: text.dagTitle,
-          count: fleet.total === 0 ? '' : String(fleet.total),
-        }),
-        h(ErrorBoundary, { fallbackTitle: text.sectionFailed }, rosterBody),
-        h('p', { className: 'stwd-note stwd-native-note' }, text.nativeListNote),
+
+      const artifactsBlock = artifacts.length > 0 ? h(ErrorBoundary, { fallbackTitle: text.sectionFailed }, h(Artifacts, {
+        text,
+        facts,
+        open: artifactsOpen,
+        onToggle: () => setArtifactsOpen((current) => !current),
+        onOpen: (path) => { if (typeof props.openFile === 'function') props.openFile(path); },
+      })) : null;
+      const current = (selectedWorkItem || artifactsBlock) ? h('section', { className: 'stwd-section stwd-current-item' },
+        selectedWorkItem ? h('h3', { className: 'stwd-current-title' }, currentTitle) : null,
+        selectedWorkItem ? h(WorkItemFacts, { item: selectedWorkItem, text }) : null,
+        artifactsBlock,
+      ) : null;
+
+      const historyBlock = history.length === 0 ? null : h('section', {
+        className: 'stwd-console-block stwd-console-history',
+        'aria-labelledby': 'stwd-history-title',
+      },
+        h('h2', { id: 'stwd-history-title', className: 'stwd-console-h' }, text.historyTitle),
+        h('ul', { className: 'stwd-console-list stwd-history-lines' },
+          history.map((item) => h('li', {
+            key: 'hist-' + item.id,
+            className: 'stwd-console-row stwd-console-history-row stwd-history-line',
+            onClick: () => openItem(item),
+          },
+            h('span', { className: 'stwd-console-state' }, workItemStateLabel(item.state, text)),
+            h('span', { className: 'stwd-console-title-line' }, humanWorkItemTitle(item, text)),
+            item.id && !isUuidLike(item.id) ? h('span', { className: 'stwd-console-id' }, item.id) : null,
+          )),
+        ),
       );
 
-      return h('div', { className: 'stwd-root stwd-panel stwd-workbench' },
+      return h('div', { className: 'stwd-root stwd-panel stwd-workbench stwd-workbench-clean' },
         styles(),
-        h('header', { className: 'stwd-panel-head' },
-          h('div', { className: 'stwd-panel-head-row' },
-            h('span', { className: 'stwd-panel-badge', 'aria-hidden': 'true' }, h(ProjectLogo, { size: 15 })),
-            h('h2', { className: 'stwd-panel-title' }, text.title),
-            h('button', {
-              type: 'button',
-              className: 'stwd-iconbtn stwd-panel-refresh',
-              title: text.refresh,
-              'aria-label': text.refresh,
-              disabled: facts.status === 'loading',
-              onClick: refreshAll,
-            }, facts.status === 'loading' ? '…' : '⟳'),
-          ),
-          h('div', { className: 'stwd-panel-subrow' },
-            h('p', { className: 'stwd-panel-sub' }, text.subtitle),
-          ),
-        ),
-        h(SuperBotConsole, {
-          ...props,
-          workItems,
-          sessionId,
-          text,
-          embedded: true,
-          evidence,
-          stage,
-          historyExtra,
-          onSelectItem: (item) => {
-            if (item && item.id) setSelectedId(item.id);
-            if (typeof props.onSelectItem === 'function') props.onSelectItem(item);
-          },
-        }),
+        decideBlock,
+        healthBlock,
+        faces,
+        current,
+        historyBlock,
       );
     }
 
@@ -4118,7 +4274,7 @@ window.__ModuleLoader__.load({
         if (typeof props.completeViewRequest === 'function') props.completeViewRequest();
         return undefined;
       }, [props.viewRequest, props.sessionId]);
-      return h(SuperBotPanel, props);
+      return h(WorkbenchPane, props);
     }
 
     function DecisionCards(props) {
@@ -4165,8 +4321,8 @@ window.__ModuleLoader__.load({
             presence ? h(ResidentFace, { presence, size: 36, mini: true, reducedMotion: true }) : null,
             h('div', { className: 'stwd-decision-card-body' },
               h('div', { className: 'stwd-decision-card-kicker' }, chatCardKicker(speech, text)),
-              h('div', { className: 'stwd-decision-card-title' }, item.title || item.id),
-              h('div', { className: 'stwd-decision-card-id' }, item.id),
+              h('div', { className: 'stwd-decision-card-title' }, humanWorkItemTitle(item, text) || item.title || ''),
+              item.id && !isUuidLike(item.id) ? h('div', { className: 'stwd-decision-card-id' }, item.id) : null,
             ),
             h('div', {
               className: 'stwd-decision-card-actions',
@@ -4198,14 +4354,14 @@ window.__ModuleLoader__.load({
       return h('span', { className: 'stwd-tabtitle' },
         styles(),
         h(SuperBotIcon, { size: 14 }),
-        h('span', { className: 'stwd-tabtitle-text' }, text.tabTitle),
+        h('span', { className: 'stwd-tabtitle-text' }, text.canvasTitle || text.tabTitle),
       );
     }
 
     function HeaderButton(props) {
       const text = props.text || {};
-      const label = text.stageTitle || text.tabTitle || 'ds-superbot';
-      const openLabel = text.openPanel || label;
+      const label = text.canvasTitle || '画布';
+      const openLabel = text.openCanvas || text.openPanel || label;
       return h('span', { className: 'stwd-headwrap' },
         styles(),
         h('button', {
@@ -4877,6 +5033,12 @@ window.__ModuleLoader__.load({
       '.stwd-console-btn{font-size:11px;line-height:1.2;padding:4px 8px;border:.5px solid var(--dsw-alias-border-l2);border-radius:6px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);cursor:pointer}',
       '.stwd-console-btn-danger{color:var(--dsw-alias-state-error-primary)}',
       '.stwd-console-empty{margin:0;font-size:11px;color:var(--dsw-alias-label-secondary)}',
+      '.stwd-workbench-clean{display:flex;flex-direction:column;gap:12px;padding:10px 12px 16px;min-width:0}',
+      '.stwd-current-item{display:flex;flex-direction:column;gap:8px;min-width:0}',
+      '.stwd-current-title{margin:0;font-size:13px;line-height:20px;font-weight:600;color:var(--dsw-alias-label-primary)}',
+      '.stwd-history-line{display:flex;align-items:baseline;gap:8px;cursor:pointer;padding:4px 0}',
+      '.stwd-history-lines{margin:0;padding:0;list-style:none}',
+      '.stwd-canvas .stwd-roster{flex:1;min-height:0}',
       '.stwd-console-health-compact .stwd-console-health-extra{display:none}',
       '.stwd-console-health-line,.stwd-console-health-extra{margin:0;font-size:11px;color:var(--dsw-alias-label-secondary)}',
       '.stwd-wifacts{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;margin:4px 0 0;font-size:11px}',
@@ -5067,10 +5229,17 @@ window.__ModuleLoader__.load({
         createConsoleOnDecide,
         AUTO_MERGE_DISABLED,
         WORKBENCH_VIEW_ID,
+        HISTORY_LIMIT,
         LOGO_FILL,
         LOGO_EYES,
         ProjectLogo,
         openWorkbenchView,
+        humanWorkItemTitle,
+        isUuidLike,
+        looksLikeSystemPrompt,
+        isSuperBotWorkItem,
+        collectWorkItems,
+        workItemsFromAgents,
         FACES,
         CAPABILITIES,
         CAPABILITY_IDS,
@@ -5154,12 +5323,12 @@ window.__ModuleLoader__.load({
           sctx.effect(() => sctx.sidebarRightTabs.register({
             id: TAB_ID,
             kind: TAB_KIND,
-            title: () => textOf().tabTitle,
+            title: () => textOf().canvasTitle,
             guide: [{
               id: 'superbot-board',
               order: 40,
-              title: () => textOf().tabTitle,
-              description: () => textOf().subtitle,
+              title: () => textOf().canvasTitle,
+              description: () => textOf().canvasSubtitle || textOf().subtitle,
             }],
           }), 'superbot: board tab type');
 
@@ -5189,6 +5358,7 @@ window.__ModuleLoader__.load({
             inject: (sessionId) => ({
               text: textOf(),
               sessionId,
+              ctx: sctx,
               openPanel: () => { openPanel(sctx); },
             }),
           }, MiniFaces)), 'superbot: header mini faces');

@@ -1119,7 +1119,8 @@ test('the client registers a right-sidebar board, its title, a header button and
   assert.equal(tabTypes.length, 1);
   assert.equal(tabTypes[0].id, 'ds-superbot');
   assert.equal(tabTypes[0].kind, 'superbot', 'openTab() names the kind');
-  assert.match(tabTypes[0].title('sidebar://superbot'), /工作台/);
+  assert.match(tabTypes[0].title('sidebar://superbot'), /画布/);
+  assert.doesNotMatch(tabTypes[0].title('sidebar://superbot'), /工作台|舞台|Stage/);
   assert.equal(tabTypes[0].guide.length, 1, 'the guide page offers a way in');
   assert.equal(tabTypes[0].guide[0].id, 'superbot-board');
 
@@ -1127,22 +1128,24 @@ test('the client registers a right-sidebar board, its title, a header button and
   const renderEmpty = panelRender(registered, 'session-empty', {});
   const emptyHost = await harness.settle(renderEmpty);
   const emptyText = emptyHost.map((node) => harness.textOf(node)).join('\n');
-  assert.match(emptyText, /工作台/);
+  assert.match(emptyText, /画布/);
+  assert.doesNotMatch(emptyText, /工作台/);
   assert.doesNotMatch(emptyText, /Super Bot 团队面板/);
   assert.doesNotMatch(emptyText, /舞台/);
   assert.match(emptyText, /还没有派发智能体/);
-  assert.match(emptyText, /原生任务列表为空/);
-  assert.match(emptyText, /产物/);
+  assert.doesNotMatch(emptyText, /原生任务列表为空/);
+  assert.doesNotMatch(emptyText, /产物/);
+  assert.doesNotMatch(emptyText, /任务进度取自 DSH/);
 
   // The header button renders as a real control and calls the injected opener.
   const buttonEntry = registered.find((entry) => entry.options.name === 'conversation.session.header.utilities' && entry.options.id === 'superbot-board');
   let opened = 0;
-  const buttonHost = harness.expand(buttonEntry.component({ text: { openPanel: '打开工作台', stageTitle: '工作台' }, openPanel: () => { opened += 1; } }));
+  const buttonHost = harness.expand(buttonEntry.component({ text: { canvasTitle: '画布', openCanvas: '打开画布' }, openPanel: () => { opened += 1; } }));
   const buttons = harness.collect(buttonHost, harness.byClass('stwd-headbtn'));
   assert.equal(buttons.length, 1);
-  assert.equal(buttons[0].props['aria-label'], '打开工作台');
+  assert.equal(buttons[0].props['aria-label'], '打开画布');
   const labels = harness.collect(buttonHost, harness.byClass('stwd-headbtn-label'));
-  assert.equal(harness.textOf(labels[0]), '工作台');
+  assert.equal(harness.textOf(labels[0]), '画布');
   assert.doesNotMatch(harness.textOf(buttonHost[0] ?? buttons[0]), /Super Bot 团队面板/);
   buttons[0].props.onClick();
   assert.equal(opened, 1);
@@ -1154,11 +1157,12 @@ test('the client registers a right-sidebar board, its title, a header button and
   enInstance.apply(en.ctx);
   const enHost = await enHarness.settle(panelRender(en.registered, 'session-empty', {}));
   const enText = enHost.map((node) => enHarness.textOf(node)).join('\n');
-  assert.match(enText, /Workbench/);
+  assert.match(enText, /Canvas/);
+  assert.doesNotMatch(enText, /Workbench/);
   assert.doesNotMatch(enText, /Super Bot team/);
   assert.doesNotMatch(enText, /Stage/);
   assert.match(enText, /No agent dispatched/);
-  assert.match(enText, /native task list is empty/);
+  assert.doesNotMatch(enText, /native task list is empty/);
 });
 
 /**
@@ -1415,10 +1419,10 @@ test('the panel draws one agent card per dispatch on a DAG canvas', async () => 
   const sides = [t1, t2, qa, review].map((box) => (box.cx < lead.cx ? 'left' : 'right'));
   assert.ok(sides.includes('left') && sides.includes('right'), 'the default map places children on more than one side of the Lead');
 
-  // 3) The native task list becomes one bar — counts only, never the tasks.
-  assert.match(panelText, /2\/4/, 'the bar counts the native tasks');
-  assert.match(panelText, /Agent Teams 任务板/, 'the source is named');
-  assert.equal(harness.collect(host, harness.byClass('stwd-tseg')).length, 4, 'one segment per native task');
+  // 3) The canvas is graph-only: native task text and the old progress bar stay out.
+  assert.doesNotMatch(panelText, /2\/4/);
+  assert.doesNotMatch(panelText, /Agent Teams 任务板/);
+  assert.equal(harness.collect(host, harness.byClass('stwd-tseg')).length, 0, 'the native task bar is gone from the canvas');
   for (const subject of ['T1 · 实现导出接口', 'T3 · QA 门禁']) {
     assert.equal(panelText.indexOf(subject) < 0, true, `task text must not leak into the panel: ${subject}`);
   }
@@ -2120,11 +2124,11 @@ test('the graph viewport stays short enough to reach artifacts below', async () 
   }));
   const view = harness.collect(host, harness.byClass('stwd-graph-view'))[0];
   const height = Number(String(view.props.style.height).replace('px', ''));
-  assert.ok(height <= 400, 'the graph window is capped so the panel can still scroll to artifacts');
+  assert.ok(height <= 400, 'the graph window is still capped to a usable height');
   assert.ok(height >= 220, 'the graph window still has a usable height');
   const stageHeight = Number(String(harness.collect(host, harness.byClass('stwd-graph-stage'))[0].props.style.height).replace('px', ''));
   assert.ok(stageHeight > height, 'the graph content can be taller than the window and panned inside it');
-  assert.equal(harness.collect(host, harness.byClass('stwd-artifacts')).length, 1, 'artifacts stay below the graph');
+  assert.equal(harness.collect(host, harness.byClass('stwd-artifacts')).length, 0, 'the canvas has no artifacts section');
 });
 
 /**
@@ -2275,9 +2279,9 @@ test('the graph viewport can be dragged taller without burying artifacts', async
 
     let host = await harness.settle(render);
     const startHeight = heightOf(host);
-    assert.ok(startHeight <= 400, 'the default graph window stays short enough to reach artifacts');
+    assert.ok(startHeight <= 400, 'the default graph window stays a usable height');
     assert.ok(startHeight >= 220, 'the default graph window still has a usable height');
-    assert.equal(harness.collect(host, harness.byClass('stwd-artifacts')).length, 1, 'artifacts stay below the graph');
+    assert.equal(harness.collect(host, harness.byClass('stwd-artifacts')).length, 0, 'the canvas has no artifacts section');
 
     const handle = harness.collect(host, harness.byClass('stwd-graph-resize'))[0];
     assert.ok(handle, 'the bottom edge has a resize handle');
@@ -2315,14 +2319,14 @@ test('the graph viewport can be dragged taller without burying artifacts', async
     const clamped = heightOf(host);
     assert.ok(clamped <= 560, 'a very long drag still clamps to the hard cap');
     assert.ok(clamped >= startHeight + 80, 'the clamped height is at least as tall as the earlier drag');
-    assert.equal(harness.collect(host, harness.byClass('stwd-artifacts')).length, 1, 'artifacts remain below a resized graph');
+    assert.equal(harness.collect(host, harness.byClass('stwd-artifacts')).length, 0, 'the canvas still has no artifacts after resize');
     const stored = JSON.parse(store.get('ds-superbot.panel.filters'));
     assert.equal(stored.graphHeight, clamped, 'the preferred height is written to panel prefs');
 
     harness.reset();
     host = await harness.settle(render);
     assert.equal(heightOf(host), clamped, 'the preferred height survives a remount');
-    assert.equal(harness.collect(host, harness.byClass('stwd-artifacts')).length, 1);
+    assert.equal(harness.collect(host, harness.byClass('stwd-artifacts')).length, 0);
   } finally {
     if (previousWindow === undefined) delete globalThis.window;
     else globalThis.window = previousWindow;
@@ -2392,7 +2396,7 @@ test('the agent graph is a canvas that zooms, pans and resets', async () => {
  * The panel counts the host's own task list — the Agent Teams board first, the
  * Session's todo list second — and never renders a task row of its own.
  */
-test('the panel counts the native task list without ever listing its tasks', async () => {
+test('the canvas does not count or list the native task list', async () => {
   const { factory } = await loadClientFactory();
   const harness = createRenderHarness();
   const instance = factory((name) => (name === 'react' ? harness.stub : {}));
@@ -2405,8 +2409,7 @@ test('the panel counts the native task list without ever listing its tasks', asy
     useProjection: (key) => projections[key],
   });
 
-  // 1) The shared board wins when it carries tasks; the todo list is not consulted.
-  let host = await harness.settle(renderWith({
+  const host = await harness.settle(renderWith({
     agentTeam: {
       enabled: true,
       tasks: [
@@ -2416,30 +2419,14 @@ test('the panel counts the native task list without ever listing its tasks', asy
     },
     todos: [{ content: '待办甲', status: 'completed' }, { content: '待办乙', status: 'pending' }],
   }));
-  let text = host.map((node) => harness.textOf(node)).join('\n');
-  assert.match(text, /1\/2/);
-  assert.match(text, /Agent Teams 任务板/);
-  assert.equal(text.indexOf('板任务甲') < 0, true, 'board task text stays out of the panel');
-  assert.equal(text.indexOf('待办甲') < 0, true, 'todo text stays out of the panel');
-
-  // 2) Without a board the Session's own todo list is counted instead.
-  host = await harness.settle(renderWith({
-    agentTeam: { enabled: false, tasks: [{ id: 'b1', subject: '不应出现', status: 'completed' }] },
-    todos: [
-      { content: '待办甲', status: 'completed' },
-      { content: '待办乙', status: 'in_progress' },
-      { content: '待办丙', status: 'pending' },
-    ],
-  }));
-  text = host.map((node) => harness.textOf(node)).join('\n');
-  assert.match(text, /1\/3/);
-  assert.match(text, /会话任务列表/);
-  assert.equal(text.indexOf('待办甲') < 0, true);
-
-  // 3) No native tasks at all means an honest empty bar, not a fabricated one.
-  host = await harness.settle(renderWith({}));
-  text = host.map((node) => harness.textOf(node)).join('\n');
-  assert.match(text, /原生任务列表为空/);
+  const text = host.map((node) => harness.textOf(node)).join('\n');
+  assert.doesNotMatch(text, /1\/2/);
+  assert.doesNotMatch(text, /Agent Teams 任务板/);
+  assert.doesNotMatch(text, /会话任务列表/);
+  assert.doesNotMatch(text, /原生任务列表为空/);
+  assert.equal(text.indexOf('板任务甲') < 0, true, 'board task text stays out of the canvas');
+  assert.equal(text.indexOf('待办甲') < 0, true, 'todo text stays out of the canvas');
+  assert.equal(harness.collect(host, harness.byClass('stwd-tasks')).length, 0);
   assert.equal(harness.collect(host, harness.byClass('stwd-tseg')).length, 0);
 });
 
@@ -2447,7 +2434,7 @@ test('the panel counts the native task list without ever listing its tasks', asy
  * The board is graph-only: there is no list mode, the native task progress bar
  * stays, and agents are opened from their cards.
  */
-test('the panel keeps the task bar and has no list mode', async () => {
+test('the canvas is graph-only and has no list mode or task bar', async () => {
   const { factory } = await loadClientFactory();
   const harness = createRenderHarness();
   const instance = factory((name) => (name === 'react' ? harness.stub : {}));
@@ -2473,12 +2460,13 @@ test('the panel keeps the task bar and has no list mode', async () => {
   assert.equal(harness.collect(host, harness.byClass('stwd-viewtab')).length, 0, 'the list/graph switch is gone');
   assert.equal(harness.collect(host, harness.byClass('stwd-arow')).length, 0, 'the list roster is gone');
   assert.equal(harness.collect(host, harness.byClass('stwd-gnode')).length, 2, 'the graph is the only roster');
-  assert.ok(harness.collect(host, harness.byClass('stwd-tasks')).length >= 1, 'the native task progress bar stays');
+  assert.equal(harness.collect(host, harness.byClass('stwd-tasks')).length, 0, 'the native task progress bar is gone');
   const mains = harness.collect(host, harness.byClass('stwd-gnode-main'));
   mains[0].props.onClick();
   assert.equal(opened.length, 1, 'a card still opens the child session');
   const panelText = host.map((node) => harness.textOf(node)).join('\n');
-  assert.equal(panelText.indexOf('任务列表') >= 0, true, 'the native list is pointed at, not copied');
+  assert.equal(panelText.indexOf('任务列表') < 0, true, 'the canvas does not point at the native task list');
+  assert.match(panelText, /画布/);
 });
 
 /**
@@ -2564,7 +2552,7 @@ test('the run directory supplies artifacts only, collapsed until asked for', asy
   });
   instance.apply(ctx);
 
-  const entry = panelEntry(registered);
+  const entry = registered.find((row) => row.options.name === 'conversation.view');
   const face = entry.options.inject('session-run07');
   const facts = await face.loadRun();
   assert.equal(facts.dir, 'tmp/superbot/1113-1518-demo', 'the newest run directory wins');

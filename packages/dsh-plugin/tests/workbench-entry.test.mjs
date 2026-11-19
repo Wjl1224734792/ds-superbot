@@ -158,19 +158,25 @@ test('icon.svg is an SVG plugin logo with a 64×64 viewBox', () => {
   assert.doesNotMatch(svg, /\bstroke=/);
 });
 
-test('client copy uses 工作台 / Workbench and never Super Bot 团队面板 or 舞台', () => {
+test('client copy uses 工作台 / Workbench for the tab and 画布 / Canvas for the right pane, never Super Bot 团队面板 or 舞台', () => {
   const source = readFileSync(CLIENT, 'utf8');
   assert.match(source, /tabTitle: '工作台'/);
   assert.match(source, /openPanel: '打开工作台'/);
+  assert.match(source, /canvasTitle: '画布'/);
+  assert.match(source, /openCanvas: '打开画布'/);
   assert.match(source, /tabTitle: 'Workbench'/);
   assert.match(source, /openPanel: 'Open the workbench'/);
+  assert.match(source, /canvasTitle: 'Canvas'/);
+  assert.match(source, /openCanvas: 'Open the canvas'/);
   assert.doesNotMatch(source, /打开 Super Bot 团队面板/);
   assert.doesNotMatch(source, /Open the Super Bot team panel/);
   assert.doesNotMatch(source, /stageTitle: '舞台'/);
   assert.doesNotMatch(source, /stageTitle: 'Stage'/);
+  assert.doesNotMatch(source, /canvasTitle: '舞台'/);
+  assert.doesNotMatch(source, /canvasTitle: 'Stage'/);
 });
 
-test('a new session with no work items can still open the workbench from the header entry', async () => {
+test('a new session can open the workbench from mini faces and the canvas from the header button', async () => {
   const { id, factory } = await loadClientFactory();
   assert.equal(id, 'ds-superbot');
   const harness = createRenderHarness();
@@ -180,18 +186,34 @@ test('a new session with no work items can still open the workbench from the hea
   const corner = registered.find((entry) => entry.options.name === 'conversation.session.header.corner');
   const utilities = registered.find((entry) => entry.options.name === 'conversation.session.header.utilities' && entry.options.id === 'superbot-board');
   assert.ok(corner && utilities);
-  let opened = 0;
-  const text = { stageTitle: '工作台', openPanel: '打开工作台', tabTitle: '工作台' };
-  const empty = await harness.settle(() => corner.component({ workItems: [], text, openPanel: () => { opened += 1; } }));
+  const opened = [];
+  const text = {
+    stageTitle: '仓 / 探 / 作 / 验',
+    tabTitle: '工作台',
+    openWorkbench: '打开工作台',
+    openPanel: '打开工作台',
+    canvasTitle: '画布',
+    openCanvas: '打开画布',
+  };
+  const empty = await harness.settle(() => corner.component({
+    workItems: [],
+    text,
+    openView: (view) => { opened.push(['view', view]); },
+    openPanel: () => { opened.push(['panel']); },
+  }));
   const entry = harness.collect(empty, harness.byClass('stwd-mini-entry'));
   assert.equal(entry.length, 1, 'MiniFaces stays visible without work items');
+  assert.equal(entry[0].props['aria-label'], '打开工作台');
   entry[0].props.onClick();
-  assert.equal(opened, 1);
-  const buttonHost = harness.expand(utilities.component({ text, openPanel: () => { opened += 1; } }));
+  assert.deepEqual(opened, [['view', 'superbot-workbench']]);
+  const buttonHost = harness.expand(utilities.component({
+    text,
+    openPanel: () => { opened.push(['panel']); },
+  }));
   const buttons = harness.collect(buttonHost, harness.byClass('stwd-headbtn'));
   assert.equal(buttons.length, 1);
-  assert.equal(buttons[0].props['aria-label'], '打开工作台');
-  assert.equal(harness.textOf(harness.collect(buttonHost, harness.byClass('stwd-headbtn-label'))[0]), '工作台');
+  assert.equal(buttons[0].props['aria-label'], '打开画布');
+  assert.equal(harness.textOf(harness.collect(buttonHost, harness.byClass('stwd-headbtn-label'))[0]), '画布');
   buttons[0].props.onClick();
-  assert.equal(opened, 2);
+  assert.deepEqual(opened, [['view', 'superbot-workbench'], ['panel']]);
 });

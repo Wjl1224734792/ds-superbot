@@ -213,7 +213,7 @@ test('settings section and title-bar entry use the project blue-whale Logo', asy
   assert.ok(iconMarks.ellipses.every((node) => node.props.fill === '#FFFFFF'));
 
   const header = slot(registered, 'conversation.session.header.utilities', (entry) => entry.options.id === 'superbot-board');
-  const headerHost = harness.expand(header.component({ text: { openPanel: '打开工作台', stageTitle: '工作台' }, openPanel: () => {} }));
+  const headerHost = harness.expand(header.component({ text: { canvasTitle: '画布', openCanvas: '打开画布' }, openPanel: () => {} }));
   const headerSvg = svgLogo(headerHost, harness.collect, harness.byClass);
   assert.ok(headerSvg, 'title-bar entry uses the project logo');
   const headerMarks = logoMarks(headerSvg, harness.collect);
@@ -237,12 +237,14 @@ test('workbench view is registered, stays off chat by default, and never calls s
   const host = await harness.settle(() => view.component({
     ...(typeof view.options.inject === 'function' ? view.options.inject('session-1') : {}),
     workItems: ITEMS,
-    text: { tabTitle: '工作台', title: '工作台', stageTitle: '仓 / 探 / 作 / 验', decideTitle: '待你决定', historyTitle: '工作项历史', seeEvidence: '看证据', evidenceTitle: '证据' },
+    text: { tabTitle: '工作台', title: '工作台', stageTitle: '仓 / 探 / 作 / 验', decideTitle: '待你决定', historyTitle: '工作项历史', seeEvidence: '看证据', workItemFallback: '工作项' },
   }));
   const text = host.map((node) => harness.textOf(node)).join('\n');
   assert.match(text, /待你决定/);
   assert.match(text, /工作项历史/);
-  assert.match(text, /证据/);
+  assert.doesNotMatch(text, /Mandate：无|门禁：无|收据：无/);
+  assert.doesNotMatch(text, /任务进度取自 DSH/);
+  assert.equal(harness.collect(host, harness.byClass('stwd-graph-view')).length, 0, 'the workbench tab does not expand TeamGraph');
   assert.equal(selected.filter((row) => row[0] === 'selectPanel').length, 0);
 });
 
@@ -291,7 +293,7 @@ test('group-chat turnTail shows quiet product cards and can approve or open the 
   assert.equal(opened[0][0], 'superbot-workbench');
 });
 
-test('header 待你决定 opens the workbench view, and mini-faces stay still while opening the right workbench', async () => {
+test('header 待你决定 and mini-faces open the workbench view, not only the right canvas', async () => {
   const { factory } = await loadClientFactory();
   const harness = createRenderHarness();
   const instance = factory((name) => (name === 'react' ? harness.stub : {}));
@@ -311,11 +313,13 @@ test('header 待你决定 opens the workbench view, and mini-faces stay still wh
   assert.equal(selected.filter((row) => row[0] === 'selectPanel').length, 0);
 
   const corner = slot(registered, 'conversation.session.header.corner');
+  const facesOpened = [];
   let panel = 0;
   const live = await harness.settle(() => corner.component({
     sessionId: 'session-1',
     workItems: ITEMS,
-    text: { stageTitle: '工作台', openPanel: '打开工作台' },
+    text: { stageTitle: '仓 / 探 / 作 / 验', openWorkbench: '打开工作台', openPanel: '打开工作台' },
+    openView: (view) => { facesOpened.push(view); },
     openPanel: () => { panel += 1; },
   }));
   const minis = harness.collect(live, harness.byClass('stwd-resident-mini'));
@@ -323,6 +327,7 @@ test('header 待你决定 opens the workbench view, and mini-faces stay still wh
   assert.ok(minis.every((node) => String(node.props.className).includes('stwd-motion-still')));
   const cang = minis.find((node) => String(node.props.className).includes('stwd-resident--cang'));
   cang.props.onClick();
-  assert.equal(panel, 1);
+  assert.deepEqual(facesOpened, ['superbot-workbench']);
+  assert.equal(panel, 0, 'mini faces must not only open the right canvas');
   assert.equal(selected.filter((row) => row[0] === 'selectPanel').length, 0);
 });
