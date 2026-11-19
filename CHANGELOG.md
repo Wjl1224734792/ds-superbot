@@ -23,6 +23,8 @@
 
 ### Changed
 
+- **破坏性变更**：DSH 安装入口改回仓库根目录。对仓库根执行 `install_bundle` 即可安装名为 `ds-superbot` 的插件；`packages/dsh-plugin` 的内部包名改为 `@ds-superbot/plugin`，不再作为安装入口，也不再声明 `dsh.bundle`。插件声明详情加载仓库根 `README.md` / `README.en.md`。左栏 `sidebar.panellist` 标题改为无直角引号的 `ds-superbot`。对外封面文案改为工作项、仓 / 探 / 作 / 验、群聊主控制台；七角色派单路径仍保留为兼容实现。不改 0.1.0 的 `superbot_dispatch` 与 `docTier=3` 硬门。默认仍 observe，禁止 auto-merge，插件不开 HTTP。
+
 - **破坏性变更（0.2.0）**：仓库重构为 monorepo。DSH 安装入口改为 `packages/dsh-plugin`（包名仍是 `ds-superbot`）。原先对仓库根执行的 `install_bundle` 需要改路径。1.0.0 之前允许破坏性变更。
 - 产品定位升格为常驻工程组织：工作项是唯一对外产品对象；门禁脚本迁到 `packages/constitution/scripts/`，插件 `scripts/` 保留转发 shim，`node <插件包根>/scripts/docs-ready.mjs` 的退出码与 `--help` 不变。
 - 新增姊妹包 `@ds-superbot/constitution`（账本 / Policy / Mandate / Receipt / 卡片 / CLI）、`@ds-superbot/runtime`（Steward / 过滤器 / Curator / Assignment，以及 P1 的文件型 Event Bus、订阅直通、Watchdog、observe / would-accept）、`@ds-superbot/im`（三种卡、发言允许表、`presenceOf`）。

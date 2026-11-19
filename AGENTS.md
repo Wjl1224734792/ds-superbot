@@ -1,6 +1,6 @@
 # 本仓库开发约定（ds-superbot）
 
-产品名是 **ds-superbot**。本仓库是 monorepo：仓库根不再等于 DSH 插件包。安装入口是 `packages/dsh-plugin`。
+产品名是 **ds-superbot**。本仓库是 monorepo：仓库根就是 DSH 插件安装入口（根 `package.json` 的 `name` 为 `ds-superbot`）。实现代码仍在 `packages/dsh-plugin`（内部包名 `@ds-superbot/plugin`）。
 
 红线：决定在人、操作在 AI、判定在程序。对外只有一个产品对象——工作项。不要用「活仓库」当产品名。不要新增可写的第 8 个角色。默认授权档位是 observe；不要打开 auto 自动合并。
 
@@ -8,8 +8,8 @@
 
 | 路径 | 内容 | 改这里的后果 |
 |---|---|---|
-| `packages/dsh-plugin/` | DSH 插件（`name`: `ds-superbot`）：`index.js`、`client.js`、角色、技能、正式原创头像 | 影响宿主安装与 0.1.0 兼容路径（7 角色派单、右侧栏、硬门） |
-| `packages/dsh-plugin/scripts/` | 转发 shim | 必须保持 `node <插件包根>/scripts/docs-ready.mjs` 的退出码与 `--help` |
+| `packages/dsh-plugin/` | DSH 插件实现（内部名 `@ds-superbot/plugin`）：`index.js`、`client.js`、角色、技能、正式原创头像。对外包名与 `dsh` 声明在仓库根 `package.json`。 | 影响宿主安装与 0.1.0 兼容路径（7 角色派单、右侧栏、硬门） |
+| `packages/dsh-plugin/scripts/` 与仓库根 `scripts/docs-ready.mjs` | 转发 shim | 必须保持 `node <仓库根>/scripts/docs-ready.mjs` 与 `node packages/dsh-plugin/scripts/docs-ready.mjs` 的退出码与 `--help` |
 | `packages/constitution/` | `@ds-superbot/constitution`：账本、Policy、跨通道 Thread、动态治理 `planSteps`、Mandate、Receipt、门禁脚本 SSOT | 影响工作项状态机与收据；不要重写门禁脚本的判定逻辑；账本不得写出 `.superbot/ledger/` |
 | `packages/runtime/` | `@ds-superbot/runtime`：Steward（轻量规则 + 预留模型接口）、Capability Compiler、`routeModel`、filter、curator、assignment、存算分离、Cartographer 回写、文件型 Event Bus、订阅直通、Watchdog、observe / would-accept / auto 灰度、P5 闭环（`approveDecision` / `rejectDecision` / `canExecute` / `dispatchWorkItem` / `recordMergeIntent`）、真实 git 适配器（只读检查 + 仅人执行的 `applyMerge`）、有限 auto-low（`dispatchAutoLow`） | 默认授权 observe；订阅直通不授权；编译器只出草稿不签发；批准才签发 Mandate；P6 起已批准项的 Watchdog tick 按 execute 运行，循环默认仍 observe；P7 起人批后插件会真正启动该循环定时器；Cartographer 默认不写文件；auto 灰度必须先有观察记录；`recordMergeIntent` 只记意图，人可显式 `applyMerge`，禁止 auto-merge 与 `git push`；有限 auto-low 不签发 Mandate；不得空实现成「假装成功」；不要开 HTTP |
 | `packages/im/` | `@ds-superbot/im`：三种卡、发言允许表、`presenceOf` | 面板与字幕只能调用 `presenceOf`，不要在 `client.js` 另写一套 |
@@ -47,9 +47,9 @@ npm test         # 各包 node:test（含迁移后的宿主契约 / docs-ready /
 
 ## 发布
 
-1. 改 `packages/dsh-plugin/package.json` 的 `version`（SemVer；1.0.0 之前允许破坏性变更，但要写进 CHANGELOG）。姊妹包版本与之对齐。
+1. 改仓库根 `package.json` 的 `version`（SemVer；1.0.0 之前允许破坏性变更，但要写进 CHANGELOG），并与 `packages/dsh-plugin/package.json` 及姊妹包对齐。
 2. 把 CHANGELOG 的 `[Unreleased]` 条目移入新的版本小节。
 3. 跑完上面两条命令，确认全绿。
 4. `git tag -a v<version> -m "v<version>"`，再推送 tag。
 
-安装方式见 `README.md`：`plugin_manager(action="install_bundle", target="<repo>/packages/dsh-plugin")`，然后重启 DSH。
+安装方式见 `README.md`：`plugin_manager(action="install_bundle", target="<repo>")`，然后重启 DSH。

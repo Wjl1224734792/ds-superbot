@@ -16,7 +16,7 @@
 
 DSH 插件继续：零运行时依赖、不注册 Preset、不自建 HTTP、原生 slot、工具名不变（`superbot_dispatch` / `superbot_board` / `superbot-roster` / `superbot`）。7 角色派单路径保留；`roles/*.md` 同时作为 Mandate 编译失败时的 fallback 模板。`docTier=3` 对 `backend-dev` / `frontend-dev` 的硬门在插件兼容路径上仍然有效。动态治理走 Constitution / Policy。
 
-安装入口改为 `packages/dsh-plugin`。门禁脚本的 SSOT 在 `packages/constitution/scripts/`，插件 `scripts/` 只保留转发 shim。
+安装入口是仓库根目录（根 `package.json` 的 `name` 为 `ds-superbot`）。实现仍在 `packages/dsh-plugin`（内部名 `@ds-superbot/plugin`）。门禁脚本的 SSOT 在 `packages/constitution/scripts/`，插件 `scripts/` 与仓库根 `scripts/docs-ready.mjs` 只保留转发 shim。
 
 ## 能力态，不是第 8 个席位
 

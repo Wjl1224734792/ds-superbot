@@ -176,7 +176,7 @@ test('P2 registers official additive slots and keeps 0.1.0 tab ids', async () =>
   assert.equal(panellist.options.id, 'ds-superbot-console');
   assert.equal(main.options.key, 'ds-superbot-console');
   const label = typeof panellist.options.label === 'function' ? panellist.options.label() : panellist.options.label;
-  assert.equal(label, '「ds-superbot」');
+  assert.equal(label, 'ds-superbot');
 
   assert.ok(slot(registered, 'conversation.session.header.corner'), 'header corner mini-faces');
   assert.ok(slot(registered, 'conversation.session.header.utilities', (entry) => entry.options.id === 'superbot-board'));

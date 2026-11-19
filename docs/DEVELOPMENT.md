@@ -1,6 +1,6 @@
 # 开发、测试与发布
 
-产品名是 **ds-superbot**。本仓库是 monorepo，安装入口是 `packages/dsh-plugin`。不需要构建，不需要 `npm install`（各包零运行时依赖）。Node.js `>=20`。
+产品名是 **ds-superbot**。本仓库是 monorepo，安装入口是仓库根目录（根 `package.json` 的 `name` 为 `ds-superbot`）。实现仍在 `packages/dsh-plugin`（内部名 `@ds-superbot/plugin`）。不需要构建，不需要 `npm install`（各包零运行时依赖）。Node.js `>=20`。
 
 ## 1. 日常循环
 
@@ -103,19 +103,19 @@ node packages/constitution/bin/constitution.mjs <root> workitem create --thread 
 
 ## 8. 发布流程
 
-1. 更新 `packages/dsh-plugin/package.json` 的 `version`（SemVer；1.0.0 之前允许破坏性变更，但必须写进 CHANGELOG）。姊妹包版本与之对齐。
+1. 更新仓库根 `package.json` 的 `version`（SemVer；1.0.0 之前允许破坏性变更，但必须写进 CHANGELOG），并与 `packages/dsh-plugin/package.json` 及姊妹包对齐。
 2. 把 `CHANGELOG.md` 的 `[Unreleased]` 条目移入新版本小节。
 3. 面向用户的文案同步中英两份：`README.md`、`README.en.md`、`locale/{zh,en}.json`。
 4. 全绿门禁：`npm run check && npm test`。
 5. 提交并打标签：`git tag -a v0.2.0 -m "v0.2.0"`。
-6. 装进 profile 复验：`plugin_manager(action="install_bundle", target="<repo>/packages/dsh-plugin")` → 重启 DSH → 新会话。
+6. 装进 profile 复验：`plugin_manager(action="install_bundle", target="<repo>")` → 重启 DSH → 新会话。
 
 ## 9. 排障
 
 | 现象 | 原因 / 处理 |
 |---|---|
-| 装完没变化 | Host 代码要重启 DSH；技能目录是会话级快照，开新会话。确认安装路径是 `packages/dsh-plugin`，不是仓库根。 |
-| 面板不出现 | 确认 `packages/dsh-plugin/package.json` 的 `dsh.client.inject` 包含 `@deepseek-ai/dsh-client-ui-settings`，且 bundle 已启用 |
+| 装完没变化 | Host 代码要重启 DSH；技能目录是会话级快照，开新会话。确认安装路径是仓库根，不是 `packages/dsh-plugin`。 |
+| 面板不出现 | 确认仓库根 `package.json` 的 `dsh.client.inject` 包含 `@deepseek-ai/dsh-client-ui-settings`，且 bundle 已启用 |
 | 设置页没有「Super Bot」 | 同上；`Config` 未导出或命名空间与补丁行 id 不一致也会导致 |
 | `superbot_dispatch` 报 `subagents service unavailable` | 当前 profile 没有子代理服务；确认 DSH 版本满足 `dsh.engines.dsh` |
 | 报 `subagent composition "standard" is not registered` | 宿主的 `standard` 组合还没加载完，稍后重试；不要改成自建组合 |

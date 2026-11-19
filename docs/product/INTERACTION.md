@@ -48,7 +48,7 @@ sidebar.panellist + main          utilities / corner / view tab       sidebar.ri
 
 ### 2.2 左栏（控制台，参照 superagent 面板）
 
-用 `sidebar.panellist` 注册一个图标行（建议 `id: ds-superbot-console`，label 用「ds-superbot」），并在根作用域 `main` 的**同一 id** 注册控制台主体。这是官方加面板的方式，**不属于**红线里禁止的「自建页面 / HTTP 桥」。
+用 `sidebar.panellist` 注册一个图标行（建议 `id: ds-superbot-console`，label 用无直角引号的 ds-superbot），并在根作用域 `main` 的**同一 id** 注册控制台主体。这是官方加面板的方式，**不属于**红线里禁止的「自建页面 / HTTP 桥」。
 
 禁止：注册 `sidebar` 整栏替换；禁止学习某些 superagent 社区实现去开 `127.0.0.1` 端口或 BFF。
 

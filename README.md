@@ -1,4 +1,4 @@
-# DS Super Bot
+# ds-superbot
 
 **中文** | [English](README.en.md)
 
@@ -8,14 +8,13 @@
 [![node](https://img.shields.io/badge/node-%3E%3D20-3c873a)](package.json)
 [![tests](https://img.shields.io/badge/tests-node--test-2ea44f)](packages/dsh-plugin/tests)
 
-DS Super Bot 是给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）用的**多角色研发团队插件**：主对话代理担任 **Tech Lead**，把需求拆成任务 DAG，按「依赖 + 文件所有权」把任务派给对应角色的子代理，走完**计划批准门 → QA → 浏览器验收 → 终审**才交付。
+ds-superbot 是给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）用的**工作项控制台**。对外只有一个产品对象——工作项；群聊是唯一人机主控制台；仓 / 探 / 作 / 验四张在场的脸负责感知、探索、施工与验收。决定在人、操作在 AI、判定在程序。
 
-目标不是「一次把代码写完」，而是让项目在每次变更后仍然**可理解、可验证、可回滚、可继续演进**。
+文档 / 规范 / 门禁 / 证据是宪法，Claim → Evidence → Receipt 是唯一交付货币。左侧控制台处理「待你决定」与工作项历史，右侧舞台展示在场与证据，过程状态不走聊天。目标不是「一次把代码写完」，而是让项目在每次变更后仍然**可理解、可验证、可回滚、可继续演进**。
 
-> **状态**：`0.2.0`（P0 monorepo）。1.0.0 之前允许破坏性变更——安装路径改为 `packages/dsh-plugin`。DSH 处于 `0.2.x` 阶段，插件的原生扩展点契约随宿主版本演进——升级 DSH 前请先看 [CHANGELOG](CHANGELOG.md)。
+> **状态**：`0.2.0`。1.0.0 之前允许破坏性变更——DSH 安装入口是**仓库根目录**，对仓库根执行 `install_bundle` 即可。DSH 处于 `0.2.x` 阶段，插件的原生扩展点契约随宿主版本演进——升级 DSH 前请先看 [CHANGELOG](CHANGELOG.md)。
 
-
-仓库本身是一支**常驻的工程组织**：群聊是唯一人机控制台，文档 / 规范 / 门禁 / 证据是宪法，工作项是唯一产品对象，Claim → Evidence → Receipt 是唯一交付货币。决定在人、操作在 AI、判定在程序。P0 先交付 monorepo 骨架、契约校验、Constitution Service、兼容 shim，以及 `presenceOf` 与头像（P6 起为正式原创脸谱）；7 角色派单路径保留。
+0.1.0 的七角色派单路径（`superbot_dispatch`）仍作为兼容实现保留，不再作为产品封面。
 
 ## 它解决什么问题
 
@@ -54,16 +53,16 @@ DS Super Bot 是给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-h
 
 ## 安装
 
-本仓库是 monorepo。DeepSeek Harness 的安装入口是 **`packages/dsh-plugin`**（该包的 `name` 仍是 `ds-superbot`，`dsh.bundle` / `dsh.client` 保持不变）。不需要构建，不需要 `npm install`。
+本仓库是 monorepo。DeepSeek Harness 的安装入口是**仓库根目录**（包名 `ds-superbot`）。不需要构建，不需要 `npm install`。
 
 ```bash
 git clone https://github.com/Wjl1224734792/ds-superbot.git
 ```
 
-然后在 DSH 里用插件管理器安装插件包目录：
+然后在 DSH 里用插件管理器对仓库根执行：
 
 ```text
-plugin_manager(action="install_bundle", target="<克隆下来的绝对路径>/packages/dsh-plugin")
+plugin_manager(action="install_bundle", target="<克隆下来的绝对路径>")
 ```
 
 装完 **重启 DSH**（Host 代码只在启动时加载），再开 **新会话**——技能目录是会话级快照，旧会话可能仍显示上一版文案。
@@ -236,14 +235,14 @@ node <插件>/scripts/docs-ready.mjs <root> status                              
 
 ```text
 .
-├── package.json                 # 私有 workspace：test / check 调各包
+├── package.json                 # 对外插件包 ds-superbot（DSH 安装入口）与 monorepo scripts
 ├── AGENTS.md                    # monorepo 约定与红线
 ├── docs/                        # 架构、开发与产品契约
 │   ├── ARCHITECTURE.md
 │   ├── DEVELOPMENT.md
 │   └── product/                 # CONTRACT.md / INTERACTION.md
 └── packages/
-    ├── dsh-plugin/              # DSH 安装入口（name: ds-superbot）
+    ├── dsh-plugin/              # 插件实现（内部名 @ds-superbot/plugin）
     │   ├── index.js / client.js
     │   ├── roles/ / skills/
     │   ├── scripts/             # 转发到 constitution 的 shim

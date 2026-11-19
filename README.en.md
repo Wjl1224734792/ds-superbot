@@ -1,4 +1,4 @@
-# DS Super Bot
+# ds-superbot
 
 [中文](README.md) | **English**
 
@@ -8,14 +8,13 @@
 [![node](https://img.shields.io/badge/node-%3E%3D20-3c873a)](package.json)
 [![tests](https://img.shields.io/badge/tests-node--test-2ea44f)](packages/dsh-plugin/tests)
 
-DS Super Bot is a **multi-role engineering-team plugin** for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH). The lead conversation agent acts as **Tech Lead**: it turns a request into a task DAG, hands each task to the role that owns it (dependency-ordered, with file ownership), and only reports delivery after the **plan gate → QA → browser acceptance → final review** have run.
+ds-superbot is a **work-item console** for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH). The work item is the only product object; group chat is the only human/AI console; four presence faces — cang / tan / zuo / yan — cover sense, explore, build and verify. Decisions stay with humans, operations with AI, judgment with programs.
 
-The goal is not "write the code in one shot" but to keep the project **understandable, verifiable, rollback-able and extendable** after every change.
+Documents / norms / gates / evidence are the constitution, and Claim → Evidence → Receipt is the only delivery currency. The left console handles items that need your decision and work-item history; the right stage shows presence and evidence; process status stays out of chat. The goal is not "write the code in one shot" but to keep the project **understandable, verifiable, rollback-able and extendable** after every change.
 
-> **Status**: `0.2.0` (P0 monorepo). Breaking changes are allowed before 1.0.0 — the install path is now `packages/dsh-plugin`. DSH itself is at `0.2.x`, so the native extension-point contract moves with the host — read the [CHANGELOG](CHANGELOG.md) before upgrading DSH.
+> **Status**: `0.2.0`. Breaking changes are allowed before 1.0.0 — the DeepSeek Harness install entry is the **repository root**; run `install_bundle` against that directory. DSH itself is at `0.2.x`, so the native extension-point contract moves with the host — read the [CHANGELOG](CHANGELOG.md) before upgrading DSH.
 
-
-The repository itself is a **long-lived engineering organization**: group chat is the only human/AI console, documents / norms / gates / evidence are its constitution, the work item is the only product object, and Claim → Evidence → Receipt is the only delivery currency. Decisions stay with humans, operations stay with AI, judgment stays with programs. P0 delivers the monorepo skeleton, contract validation, the Constitution Service, compatibility shims, and `presenceOf` plus faces (formal original portraits as of P6). The 0.1.0 seven-role dispatch path is kept.
+The 0.1.0 seven-role dispatch path (`superbot_dispatch`) remains as a compatibility implementation, not the product cover.
 
 ## What it fixes
 
@@ -54,16 +53,16 @@ Handing a request to one large model usually produces code that runs, but nobody
 
 ## Install
 
-This repository is a monorepo. The DeepSeek Harness install entry is **`packages/dsh-plugin`** (the package `name` remains `ds-superbot`; `dsh.bundle` / `dsh.client` are unchanged). No build step, no `npm install`.
+This repository is a monorepo. The DeepSeek Harness install entry is the **repository root** (package name `ds-superbot`). No build step, no `npm install`.
 
 ```bash
 git clone https://github.com/Wjl1224734792/ds-superbot.git
 ```
 
-Then install that plugin directory with the DSH plugin manager:
+Then point the DSH plugin manager at the repository root:
 
 ```text
-plugin_manager(action="install_bundle", target="<absolute path of the clone>/packages/dsh-plugin")
+plugin_manager(action="install_bundle", target="<absolute path of the clone>")
 ```
 
 Restart DSH afterwards (Host code loads at startup) and open a **new session** — the skill catalog is a per-session snapshot, so older sessions may still show the previous copy.
@@ -236,14 +235,14 @@ Criteria and error codes are in `docs-ready --help` and the `docs-rules` skill. 
 
 ```text
 .
-├── package.json                 # private workspace: test / check across packages
+├── package.json                 # public ds-superbot plugin (DSH install entry) plus monorepo scripts
 ├── AGENTS.md                    # monorepo conventions and red lines
 ├── docs/                        # architecture, development, and product contracts
 │   ├── ARCHITECTURE.md
 │   ├── DEVELOPMENT.md
 │   └── product/                 # CONTRACT.md / INTERACTION.md
 └── packages/
-    ├── dsh-plugin/              # DSH install entry (name: ds-superbot)
+    ├── dsh-plugin/              # plugin implementation (internal name @ds-superbot/plugin)
     │   ├── index.js / client.js
     │   ├── roles/ / skills/
     │   ├── scripts/             # shims that forward to constitution

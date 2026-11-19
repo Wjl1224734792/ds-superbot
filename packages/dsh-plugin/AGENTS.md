@@ -1,6 +1,6 @@
 # ds-superbot 插件硬约束
 
-本目录是 DeepSeek Harness 的安装入口（`package.json` 的 `name` 仍是 `ds-superbot`）。产品名是 **ds-superbot**，不要改成「活仓库」。
+本目录是 DSH 插件的实现包（内部名 `@ds-superbot/plugin`）。安装入口是仓库根目录，根 `package.json` 的 `name` 为 `ds-superbot`。产品名是 **ds-superbot**，不要改成「活仓库」。
 
 1. **运行时零依赖**：只用 Node 内置模块。除可选 peer `@deepseek-ai/schemastery` 外，不新增 `dependencies`。
 2. **不注册 Agent Preset**。角色只是派单时注入的章程；`roles/*.md` 在 P0 仍用于 7 角色派单，并作为 Mandate 编译失败时的 fallback 模板。

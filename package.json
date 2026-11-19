@@ -1,9 +1,8 @@
 {
-  "name": "ds-superbot-workspace",
-  "private": true,
+  "name": "ds-superbot",
   "version": "0.2.0",
   "type": "module",
-  "description": "ds-superbot monorepo: DSH plugin, constitution service, runtime interfaces, and IM protocol.",
+  "description": "Work-item console for DeepSeek Harness: the work item is the only product object, group chat is the main human/AI console, and the four presence faces (cang / tan / zuo / yan) cover sense, explore, build and verify. Decisions stay with humans, operations with AI, judgment with programs. The 0.1.0 seven-role superbot_dispatch path is kept as compatibility implementation, not the product cover.",
   "license": "MIT",
   "author": "Lin",
   "repository": {
@@ -14,11 +13,70 @@
   "bugs": {
     "url": "https://github.com/Wjl1224734792/ds-superbot/issues"
   },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "subagent",
+    "multi-agent",
+    "engineering-team",
+    "documentation-pipeline"
+  ],
+  "exports": {
+    ".": "./packages/dsh-plugin/index.js",
+    "./client": "./packages/dsh-plugin/client.js",
+    "./locale/*.json": "./packages/dsh-plugin/locale/*.json",
+    "./icon": "./packages/dsh-plugin/icon.svg"
+  },
+  "files": [
+    "README.md",
+    "README.en.md",
+    "packages/dsh-plugin/index.js",
+    "packages/dsh-plugin/client.js",
+    "packages/dsh-plugin/cordis.patch.yml",
+    "packages/dsh-plugin/icon.svg",
+    "packages/dsh-plugin/locale/*.json",
+    "packages/dsh-plugin/skills/**",
+    "packages/dsh-plugin/roles/**",
+    "packages/dsh-plugin/scripts/**",
+    "packages/dsh-plugin/assets/**",
+    "packages/dsh-plugin/lib/**",
+    "packages/dsh-plugin/AGENTS.md",
+    "packages/constitution/src/**",
+    "packages/constitution/scripts/**",
+    "packages/constitution/schemas/**",
+    "packages/constitution/bin/**",
+    "packages/runtime/src/**",
+    "packages/im/src/**"
+  ],
   "scripts": {
     "test": "node scripts/ensure-schemastery-stub.mjs && node --test packages/dsh-plugin/tests/*.mjs packages/constitution/tests/*.mjs packages/runtime/tests/*.mjs packages/im/tests/*.mjs",
     "check": "node --check packages/dsh-plugin/index.js && node --check packages/dsh-plugin/client.js && node --check packages/constitution/bin/constitution.mjs && node --check packages/constitution/src/cli.mjs && node --check packages/constitution/src/index.mjs && node --check packages/runtime/src/index.mjs && node --check packages/runtime/src/compiler.mjs && node --check packages/runtime/src/routing.mjs && node --check packages/runtime/src/bus.mjs && node --check packages/runtime/src/watchdog.mjs && node --check packages/runtime/src/git-adapter.mjs && node --check packages/runtime/src/auto-low.mjs && node --check packages/runtime/src/subscribe.mjs && node --check packages/runtime/src/steward.mjs && node --check packages/runtime/src/observe.mjs && node --check packages/im/src/index.mjs && node --check packages/im/src/presence.mjs && node --check packages/dsh-plugin/lib/presence-standalone.mjs && node --check packages/dsh-plugin/lib/presence-classes.mjs && node --check packages/dsh-plugin/lib/console-model.mjs && node --check packages/dsh-plugin/lib/decide-adapter.mjs && node --check packages/dsh-plugin/lib/live-loop-adapter.mjs && node --check packages/dsh-plugin/lib/watchdog-loop-adapter.mjs && node --check packages/dsh-plugin/lib/watchdog-timers.mjs && node --check packages/dsh-plugin/lib/auto-low-adapter.mjs && node --check packages/constitution/scripts/lib/t1-files.mjs && node --check packages/dsh-plugin/scripts/docs-ready.mjs && node --check packages/dsh-plugin/scripts/lib/docs-state.mjs && node --check packages/constitution/src/ledger.mjs && node --check packages/constitution/src/thread.mjs && node --check packages/constitution/src/policy.mjs && node --check packages/constitution/src/governance.mjs && node --check packages/runtime/src/separation.mjs && node --check packages/runtime/src/cartographer.mjs && node --check packages/runtime/src/assignment.mjs && node --check packages/runtime/src/loop.mjs && node --check packages/constitution/src/workitem.mjs && node --check packages/constitution/src/cards.mjs && node --check packages/constitution/src/mandate.mjs"
   },
   "engines": {
     "node": ">=20"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/schemastery": ">=3.18.4 <4"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/schemastery": {
+      "optional": true
+    }
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./packages/dsh-plugin/cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings"
+      ]
+    },
+    "engines": {
+      "dsh": ">=0.2.1-rc.2 <0.4.0-0"
+    }
   }
 }

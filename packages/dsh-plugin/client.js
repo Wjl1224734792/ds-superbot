@@ -176,7 +176,7 @@ window.__ModuleLoader__.load({
         conflict: '设置已在其他位置更新，请撤销后重试。',
         invalidRoute: '每个角色要么同时选提供方与模型，要么两者都留空（继承主代理）。',
         
-        consoleLabel: '「ds-superbot」',
+        consoleLabel: 'ds-superbot',
         consoleTitle: 'ds-superbot',
         consoleNav: '打开 ds-superbot 控制台',
         decideTitle: '待你决定',
@@ -369,7 +369,7 @@ window.__ModuleLoader__.load({
         conflict: 'Settings changed elsewhere. Discard and try again.',
         invalidRoute: 'Each role needs both a provider and a model, or neither (inherit the parent).',
         
-        consoleLabel: '「ds-superbot」',
+        consoleLabel: 'ds-superbot',
         consoleTitle: 'ds-superbot',
         consoleNav: 'Open the ds-superbot console',
         decideTitle: 'Needs your decision',
@@ -3515,7 +3515,7 @@ window.__ModuleLoader__.load({
       const text = props.text || {};
       return h('span', { className: 'stwd-root stwd-console-icon' },
         styles(),
-        h('span', { className: 'stwd-console-glyph', title: text.consoleLabel || '「ds-superbot」', 'aria-hidden': 'true' },
+        h('span', { className: 'stwd-console-glyph', title: text.consoleLabel || 'ds-superbot', 'aria-hidden': 'true' },
           h(SuperBotIcon, { size: 18 }),
         ),
       );
@@ -4700,7 +4700,7 @@ window.__ModuleLoader__.load({
           name: 'sidebar.panellist',
           id: CONSOLE_SLOT_ID,
           order: 40,
-          label: () => textOf().consoleLabel || '「ds-superbot」',
+          label: () => textOf().consoleLabel || 'ds-superbot',
         }, () => h(ConsoleNavIcon, { text: textOf() }))), 'superbot: left console icon');
         ctx.effect(() => ctx.slots.inject('main', () => ctx.slots.register({
           name: 'main',
