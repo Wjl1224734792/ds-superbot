@@ -358,7 +358,7 @@ window.__ModuleLoader__.load({
         sectionFailed: 'This section failed to render (the rest still works)',
         configTitle: 'Subagent models and reasoning effort',
         configSub: 'Pick a model per role or capability in Settings; empty rows use the defaults, and without defaults they inherit the parent. A modelRouting entry in the project superbot.config.json takes priority for that role. Capability × risk routing still comes first.',
-        defaultsTitle: 'Defaults',
+        defaultsTitle: 'Defaults (fallback)',
         defaultsSub: 'Roles and capabilities without their own selection use this model and effort.',
         rolesTitle: 'Roles',
         capabilitiesTitle: 'Capabilities',
@@ -4301,6 +4301,7 @@ window.__ModuleLoader__.load({
       const [saving, setSaving] = useState(false);
       const [error, setError] = useState('');
       const [notice, setNotice] = useState('');
+      const [configTab, setConfigTab] = useState('roles');
 
       const loadCatalog = useCallback(async () => {
         catalogRef.current = { status: 'loading', groups: [], failures: [] };
@@ -4415,76 +4416,78 @@ window.__ModuleLoader__.load({
         );
       }
 
-      const rows = [];
-      rows.push(h('div', { className: 'stwd-tr stwd-tr-head', key: '__head', 'aria-hidden': 'true' },
-        h('span', { className: 'stwd-th' }, text.colRole),
+      const tableHead = (firstCol) => h('div', { className: 'stwd-tr stwd-tr-head', key: '__head', 'aria-hidden': 'true' },
+        h('span', { className: 'stwd-th' }, firstCol),
         h('span', { className: 'stwd-th' }, text.providerLabel),
         h('span', { className: 'stwd-th' }, text.modelLabel),
         h('span', { className: 'stwd-th' }, text.effortLabel),
         h('span', { className: 'stwd-th stwd-th-last' }, text.colSource),
-      ));
-      rows.push(h('div', { className: 'stwd-tr stwd-tr-default', key: '__defaults' },
+      );
+      const namedRow = (item, selection, source, onId, name, desc) => h('div', { className: 'stwd-tr', key: onId },
         h('span', { className: 'stwd-cell-role' },
-          h('span', { className: 'stwd-role-name' }, text.defaultsTitle),
-          h('span', { className: 'stwd-role-sub' }, text.defaultsSub),
+          h('span', { className: 'stwd-role-name', title: desc }, name),
+          h('span', { className: 'stwd-role-sub stwd-role-id' }, item.id),
         ),
         ...selectionCells({
           text,
           catalog,
-          selection: draft.defaults,
-          onChange: (selection) => update('defaults', selection),
-          onClear: () => update('defaults', emptySelection()),
-          clearable: draft.defaults.provider !== '',
-          source: draft.defaults.provider === '' ? 'inherit' : 'defaults',
+          selection,
+          onChange: (next) => update(onId, next),
+          onClear: () => update(onId, emptySelection()),
+          clearable: selection.provider !== '',
+          source,
         }),
-      ));
-      for (const role of ROLES) {
-        const selection = draft.roles[role.id] || emptySelection();
-        const source = selectionSource(draft, role.id);
-        rows.push(h('div', { className: 'stwd-tr', key: role.id },
-          h('span', { className: 'stwd-cell-role' },
-            h('span', { className: 'stwd-role-name', title: roleDesc(role, lang) }, roleName(role, lang)),
-            h('span', { className: 'stwd-role-sub stwd-role-id' }, role.id),
-          ),
+      );
+      const roleRows = [tableHead(text.colRole)].concat(ROLES.map((role) => namedRow(
+        role,
+        draft.roles[role.id] || emptySelection(),
+        selectionSource(draft, role.id),
+        role.id,
+        roleName(role, lang),
+        roleDesc(role, lang),
+      )));
+      const capRows = [tableHead(text.capabilitiesTitle || '能力')].concat(CAPABILITIES.map((cap) => namedRow(
+        cap,
+        (draft.capabilities || {})[cap.id] || emptySelection(),
+        capabilitySource(draft, cap.id),
+        cap.id,
+        lang === 'zh' ? cap.zh : cap.en,
+        lang === 'zh' ? cap.zhDesc : cap.enDesc,
+      )));
+      const defaultsCard = h('div', { className: 'stwd-defaults-card' },
+        h('div', { className: 'stwd-defaults-head' },
+          h('h3', { className: 'stwd-defaults-title' }, text.defaultsTitle),
+          h('p', { className: 'stwd-note' }, text.defaultsSub),
+        ),
+        h('div', { className: 'stwd-defaults-fields', role: 'group', 'aria-label': text.defaultsTitle },
           ...selectionCells({
             text,
             catalog,
-            selection,
-            onChange: (next) => update(role.id, next),
-            onClear: () => update(role.id, emptySelection()),
-            clearable: selection.provider !== '',
-            source,
+            selection: draft.defaults,
+            onChange: (selection) => update('defaults', selection),
+            onClear: () => update('defaults', emptySelection()),
+            clearable: draft.defaults.provider !== '',
+            source: draft.defaults.provider === '' ? 'inherit' : 'defaults',
           }),
-        ));
-      }
-      rows.push(h('div', { className: 'stwd-tr stwd-tr-head', key: '__cap-head', 'aria-hidden': 'true' },
-        h('span', { className: 'stwd-th' }, text.capabilitiesTitle || '能力'),
-        h('span', { className: 'stwd-th' }, text.providerLabel),
-        h('span', { className: 'stwd-th' }, text.modelLabel),
-        h('span', { className: 'stwd-th' }, text.effortLabel),
-        h('span', { className: 'stwd-th stwd-th-last' }, text.colSource),
-      ));
-      for (const cap of CAPABILITIES) {
-        const selection = (draft.capabilities || {})[cap.id] || emptySelection();
-        const source = capabilitySource(draft, cap.id);
-        rows.push(h('div', { className: 'stwd-tr', key: 'cap-' + cap.id },
-          h('span', { className: 'stwd-cell-role' },
-            h('span', { className: 'stwd-role-name', title: lang === 'zh' ? cap.zhDesc : cap.enDesc }, lang === 'zh' ? cap.zh : cap.en),
-            h('span', { className: 'stwd-role-sub stwd-role-id' }, cap.id),
-          ),
-          ...selectionCells({
-            text,
-            catalog,
-            selection,
-            onChange: (next) => update(cap.id, next),
-            onClear: () => update(cap.id, emptySelection()),
-            clearable: selection.provider !== '',
-            source,
-          }),
-        ));
-      }
+        ),
+      );
+      const tabButton = (id, label, count) => h('button', {
+        type: 'button',
+        role: 'tab',
+        id: 'stwd-cfg-tab-' + id,
+        className: 'stwd-cfg-tab' + (configTab === id ? ' stwd-cfg-tab-active' : ''),
+        'aria-selected': configTab === id,
+        'aria-controls': 'stwd-cfg-panel-' + id,
+        tabIndex: configTab === id ? 0 : -1,
+        onClick: () => setConfigTab(id),
+      },
+        label,
+        h('span', { className: 'stwd-cfg-tab-count' }, String(count)),
+      );
+      const activeId = configTab === 'capabilities' ? 'capabilities' : 'roles';
+      const activeRows = activeId === 'capabilities' ? capRows : roleRows;
 
-      return h('section', { className: 'stwd-section' },
+      return h('section', { className: 'stwd-section stwd-config' },
         compact ? h('h3', { className: 'stwd-section-title' }, text.configTitle) : h(SectionHead, { title: text.configTitle, count: text.rolesTitle + ' ' + String(ROLES.length) + ' · ' + (text.capabilitiesTitle || '能力') + ' ' + String(CAPABILITIES.length) }),
         h('p', { className: 'stwd-note' }, text.configSub),
         error ? h(Alert, { tone: 'error' }, error) : null,
@@ -4494,7 +4497,19 @@ window.__ModuleLoader__.load({
         !writable ? h(Alert, { tone: 'warn' }, text.readOnly) : null,
         catalog.status === 'error' ? h(Alert, { tone: 'warn' }, `${text.catalogEmpty}：${catalog.error || ''}`) : null,
         catalog.status === 'loading' ? h(SkeletonRows, { rows: 2 }) : null,
-        h('div', { className: 'stwd-table', role: 'group', 'aria-label': text.configTitle }, rows),
+        defaultsCard,
+        h('div', { className: 'stwd-cfg-switch' },
+          h('div', { className: 'stwd-cfg-tabs', role: 'tablist', 'aria-label': text.configTitle },
+            tabButton('roles', text.rolesTitle, ROLES.length),
+            tabButton('capabilities', text.capabilitiesTitle || '能力', CAPABILITIES.length),
+          ),
+          h('div', {
+            className: 'stwd-table',
+            role: 'tabpanel',
+            id: 'stwd-cfg-panel-' + activeId,
+            'aria-labelledby': 'stwd-cfg-tab-' + activeId,
+          }, activeRows),
+        ),
         h('div', { className: 'stwd-toolbar' },
           h('span', { className: 'stwd-state ' + (dirty ? 'stwd-state-dirty' : 'stwd-state-ok') },
             h(StatusDot, { tone: dirty ? 'warn' : 'done' }),
@@ -4738,6 +4753,18 @@ window.__ModuleLoader__.load({
       '.stwd-toolbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap}',
       '.stwd-spacer{flex:1}',
       '/* --- configuration table ------------------------------------------------ */',
+      '.stwd-root-compact{display:flex;flex-direction:column;gap:16px;padding:4px 0 12px;min-width:0}',
+      '.stwd-config{gap:14px}',
+      '.stwd-defaults-card{display:flex;flex-direction:column;gap:10px;padding:12px 12px 14px;border:.5px solid var(--stwd-border-soft);border-radius:12px;background:color-mix(in srgb,var(--dsw-alias-brand-primary) 6%,var(--dsw-alias-bg-layer-1))}',
+      '.stwd-defaults-head{display:flex;flex-direction:column;gap:2px;min-width:0}',
+      '.stwd-defaults-title{margin:0;font-size:13px;line-height:20px;font-weight:600;color:var(--dsw-alias-label-primary)}',
+      '.stwd-defaults-fields{display:grid;grid-template-columns:repeat(3,minmax(112px,1fr)) minmax(92px,.7fr);gap:8px 12px;align-items:end}',
+      '.stwd-cfg-switch{display:flex;flex-direction:column;gap:8px;min-width:0}',
+      '.stwd-cfg-tabs{display:flex;align-items:center;gap:2px;padding:3px;width:fit-content;max-width:100%;border:.5px solid var(--stwd-border-soft);border-radius:10px;background:var(--dsw-alias-bg-layer-2)}',
+      '.stwd-cfg-tab{display:inline-flex;align-items:center;min-height:26px;padding:2px 12px;border:0;border-radius:7px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;line-height:18px;cursor:pointer}',
+      '.stwd-cfg-tab:hover{color:var(--dsw-alias-label-primary);background:var(--stwd-hover)}',
+      '.stwd-cfg-tab-active{background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-weight:500;box-shadow:var(--stwd-elev)}',
+      '.stwd-cfg-tab-count{margin-left:6px;font-size:10.5px;line-height:16px;color:var(--stwd-muted);font-variant-numeric:tabular-nums}',
       '.stwd-table{display:flex;flex-direction:column;border:.5px solid var(--stwd-border-soft);border-radius:10px;overflow:hidden;background:var(--dsw-alias-bg-layer-1)}',
       '.stwd-tr{display:grid;grid-template-columns:minmax(112px,1.1fr) repeat(3,minmax(96px,1fr)) minmax(84px,.8fr);gap:8px;align-items:center;padding:7px 9px;border-top:.5px solid var(--stwd-border-soft)}',
       '.stwd-tr:first-child{border-top:0}',
@@ -4773,6 +4800,7 @@ window.__ModuleLoader__.load({
       '@keyframes stwd-idle-eyes{0%,68%,100%{transform:translateX(0)}76%,88%{transform:translateX(-2.6px)}}',
       '@keyframes stwd-sleepy{0%,70%,100%{transform:rotate(-2deg) translateY(1px)}85%{transform:rotate(3deg) translateY(2px)}}',
       '@media (max-width:420px){',
+      '.stwd-defaults-fields{grid-template-columns:1fr 1fr}',
       '.stwd-arow-roleid{display:none}',
       '.stwd-gnode-model{font-size:9.5px}',
       '.stwd-tr{grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:stretch}',

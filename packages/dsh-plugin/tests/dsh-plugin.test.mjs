@@ -2643,8 +2643,9 @@ test('the panel face opens child sessions, artifacts and asks for child projecti
 
 /**
  * The configuration surface is the densest part of the panel. Render it against a
- * settled native settings snapshot plus a live model catalog and assert the table
- * shape: column headers, the defaults row, one row per role, one row per capability, three selects each.
+ * settled native settings snapshot plus a live model catalog and assert the new
+ * layout: the fallback card stays visible, tabs switch role and capability
+ * tables, and routing sources are unchanged.
  */
 test('the settings section renders the model table with a defaults row and one row per role', async () => {
   const { factory } = await loadClientFactory();
@@ -2678,14 +2679,16 @@ test('the settings section renders the model table with a defaults row and one r
   const settingsEntry = registered.find((entry) => entry.options.name === 'settings.section');
   assert.ok(settingsEntry, 'the settings section is registered');
   const { collect, labelOf, textOf, byClass } = harness;
-  const host = await harness.settle(() => settingsEntry.component({}));
+  const render = () => settingsEntry.component({});
+  let host = await harness.settle(render);
 
-  assert.deepEqual(collect(host, byClass('stwd-th')).map(labelOf), ['角色', '提供方', '模型', '思考强度', '来源', '能力', '提供方', '模型', '思考强度', '来源']);
+  assert.equal(collect(host, byClass('stwd-defaults-card')).length, 1, 'the fallback card is always on top');
+  assert.match(textOf(collect(host, byClass('stwd-defaults-card'))[0]), /默认（兜底）/);
+  assert.deepEqual(collect(host, byClass('stwd-th')).map(labelOf), ['角色', '提供方', '模型', '思考强度', '来源']);
 
-  const rows = collect(host, byClass('stwd-tr')).filter((node) => node.props.className.indexOf('stwd-tr-head') < 0);
-  assert.equal(rows.length, 16, 'defaults + 7 roles + 8 capabilities');
-  assert.match(rows[0].props.className, /stwd-tr-default/);
-  assert.equal(collect(host, (node) => node.type === 'select').length, 48, 'three route selects per row');
+  const dataRows = (tree) => collect(tree, byClass('stwd-tr')).filter((node) => node.props.className.indexOf('stwd-tr-head') < 0);
+  assert.equal(dataRows(host).length, 7, 'the roles tab shows one row per role, not the stacked capability table');
+  assert.equal(collect(host, (node) => node.type === 'select').length, 24, 'three selects on the fallback plus three per visible role');
 
   const selects = collect(host, (node) => node.type === 'select');
   assert.equal(selects[0].props.value, '', 'the defaults provider inherits the parent agent');
@@ -2696,9 +2699,26 @@ test('the settings section renders the model table with a defaults row and one r
 
   const sources = collect(host, (node) => typeof node.props.className === 'string'
     && node.props.className.split(/\s+/).some((name) => name.indexOf('stwd-pill-src-') === 0));
-  assert.ok(sources.length >= 8, 'every row shows where its route comes from');
+  assert.ok(sources.length >= 8, 'the fallback and every visible row show where the route comes from');
   assert.ok(sources.some((node) => node.props.className.indexOf('stwd-pill-src-role') >= 0), 'the configured role is marked as custom');
   assert.ok(sources.some((node) => node.props.className.indexOf('stwd-pill-src-inherit') >= 0), 'unconfigured roles are marked as inherited');
+
+  const tabs = collect(host, (node) => node.props.role === 'tab');
+  assert.equal(tabs.length, 2, 'role and capability tables sit behind two tabs');
+  assert.equal(labelOf(tabs[0]), '角色');
+  assert.equal(labelOf(tabs[1]), '能力');
+  assert.equal(tabs[0].props['aria-selected'], true);
+  assert.equal(tabs[1].props['aria-selected'], false);
+
+  tabs[1].props.onClick();
+  host = await harness.settle(render);
+  assert.equal(collect(host, byClass('stwd-defaults-card')).length, 1, 'switching tabs keeps the fallback card visible');
+  assert.deepEqual(collect(host, byClass('stwd-th')).map(labelOf), ['能力', '提供方', '模型', '思考强度', '来源']);
+  assert.equal(dataRows(host).length, 8, 'the capability tab shows one row per capability');
+  assert.equal(collect(host, (node) => node.type === 'select').length, 27, 'three selects on the fallback plus three per visible capability');
+  const roleIds = collect(host, byClass('stwd-role-id')).map(textOf);
+  assert.ok(roleIds.includes('Discover') && roleIds.includes('Cartographer'), 'capability rows are the ones in view');
+  assert.ok(!roleIds.includes('backend-dev') && !roleIds.includes('pm'), 'role rows are hidden while the capability tab is active');
 
   const toolbar = collect(host, byClass('stwd-toolbar'));
   assert.equal(toolbar.length, 1, 'one save toolbar');
