@@ -150,7 +150,7 @@ test('icon.svg is an SVG plugin logo with a 64×64 viewBox', () => {
   assert.match(svg, /viewBox="0 0 64 64"/);
   assert.match(svg, /#4D6BFE|#4C6EF5/i);
   const bars = svg.match(/<rect\b[^>]*fill="#FFFFFF"/g) || [];
-  assert.equal(bars.length, 4, 'two eyes, each with a main and a small white highlight bar');
+  assert.equal(bars.length, 2, 'two perspective bar eyes, no extra highlight bars');
   assert.doesNotMatch(svg, /<circle\b/);
   assert.doesNotMatch(svg, /stwd-sclera/);
   assert.doesNotMatch(svg, /#243A6E|#0E1528|#14C16F/i);
