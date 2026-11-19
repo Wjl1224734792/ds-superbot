@@ -20,64 +20,15 @@ The 0.1.0 seven-role dispatch path (`superbot_dispatch`) remains as a compatibil
 
 Source synthesis:
 
-```mermaid
-flowchart TB
-  dsbot["DS-Bot: group-chat main console, restrained speech, presence"]
-  superagent["Superagent: runtime skeleton, Watchdog, observe"]
-  steward["Steward: dispatch only; no execution, no judgment"]
-  product["ds-superbot: a standing engineering organization"]
-  dsbot --> product
-  superagent --> product
-  steward --> product
-  product --> inst["Institution layer: work items, Mandate, Receipt, gates"]
-  product --> runtime["Runtime layer: dispatch, Watchdog, capability routing"]
-  product --> ui["Interaction layer: left-rail decisions, center group chat, right Workbench"]
-```
+![Source synthesis](docs/architecture/en-source-synthesis.png)
 
 Institution / runtime / interaction:
 
-```mermaid
-flowchart LR
-  subgraph ui [Interaction layer]
-    left["Left rail: needs your decision"]
-    chat["Center: group chat"]
-    workbench["Right Workbench: cang / tan / zuo / yan"]
-  end
-  subgraph runtime [Runtime layer]
-    assign["Steward dispatch"]
-    watchdog["Watchdog"]
-    route["routeModel"]
-  end
-  subgraph inst [Institution layer]
-    workitem["Work item"]
-    mandate["Mandate / Receipt"]
-    policy["Policy gates"]
-  end
-  chat --> assign
-  left -->|"human approves or rejects"| mandate
-  assign --> workitem
-  watchdog --> workitem
-  route --> assign
-  workitem --> policy
-  workitem -.-> workbench
-```
+![Institution / runtime / interaction](docs/architecture/en-layers.png)
 
 Work-item loop:
 
-```mermaid
-sequenceDiagram
-  participant Person as Person
-  participant Chat as Group chat
-  participant Console as Left rail
-  participant Runtime as Runtime
-  participant Workbench as Workbench
-  Person->>Chat: raises a request
-  Chat->>Console: forms a work item, enters needs-your-decision
-  Person->>Console: approves
-  Console->>Runtime: issues a Mandate and starts Watchdog
-  Runtime->>Workbench: cang / tan / zuo / yan express status
-  Runtime-->>Console: result ready, or another decision is needed
-```
+![Work-item loop](docs/architecture/en-workflow.png)
 
 ## What it fixes
 

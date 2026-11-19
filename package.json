@@ -22,6 +22,7 @@
     "engineering-team",
     "documentation-pipeline"
   ],
+  "icon": "./icon.svg",
   "exports": {
     ".": "./packages/dsh-plugin/index.js",
     "./client": "./packages/dsh-plugin/client.js",
@@ -31,6 +32,8 @@
   "files": [
     "README.md",
     "README.en.md",
+    "icon.svg",
+    "docs/architecture/**",
     "packages/dsh-plugin/index.js",
     "packages/dsh-plugin/client.js",
     "packages/dsh-plugin/cordis.patch.yml",

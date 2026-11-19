@@ -1,0 +1,12 @@
+sequenceDiagram
+  participant Person as 人
+  participant Chat as 群聊
+  participant Console as 左栏
+  participant Runtime as 运行时
+  participant Workbench as 工作台
+  Person->>Chat: 提出需求
+  Chat->>Console: 形成工作项，进入待你决定
+  Person->>Console: 批准
+  Console->>Runtime: 签发 Mandate，启动 Watchdog
+  Runtime->>Workbench: 仓探作验表达状态
+  Runtime-->>Console: 结果就绪或需要再决定

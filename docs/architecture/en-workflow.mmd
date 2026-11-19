@@ -1,0 +1,12 @@
+sequenceDiagram
+  participant Person as Person
+  participant Chat as Group chat
+  participant Console as Left rail
+  participant Runtime as Runtime
+  participant Workbench as Workbench
+  Person->>Chat: raises a request
+  Chat->>Console: forms a work item, enters needs-your-decision
+  Person->>Console: approves
+  Console->>Runtime: issues a Mandate and starts Watchdog
+  Runtime->>Workbench: cang / tan / zuo / yan express status
+  Runtime-->>Console: result ready, or another decision is needed

@@ -20,64 +20,15 @@ ds-superbot 是给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-ha
 
 来源合成：
 
-```mermaid
-flowchart TB
-  dsbot["DS-Bot：群聊主控制台、克制发言、在场"]
-  superagent["Superagent：运行时骨架、Watchdog、observe"]
-  steward["Steward：只分派、不执行、不做判定"]
-  product["ds-superbot：一支常驻工程组织"]
-  dsbot --> product
-  superagent --> product
-  steward --> product
-  product --> inst["制度层：工作项、Mandate、Receipt、门禁"]
-  product --> runtime["运行时层：派单、Watchdog、能力态路由"]
-  product --> ui["交互层：左栏决定、中栏群聊、右栏工作台"]
-```
+![来源合成](docs/architecture/zh-source-synthesis.png)
 
 制度 / 运行时 / 交互：
 
-```mermaid
-flowchart LR
-  subgraph ui [交互层]
-    left["左栏：待你决定"]
-    chat["中栏：群聊"]
-    workbench["右栏工作台：仓 / 探 / 作 / 验"]
-  end
-  subgraph runtime [运行时层]
-    assign["Steward 分派"]
-    watchdog["Watchdog"]
-    route["routeModel"]
-  end
-  subgraph inst [制度层]
-    workitem["工作项"]
-    mandate["Mandate / Receipt"]
-    policy["Policy 门禁"]
-  end
-  chat --> assign
-  left -->|"人批准或否决"| mandate
-  assign --> workitem
-  watchdog --> workitem
-  route --> assign
-  workitem --> policy
-  workitem -.-> workbench
-```
+![制度 / 运行时 / 交互](docs/architecture/zh-layers.png)
 
 工作项闭环：
 
-```mermaid
-sequenceDiagram
-  participant Person as 人
-  participant Chat as 群聊
-  participant Console as 左栏
-  participant Runtime as 运行时
-  participant Workbench as 工作台
-  Person->>Chat: 提出需求
-  Chat->>Console: 形成工作项，进入待你决定
-  Person->>Console: 批准
-  Console->>Runtime: 签发 Mandate，启动 Watchdog
-  Runtime->>Workbench: 仓探作验表达状态
-  Runtime-->>Console: 结果就绪或需要再决定
-```
+![工作项闭环](docs/architecture/zh-workflow.png)
 
 ## 它解决什么问题
 

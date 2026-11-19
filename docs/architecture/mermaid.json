@@ -1,0 +1,24 @@
+{
+  "theme": "neutral",
+  "themeVariables": {
+    "fontFamily": "Noto Sans CJK SC, Noto Sans, DejaVu Sans, sans-serif",
+    "fontSize": "16px"
+  },
+  "flowchart": {
+    "htmlLabels": true,
+    "curve": "basis",
+    "padding": 12,
+    "nodeSpacing": 36,
+    "rankSpacing": 48,
+    "wrappingWidth": 420,
+    "useMaxWidth": false
+  },
+  "sequence": {
+    "useMaxWidth": false,
+    "actorFontFamily": "Noto Sans CJK SC, Noto Sans, DejaVu Sans, sans-serif",
+    "noteFontFamily": "Noto Sans CJK SC, Noto Sans, DejaVu Sans, sans-serif",
+    "messageFontFamily": "Noto Sans CJK SC, Noto Sans, DejaVu Sans, sans-serif",
+    "actorFontSize": 15,
+    "messageFontSize": 15
+  }
+}

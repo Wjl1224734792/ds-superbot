@@ -1,0 +1,23 @@
+flowchart LR
+  subgraph ui [Interaction layer]
+    left["Left rail: needs your decision"]
+    chat["Center: group chat"]
+    workbench["Right Workbench: cang / tan / zuo / yan"]
+  end
+  subgraph runtime [Runtime layer]
+    assign["Steward dispatch"]
+    watchdog["Watchdog"]
+    route["routeModel"]
+  end
+  subgraph inst [Institution layer]
+    workitem["Work item"]
+    mandate["Mandate / Receipt"]
+    policy["Policy gates"]
+  end
+  chat --> assign
+  left -->|"human approves or rejects"| mandate
+  assign --> workitem
+  watchdog --> workitem
+  route --> assign
+  workitem --> policy
+  workitem -.-> workbench

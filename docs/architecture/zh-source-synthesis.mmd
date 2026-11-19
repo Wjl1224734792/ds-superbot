@@ -1,0 +1,11 @@
+flowchart TB
+  dsbot["DS-Bot：群聊主控制台、克制发言、在场"]
+  superagent["Superagent：运行时骨架、Watchdog、observe"]
+  steward["Steward：只分派、不执行、不做判定"]
+  product["ds-superbot：一支常驻工程组织"]
+  dsbot --> product
+  superagent --> product
+  steward --> product
+  product --> inst["制度层：工作项、Mandate、Receipt、门禁"]
+  product --> runtime["运行时层：派单、Watchdog、能力态路由"]
+  product --> ui["交互层：左栏决定、中栏群聊、右栏工作台"]

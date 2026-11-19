@@ -1,0 +1,23 @@
+flowchart LR
+  subgraph ui [交互层]
+    left["左栏：待你决定"]
+    chat["中栏：群聊"]
+    workbench["右栏工作台：仓 / 探 / 作 / 验"]
+  end
+  subgraph runtime [运行时层]
+    assign["Steward 分派"]
+    watchdog["Watchdog"]
+    route["routeModel"]
+  end
+  subgraph inst [制度层]
+    workitem["工作项"]
+    mandate["Mandate / Receipt"]
+    policy["Policy 门禁"]
+  end
+  chat --> assign
+  left -->|"人批准或否决"| mandate
+  assign --> workitem
+  watchdog --> workitem
+  route --> assign
+  workitem --> policy
+  workitem -.-> workbench

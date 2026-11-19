@@ -1,0 +1,11 @@
+flowchart TB
+  dsbot["DS-Bot: group-chat main console, restrained speech, presence"]
+  superagent["Superagent: runtime skeleton, Watchdog, observe"]
+  steward["Steward: dispatch only; no execution, no judgment"]
+  product["ds-superbot: a standing engineering organization"]
+  dsbot --> product
+  superagent --> product
+  steward --> product
+  product --> inst["Institution layer: work items, Mandate, Receipt, gates"]
+  product --> runtime["Runtime layer: dispatch, Watchdog, capability routing"]
+  product --> ui["Interaction layer: left-rail decisions, center group chat, right Workbench"]
