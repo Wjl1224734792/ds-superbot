@@ -10,7 +10,12 @@ window.__ModuleLoader__.load({
     /** Right-Sidebar tab type: `id` keys the body/title slots, `kind` is what openTab() names. */
     const TAB_ID = 'ds-superbot';
     const TAB_KIND = 'superbot';
-    const CONSOLE_SLOT_ID = 'ds-superbot-console';
+    const WORKBENCH_VIEW_ID = 'superbot-workbench';
+    const LOGO_FILL = '#4D6BFE';
+    const LOGO_EYES = Object.freeze([
+      { cx: '37.490', cy: '26.870', rx: '2.436', ry: '3.840' },
+      { cx: '50.440', cy: '25.490', rx: '2.400', ry: '3.804' },
+    ]);
 
     const FIELDS = ['provider', 'model', 'effort'];
     /** Workspace-relative roots a Super Bot run can live at (skill contract, in this order). */
@@ -200,6 +205,10 @@ window.__ModuleLoader__.load({
         decideRejectConfirm: '确定否决这个工作项？此操作需要你确认。',
         decideApproved: '已批准并签发 Mandate',
         decideRejected: '已否决，未签发 Mandate',
+        seeEvidence: '看证据',
+        evidenceTitle: '证据',
+        cardResult: '结果已就绪',
+        cardFailed: '未能完成',
         decideNeedSession: '请先打开一个会话，再批准或否决工作项。',
         decideNeedCommand: '当前宿主没有提供命令通道，无法把决定送到 approveDecision / rejectDecision。',
         decideUnwired: '控制台还没有接到决定通道。',
@@ -394,6 +403,10 @@ window.__ModuleLoader__.load({
         decideRejectConfirm: 'Reject this work item? This needs your confirmation.',
         decideApproved: 'Approved, Mandate issued',
         decideRejected: 'Rejected, no Mandate issued',
+        seeEvidence: 'View evidence',
+        evidenceTitle: 'Evidence',
+        cardResult: 'Result ready',
+        cardFailed: 'Failed',
         decideNeedSession: 'Open a session first, then approve or reject the work item.',
         decideNeedCommand: 'The host does not expose commands, so the decision cannot reach approveDecision / rejectDecision.',
         decideUnwired: 'The console is not wired to a decide handler.',
@@ -2218,19 +2231,143 @@ window.__ModuleLoader__.load({
 
     const WHALE_SILHOUETTE = 'M 41.46 53.48 C 43.44 53.32 43.99 53.22 45.03 52.78 C 45.40 52.62 45.98 52.42 46.32 52.34 C 47.00 52.16 48.89 51.27 49.59 50.80 C 49.83 50.64 50.35 50.28 50.75 49.99 C 51.15 49.71 51.70 49.34 51.97 49.18 C 53.31 48.41 56.14 45.60 57.50 43.72 C 58.56 42.23 60.05 39.45 60.37 38.33 C 60.45 38.05 60.69 37.30 60.91 36.67 C 61.95 33.59 62.00 27.12 61.00 24.64 C 60.84 24.24 60.61 23.64 60.49 23.31 C 59.81 21.36 57.92 18.53 56.26 16.95 C 54.95 15.70 52.26 14.04 50.93 13.66 C 50.63 13.57 49.95 13.36 49.42 13.19 C 47.81 12.67 46.62 12.61 40.74 12.72 C 39.15 12.75 38.83 12.69 37.44 12.09 C 36.39 11.63 36.58 11.68 34.95 11.38 C 32.18 10.87 30.98 11.01 30.69 11.89 C 30.57 12.25 30.73 12.54 31.37 13.19 C 32.89 14.70 32.61 15.58 29.94 17.68 C 27.98 19.21 27.56 19.59 25.29 21.87 C 20.74 26.44 19.25 27.23 18.44 25.51 C 17.96 24.50 18.10 24.15 19.52 22.74 C 21.85 20.43 23.04 17.57 22.89 14.67 C 22.80 13.07 21.97 10.85 21.33 10.52 C 20.58 10.14 20.00 10.52 19.59 11.69 C 19.19 12.82 18.86 13.16 17.21 14.14 C 15.53 15.13 15.04 15.55 14.36 16.55 C 13.76 17.44 13.55 17.44 11.75 16.66 C 10.36 16.06 10.10 16.00 8.55 15.89 C 7.00 15.79 6.61 15.62 5.30 14.50 C 4.35 13.67 3.85 13.60 3.29 14.19 C 2.78 14.72 2.69 15.44 3.00 16.48 C 3.10 16.81 3.26 17.37 3.36 17.73 C 3.77 19.16 3.92 19.53 4.38 20.30 C 5.59 22.31 7.56 24.00 9.34 24.54 C 11.49 25.20 11.70 25.31 11.99 25.91 C 12.14 26.23 12.18 26.44 12.22 27.16 C 12.28 28.45 12.38 29.00 12.73 30.09 C 12.91 30.65 13.11 31.52 13.22 32.15 C 13.35 32.94 13.47 33.41 13.66 33.87 C 13.81 34.22 14.05 34.87 14.20 35.30 C 14.97 37.53 16.58 40.22 18.54 42.59 C 19.48 43.72 19.67 43.98 19.75 44.28 C 19.92 44.92 19.55 45.34 18.50 45.70 C 17.42 46.08 15.80 46.98 15.53 47.35 C 14.90 48.26 15.57 49.39 17.02 49.87 C 18.50 50.35 21.87 50.24 23.58 49.66 C 24.98 49.18 25.13 49.21 26.57 50.20 C 28.24 51.34 29.61 52.07 30.73 52.41 C 31.08 52.51 31.66 52.72 32.00 52.87 C 33.42 53.46 37.88 53.75 41.46 53.48 Z';
 
-    function SuperBotIcon({ size }) {
-      const edge = typeof size === 'number' && size > 0 ? size : 16;
+    function ProjectLogo(props) {
+      const size = typeof props.size === 'number' && props.size > 0 ? props.size : 18;
       return h('svg', {
-        className: 'stwd-icon',
-        width: edge,
-        height: edge,
+        className: 'stwd-project-logo' + (props.className ? ' ' + props.className : ''),
+        width: size,
+        height: size,
         viewBox: '0 0 64 64',
         fill: 'none',
-        'aria-hidden': 'true',
+        xmlns: 'http://www.w3.org/2000/svg',
+        'aria-hidden': props['aria-hidden'] === false ? undefined : 'true',
         focusable: 'false',
+        'data-active': props.active ? 'true' : undefined,
       },
-        h('path', { d: WHALE_SILHOUETTE, fill: 'currentColor', fillRule: 'evenodd' }),
+        h('path', { d: WHALE_SILHOUETTE, fill: LOGO_FILL, fillRule: 'evenodd' }),
+        LOGO_EYES.map((eye, index) => h('ellipse', {
+          key: 'eye-' + index,
+          cx: eye.cx,
+          cy: eye.cy,
+          rx: eye.rx,
+          ry: eye.ry,
+          fill: '#FFFFFF',
+        })),
       );
+    }
+
+    function SuperBotIcon(props) {
+      return h(ProjectLogo, props);
+    }
+
+    function SettingsSectionIcon(props) {
+      const size = typeof props.size === 'number' && props.size > 0 ? props.size : 18;
+      return h('span', {
+        className: 'stwd-root stwd-settings-icon',
+        'data-active': props.active ? 'true' : 'false',
+        'aria-hidden': 'true',
+      }, styles(), h(ProjectLogo, { size, active: Boolean(props.active) }));
+    }
+
+    const workbenchFocus = (() => {
+      const values = new Map();
+      const listeners = new Map();
+      return {
+        get(sessionId) {
+          return values.get(String(sessionId || '')) || null;
+        },
+        set(sessionId, next) {
+          const key = String(sessionId || '');
+          values.set(key, next || null);
+          const set = listeners.get(key);
+          if (set) {
+            for (const fn of set) fn(next || null);
+          }
+        },
+        subscribe(sessionId, fn) {
+          const key = String(sessionId || '');
+          const set = listeners.get(key) || new Set();
+          set.add(fn);
+          listeners.set(key, set);
+          return () => {
+            set.delete(fn);
+            if (set.size === 0) listeners.delete(key);
+          };
+        },
+      };
+    })();
+
+    const tailSeqBySession = new Map();
+
+    function useIsLatestTail(sessionId, seq) {
+      const key = String(sessionId || '');
+      const value = seq === undefined || seq === null || seq === '' ? 0 : Number(seq);
+      const safe = Number.isFinite(value) ? value : 0;
+      const [latest, setLatest] = useState(() => {
+        const set = tailSeqBySession.get(key) || new Set();
+        set.add(safe);
+        tailSeqBySession.set(key, set);
+        return Math.max.apply(null, Array.from(set));
+      });
+      useEffect(() => {
+        const set = tailSeqBySession.get(key) || new Set();
+        set.add(safe);
+        tailSeqBySession.set(key, set);
+        setLatest(Math.max.apply(null, Array.from(set)));
+        return () => {
+          set.delete(safe);
+          if (set.size === 0) tailSeqBySession.delete(key);
+          else setLatest(Math.max.apply(null, Array.from(set)));
+        };
+      }, [key, safe]);
+      return latest === safe;
+    }
+
+    function useWorkbenchFocus(sessionId) {
+      const [focus, setFocus] = useState(() => workbenchFocus.get(sessionId));
+      useEffect(() => workbenchFocus.subscribe(sessionId, setFocus), [sessionId]);
+      return focus;
+    }
+
+    function openWorkbenchView(options) {
+      const opts = options || {};
+      const view = WORKBENCH_VIEW_ID;
+      const sessionId = opts.sessionId;
+      if (opts.focus) workbenchFocus.set(sessionId, opts.focus);
+      const props = opts.props || {};
+      if (typeof props.openView === 'function') {
+        props.openView(view, opts.focus && (opts.focus.itemId || opts.focus));
+        return true;
+      }
+      if (typeof props.selectView === 'function') {
+        props.selectView(view);
+        return true;
+      }
+      const actions = props.actions;
+      if (actions && typeof actions.openView === 'function') {
+        actions.openView(view, opts.focus && (opts.focus.itemId || opts.focus));
+        return true;
+      }
+      if (actions && typeof actions.setView === 'function') {
+        actions.setView(view);
+        return true;
+      }
+      const ui = opts.ctx && opts.ctx.uiConversation;
+      if (ui && typeof ui.binding === 'function' && sessionId) {
+        const binding = ui.binding(sessionId);
+        if (binding && typeof binding.activate === 'function') {
+          binding.activate(view);
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function chatCardKicker(speech, text) {
+      if (!speech) return '';
+      if (speech.reason === 'needs-decision') return text.decideTitle || '';
+      if (speech.reason === 'failed') return text.cardFailed || '';
+      return text.cardResult || '';
     }
 
     // --- task progress --------------------------------------------------------------
@@ -3458,23 +3595,25 @@ window.__ModuleLoader__.load({
     function MiniFaces(props) {
       const items = collectWorkItems(props);
       const field = stageField(items);
-      const reduced = prefersReducedMotion(props.reducedMotion);
       const text = props.text || {};
       const groupLabel = text.stageTitle || 'ds-superbot';
       const openLabel = text.openPanel || groupLabel;
       const open = () => { if (typeof props.openPanel === 'function') props.openPanel(); };
+      const selectFace = (presence) => {
+        workbenchFocus.set(props.sessionId, { face: presence && presence.face });
+        if (typeof props.onSelect === 'function') props.onSelect(presence);
+        if (typeof props.onSelectFace === 'function') props.onSelectFace(presence && presence.face);
+        open();
+      };
       const faces = items.length > 0
-        ? field.map((presence, index) => h(ResidentFace, {
+        ? field.map((presence) => h(ResidentFace, {
             key: presence.face,
-            presence,
+            presence: stillFrameOf(presence) || presence,
             size: 32,
             mini: true,
-            delay: (index * 0.8) + 's',
-            reducedMotion: reduced,
-            onSelect: () => {
-              if (typeof props.onSelect === 'function') props.onSelect(presence);
-              open();
-            },
+            delay: '0s',
+            reducedMotion: true,
+            onSelect: () => selectFace(presence),
           }))
         : [h('button', {
             type: 'button',
@@ -3517,8 +3656,7 @@ window.__ModuleLoader__.load({
           'aria-label': label,
           title: label,
           onClick: () => {
-            if (typeof props.openConsole === 'function') props.openConsole();
-            else if (typeof props.openPanel === 'function') props.openPanel();
+            openWorkbenchView({ sessionId: props.sessionId, props, ctx: props.ctx });
           },
         }, label),
       );
@@ -3608,15 +3746,17 @@ window.__ModuleLoader__.load({
         }
       };
       const openItem = (item) => {
+        if (item && item.id) workbenchFocus.set(props.sessionId, { itemId: item.id, face: item.face });
         if (typeof props.onSelectItem === 'function') props.onSelectItem(item);
-        if (typeof props.openPanel === 'function') props.openPanel();
+        if (props.embedded) return;
+        openWorkbenchView({
+          sessionId: props.sessionId,
+          focus: item ? { itemId: item.id, face: item.face } : null,
+          props,
+          ctx: props.ctx,
+        });
       };
-      return h('div', { className: 'stwd-root stwd-console' },
-        styles(),
-        h('header', { className: 'stwd-console-head' },
-          h('h1', { className: 'stwd-console-title' }, text.consoleTitle || 'ds-superbot'),
-        ),
-        h('section', { className: 'stwd-console-block stwd-console-decide', 'aria-labelledby': 'stwd-decide-title' },
+      const decideBlock = h('section', { className: 'stwd-console-block stwd-console-decide', 'aria-labelledby': 'stwd-decide-title' },
           h('h2', { id: 'stwd-decide-title', className: 'stwd-console-h' }, text.decideTitle),
           sections.decisions.length === 0
             ? h('p', { className: 'stwd-console-empty' }, text.decideEmpty)
@@ -3641,14 +3781,19 @@ window.__ModuleLoader__.load({
                     className: 'stwd-console-btn stwd-console-btn-danger',
                     onClick: () => confirmReject(item),
                   }, text.decideReject),
+                  h('button', {
+                    type: 'button',
+                    className: 'stwd-console-btn stwd-console-btn-evidence',
+                    onClick: () => openItem(item),
+                  }, text.seeEvidence),
                 ),
               )),
             ),
           decideStatus ? h('p', {
             className: 'stwd-console-decide-status' + (decideStatus.tone === 'error' ? ' stwd-console-decide-status-error' : ''),
           }, decideStatus.text) : null,
-        ),
-        h('section', {
+        );
+      const healthBlock = h('section', {
           className: 'stwd-console-block stwd-console-health' + (health.compact ? ' stwd-console-health-compact' : ''),
           'aria-labelledby': 'stwd-health-title',
         },
@@ -3663,8 +3808,8 @@ window.__ModuleLoader__.load({
           health.compact ? null : h('p', { className: 'stwd-console-health-extra' },
             text.watchdogOff + ' · ' + text.subscribeOff,
           ),
-        ),
-        h('section', { className: 'stwd-console-block stwd-console-history', 'aria-labelledby': 'stwd-history-title' },
+        );
+      const historyBlock = h('section', { className: 'stwd-console-block stwd-console-history', 'aria-labelledby': 'stwd-history-title' },
           h('h2', { id: 'stwd-history-title', className: 'stwd-console-h' }, text.historyTitle),
           sections.history.length === 0
             ? h('p', { className: 'stwd-console-empty' }, text.historyEmpty)
@@ -3682,7 +3827,29 @@ window.__ModuleLoader__.load({
                 h(WorkItemFacts, { item, text }),
               )),
             ),
+        );
+      if (props.embedded) {
+        return [
+          h('div', { className: 'stwd-workbench-top' },
+            decideBlock,
+            healthBlock,
+            props.evidence || null,
+          ),
+          props.stage || null,
+          h('div', { className: 'stwd-workbench-bottom' },
+            historyBlock,
+            props.historyExtra || null,
+          ),
+        ];
+      }
+      return h('div', { className: 'stwd-root stwd-console' },
+        styles(),
+        h('header', { className: 'stwd-console-head' },
+          h('h1', { className: 'stwd-console-title' }, text.consoleTitle || 'ds-superbot'),
         ),
+        decideBlock,
+        healthBlock,
+        historyBlock,
       );
     }
 
@@ -3819,6 +3986,19 @@ window.__ModuleLoader__.load({
         authority: props.authority || DEFAULT_AUTHORITY,
       }), [props.workItems, rows, facts, props.authority]);
 
+      const focus = useWorkbenchFocus(sessionId);
+      useEffect(() => {
+        if (!focus) return;
+        if (focus.itemId) {
+          setSelectedId(String(focus.itemId));
+          return;
+        }
+        if (focus.face) {
+          const match = workItems.find((item) => item && (item.face || faceForRole(item.role)) === focus.face);
+          if (match && match.id) setSelectedId(String(match.id));
+        }
+      }, [focus, workItems]);
+
       const selectedWorkItem = workItems.find((item) => item && (item.id === selectedId || item.agentId === selectedId))
         || workItems[0]
         || null;
@@ -3844,11 +4024,54 @@ window.__ModuleLoader__.load({
           : null,
       );
 
-      return h('div', { className: 'stwd-root stwd-panel' },
+      const evidence = [
+        h(ErrorBoundary, { fallbackTitle: text.sectionFailed }, h(TaskProgress, { text, progress })),
+        h('section', { className: 'stwd-section stwd-evidence-section' },
+          h(SectionHead, { title: text.evidenceTitle || text.workItemDetail }),
+          selectedWorkItem ? h(WorkItemFacts, { item: selectedWorkItem, text }) : null,
+          h(ErrorBoundary, { fallbackTitle: text.sectionFailed }, h(Artifacts, {
+            text,
+            facts,
+            open: artifactsOpen,
+            onToggle: () => setArtifactsOpen((current) => !current),
+            onOpen: (path) => { if (typeof props.openFile === 'function') props.openFile(path); },
+          })),
+        ),
+      ];
+      const stage = h('section', { className: 'stwd-section stwd-stage-section stwd-workbench-mid' },
+        h(SectionHead, { title: text.stageTitle }),
+        h(ErrorBoundary, { fallbackTitle: text.sectionFailed }, h(ResidentStage, {
+          items: workItems,
+          text,
+          reducedMotion: props.reducedMotion,
+          onSelect: (presence) => {
+            const match = workItems.find((item) => (item.face || faceForRole(item.role)) === presence.face);
+            if (match) {
+              setSelectedId(match.id);
+              workbenchFocus.set(sessionId, { itemId: match.id, face: presence.face });
+            }
+          },
+        })),
+      );
+      const historyExtra = h('section', { className: 'stwd-section stwd-detail-section' },
+        h(SectionHead, {
+          title: text.workItemDetail,
+          count: workItems.length === 0 ? '' : String(workItems.length),
+          actions: rosterActions,
+        }),
+        h(SectionHead, {
+          title: text.dagTitle,
+          count: fleet.total === 0 ? '' : String(fleet.total),
+        }),
+        h(ErrorBoundary, { fallbackTitle: text.sectionFailed }, rosterBody),
+        h('p', { className: 'stwd-note stwd-native-note' }, text.nativeListNote),
+      );
+
+      return h('div', { className: 'stwd-root stwd-panel stwd-workbench' },
         styles(),
         h('header', { className: 'stwd-panel-head' },
           h('div', { className: 'stwd-panel-head-row' },
-            h('span', { className: 'stwd-panel-badge', 'aria-hidden': 'true' }, h(SuperBotIcon, { size: 15 })),
+            h('span', { className: 'stwd-panel-badge', 'aria-hidden': 'true' }, h(ProjectLogo, { size: 15 })),
             h('h2', { className: 'stwd-panel-title' }, text.title),
             h('button', {
               type: 'button',
@@ -3863,40 +4086,110 @@ window.__ModuleLoader__.load({
             h('p', { className: 'stwd-panel-sub' }, text.subtitle),
           ),
         ),
-        h(ErrorBoundary, { fallbackTitle: text.sectionFailed }, h(TaskProgress, { text, progress })),
-        h('section', { className: 'stwd-section stwd-stage-section' },
-          h(SectionHead, { title: text.stageTitle }),
-          h(ErrorBoundary, { fallbackTitle: text.sectionFailed }, h(ResidentStage, {
-            items: workItems,
-            text,
-            reducedMotion: props.reducedMotion,
-            onSelect: (presence) => {
-              const match = workItems.find((item) => (item.face || faceForRole(item.role)) === presence.face);
-              if (match) setSelectedId(match.id);
-            },
-          })),
-        ),
-        h('section', { className: 'stwd-section stwd-detail-section' },
-          h(SectionHead, {
-            title: text.workItemDetail,
-            count: workItems.length === 0 ? '' : String(workItems.length),
-            actions: rosterActions,
-          }),
-          selectedWorkItem ? h(WorkItemFacts, { item: selectedWorkItem, text }) : null,
-          h(SectionHead, {
-            title: text.dagTitle,
-            count: fleet.total === 0 ? '' : String(fleet.total),
-          }),
-          h(ErrorBoundary, { fallbackTitle: text.sectionFailed }, rosterBody),
-          h('p', { className: 'stwd-note stwd-native-note' }, text.nativeListNote),
-        ),
-        h(ErrorBoundary, { fallbackTitle: text.sectionFailed }, h(Artifacts, {
+        h(SuperBotConsole, {
+          ...props,
+          workItems,
+          sessionId,
           text,
-          facts,
-          open: artifactsOpen,
-          onToggle: () => setArtifactsOpen((current) => !current),
-          onOpen: (path) => { if (typeof props.openFile === 'function') props.openFile(path); },
-        })),
+          embedded: true,
+          evidence,
+          stage,
+          historyExtra,
+          onSelectItem: (item) => {
+            if (item && item.id) setSelectedId(item.id);
+            if (typeof props.onSelectItem === 'function') props.onSelectItem(item);
+          },
+        }),
+      );
+    }
+
+    function WorkbenchView(props) {
+      useEffect(() => {
+        const req = props.viewRequest;
+        if (!req) return undefined;
+        const view = req.view || req.id;
+        if (view && view !== WORKBENCH_VIEW_ID) return undefined;
+        const focus = req.focus;
+        if (focus && typeof focus === 'object') {
+          workbenchFocus.set(props.sessionId, { itemId: focus.itemId || focus.id, face: focus.face });
+        } else if (typeof focus === 'string' && focus && focus !== WORKBENCH_VIEW_ID) {
+          workbenchFocus.set(props.sessionId, { itemId: focus });
+        }
+        if (typeof props.completeViewRequest === 'function') props.completeViewRequest();
+        return undefined;
+      }, [props.viewRequest, props.sessionId]);
+      return h(SuperBotPanel, props);
+    }
+
+    function DecisionCards(props) {
+      const text = props.text || {};
+      const items = collectWorkItems(props);
+      const cards = items.filter((item) => chatSpeechFor(item).ok);
+      const latest = useIsLatestTail(props.sessionId, props.seq);
+      if (!latest || cards.length === 0) return null;
+      const openItem = (item) => {
+        openWorkbenchView({
+          sessionId: props.sessionId,
+          focus: item ? { itemId: item.id, face: item.face } : null,
+          props,
+          ctx: props.ctx,
+        });
+      };
+      const runDecide = (item, action) => {
+        if (typeof props.onDecide !== 'function') return;
+        Promise.resolve(props.onDecide(item, action)).catch(() => {});
+      };
+      const confirmReject = (item) => {
+        const ask = typeof props.confirm === 'function'
+          ? props.confirm
+          : (message) => {
+            const root = typeof globalThis !== 'undefined' ? globalThis : null;
+            const win = (root && root.window) ? root.window : root;
+            if (win && typeof win.confirm === 'function') return win.confirm(message);
+            return false;
+          };
+        if (ask(text.decideRejectConfirm || '')) runDecide(item, 'reject');
+      };
+      return h('div', { className: 'stwd-root stwd-chat-cards' },
+        styles(),
+        cards.map((item) => {
+          const speech = chatSpeechFor(item);
+          const presence = stillFrameOf(presenceOf({ workItem: item, face: item.face, speakKind: speakKindFor(item) }));
+          const canDecide = DECISION_STATES.indexOf(item.state) >= 0;
+          return h('article', {
+            key: item.id,
+            className: 'stwd-decision-card stwd-decision-card--' + (speech.reason || 'result'),
+            role: 'group',
+            onClick: () => openItem(item),
+          },
+            presence ? h(ResidentFace, { presence, size: 36, mini: true, reducedMotion: true }) : null,
+            h('div', { className: 'stwd-decision-card-body' },
+              h('div', { className: 'stwd-decision-card-kicker' }, chatCardKicker(speech, text)),
+              h('div', { className: 'stwd-decision-card-title' }, item.title || item.id),
+              h('div', { className: 'stwd-decision-card-id' }, item.id),
+            ),
+            h('div', {
+              className: 'stwd-decision-card-actions',
+              onClick: (event) => { event.stopPropagation(); },
+            },
+              canDecide ? h('button', {
+                type: 'button',
+                className: 'stwd-console-btn stwd-console-btn-approve',
+                onClick: () => runDecide(item, 'approve'),
+              }, text.decideApprove) : null,
+              canDecide ? h('button', {
+                type: 'button',
+                className: 'stwd-console-btn stwd-console-btn-danger',
+                onClick: () => confirmReject(item),
+              }, text.decideReject) : null,
+              h('button', {
+                type: 'button',
+                className: 'stwd-decision-card-evidence',
+                onClick: () => openItem(item),
+              }, text.seeEvidence),
+            ),
+          );
+        }),
       );
     }
 
@@ -4235,7 +4528,7 @@ window.__ModuleLoader__.load({
       '/* --- shell ------------------------------------------------------------- */',
       '.stwd-root{--stwd-border:var(--dsw-alias-border-l2);--stwd-border-soft:var(--dsw-alias-border-l1);--stwd-border-strong:var(--dsw-alias-border-l3,var(--dsw-alias-border-l2));--stwd-hover:var(--dsw-alias-interactive-bg-hover,var(--dsw-alias-bg-layer-2));--stwd-live:var(--dsw-alias-state-business-primary,var(--dsw-alias-brand-primary));--stwd-muted:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-secondary));--stwd-elev:var(--dsw-elevation-panel,0 1px 2px rgb(0 0 0 / 8%));--stwd-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;box-sizing:border-box;color:var(--dsw-alias-label-primary);font-size:12.5px;line-height:18px;font-family:inherit}',
       '.stwd-root *{box-sizing:border-box}',
-      '.stwd-panel{display:flex;flex-direction:column;gap:12px;height:100%;min-height:0;overflow-y:auto;overflow-x:hidden;padding:12px 12px 20px}',
+      '.stwd-panel{display:flex;flex-direction:column;gap:20px;height:100%;min-height:0;overflow-y:auto;overflow-x:hidden;padding:16px 16px 24px}',
       '.stwd-panel>style{display:none}',
       '.stwd-mono{font-family:var(--stwd-mono)}',
       '.stwd-note{margin:0;font-size:11px;line-height:16px;color:var(--stwd-muted)}',
@@ -4562,6 +4855,21 @@ window.__ModuleLoader__.load({
       '.stwd-wifacts dt{margin:0;color:var(--dsw-alias-label-secondary)}',
       '.stwd-wifacts dd{margin:0}',
       '.stwd-console-icon{display:inline-flex}',
+      '.stwd-project-logo{display:block;flex:none}',
+      '.stwd-settings-icon{display:inline-flex;align-items:center;justify-content:center}',
+      '.stwd-workbench{min-width:0}',
+      '.stwd-workbench-top,.stwd-workbench-mid,.stwd-workbench-bottom{display:flex;flex-direction:column;gap:12px;min-width:0}',
+      '.stwd-workbench-mid{padding:4px 0 8px}',
+      '.stwd-evidence-section{display:flex;flex-direction:column;gap:8px}',
+      '.stwd-chat-cards{display:flex;flex-direction:column;gap:8px;margin:4px 0;max-width:440px}',
+      '.stwd-decision-card{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border:1px solid var(--stwd-border);border-radius:14px;background:var(--dsw-alias-bg-layer-1);box-shadow:var(--stwd-elev);cursor:pointer}',
+      '.stwd-decision-card-body{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}',
+      '.stwd-decision-card-kicker{font-size:11px;color:var(--stwd-muted)}',
+      '.stwd-decision-card-title{font-weight:600;font-size:13px;line-height:18px}',
+      '.stwd-decision-card-id{font-family:var(--stwd-mono);font-size:11px;color:var(--stwd-muted)}',
+      '.stwd-decision-card-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}',
+      '.stwd-decision-card-evidence,.stwd-console-btn-evidence{appearance:none;border:0;background:transparent;color:var(--dsw-alias-state-business-primary,var(--dsw-alias-brand-primary));font:inherit;font-size:12px;font-weight:600;cursor:pointer;padding:0 2px}',
+      '.stwd-decision-card:hover{background:var(--stwd-hover)}',
       '.stwd-reduced .stwd-figure,.stwd-reduced .stwd-pupil,.stwd-reduced .stwd-lid,.stwd-reduced .stwd-brow{animation:none !important;transform:none}',
       '@media (prefers-reduced-motion:reduce){',
       '.stwd-root *{animation:none !important;transition:none !important}',
@@ -4572,10 +4880,11 @@ window.__ModuleLoader__.load({
 
     /**
      * Pick a session/agent id the Host command executor will accept.
-     * The left console is not session-scoped, so this uses the mounted
-     * session, then the sessions list, then the workspace.
+     * Prefer the slot's session id, then the mounted right-tab session,
+     * then the sessions list, then the workspace.
      */
-    function resolveCommandAgent(ctx) {
+    function resolveCommandAgent(ctx, sessionId) {
+      if (sessionId) return String(sessionId);
       const right = ctx ? ctx.sidebarRight : undefined;
       if (right && right.mounted && typeof right.mounted.getSnapshot === 'function') {
         try {
@@ -4610,11 +4919,11 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Wire left-console onDecide to the Host `/superbot-decide` command, which
+     * Wire workbench and card onDecide to the Host `/superbot-decide` command, which
      * calls runtime approveDecision / rejectDecision. Approval is user-only:
      * this is not a public tool.
      */
-    function createConsoleOnDecide(ctx, text) {
+    function createConsoleOnDecide(ctx, text, sessionId) {
       const copy = text || {};
       return async (item, action) => {
         const commands = ctx && ctx.remote ? ctx.remote.commands : undefined;
@@ -4624,7 +4933,7 @@ window.__ModuleLoader__.load({
         const id = item && typeof item === 'object' ? item.id : item;
         const verb = action === 'reject' ? 'reject' : 'approve';
         const line = '/superbot-decide ' + verb + ' ' + id;
-        const agent = resolveCommandAgent(ctx);
+        const agent = resolveCommandAgent(ctx, sessionId || (item && item.sessionId));
         if (!agent) {
           return { ok: false, kind: 'error', text: copy.decideNeedSession || '' };
         }
@@ -4729,7 +5038,11 @@ window.__ModuleLoader__.load({
         resolveCommandAgent,
         createConsoleOnDecide,
         AUTO_MERGE_DISABLED,
-        CONSOLE_SLOT_ID,
+        WORKBENCH_VIEW_ID,
+        LOGO_FILL,
+        LOGO_EYES,
+        ProjectLogo,
+        openWorkbenchView,
         FACES,
         CAPABILITIES,
         CAPABILITY_IDS,
@@ -4749,39 +5062,51 @@ window.__ModuleLoader__.load({
           label: () => textOf().nav,
         }, () => h(SettingsSection, { ctx, text: textOf(), lang: lang() }))), 'superbot: settings section');
 
-        // Official additive left console: panellist icon row + root-scoped main panel,
-        // verified against installed DeepSeek Harness 0.2.2-rc.2. Same id/key.
-        // Never register the occupied singleton slots sidebar / rightbar /
-        // conversation.session.header / conversation.header.
-        const openConsole = (target) => {
-          const layout = (target || ctx).layout;
-          if (!layout || typeof layout.selectPanel !== 'function') return false;
-          try {
-            layout.selectPanel(CONSOLE_SLOT_ID);
-            return true;
-          } catch {
-            return false;
-          }
-        };
-        ctx.effect(() => ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
-          name: 'sidebar.panellist',
-          id: CONSOLE_SLOT_ID,
-          order: 40,
-          label: () => textOf().consoleLabel || 'ds-superbot',
-        }, () => h(ConsoleNavIcon, { text: textOf() }))), 'superbot: left console icon');
-        ctx.effect(() => ctx.slots.inject('main', () => ctx.slots.register({
-          name: 'main',
-          key: CONSOLE_SLOT_ID,
+        // Official settings nav icon, verified against DSH 0.2.2-rc.5:
+        // settings.section.icon must reuse the section id. The icon's label is not shown.
+        ctx.effect(() => ctx.slots.inject('settings.section.icon', () => ctx.slots.register({
+          name: 'settings.section.icon',
+          id: 'superbot',
+          order: 50,
+        }, SettingsSectionIcon)), 'superbot: settings section icon');
+
+        // Official conversation.view (session-scoped list). Default stays Chat;
+        // this registration must not activate the workbench on its own.
+        // Never register occupied singleton slots sidebar / rightbar /
+        // conversation.session.header / conversation.header, and never call
+        // layout.selectPanel.
+        ctx.effect(() => ctx.slots.inject('conversation.view', () => ctx.slots.register({
+          name: 'conversation.view',
+          id: WORKBENCH_VIEW_ID,
+          order: 20,
           locale: NS,
-          inject: () => ({
+          label: () => textOf().tabTitle,
+          inject: (sessionId) => ({
+            ...makePanelFace(ctx, sessionId, textOf(), lang()),
+            sessionId,
             text: textOf(),
             lang: lang(),
             authority: DEFAULT_AUTHORITY,
-            openPanel: () => { openPanel(ctx); },
-            openConsole: () => { openConsole(ctx); },
-            onDecide: createConsoleOnDecide(ctx, textOf()),
+            ctx,
+            onDecide: createConsoleOnDecide(ctx, textOf(), sessionId),
           }),
-        }, SuperBotConsole)), 'superbot: left console panel');
+        }, WorkbenchView)), 'superbot: session workbench view');
+
+        // Official message-level additive slot: quiet product cards on the latest
+        // completed turn. Process states stay out of chat.
+        ctx.effect(() => ctx.slots.inject('conversation.chat.turnTail', () => ctx.slots.register({
+          name: 'conversation.chat.turnTail',
+          id: 'ds-superbot-cards',
+          order: 20,
+          locale: NS,
+          inject: (sessionId) => ({
+            sessionId,
+            text: textOf(),
+            lang: lang(),
+            ctx,
+            onDecide: createConsoleOnDecide(ctx, textOf(), sessionId),
+          }),
+        }, DecisionCards)), 'superbot: group-chat decision cards');
 
         // The board is a per-Session right-Sidebar tab: the type (what opens), its
         // body and chip title, the header button, and the rule that opens it when a
@@ -4848,8 +5173,7 @@ window.__ModuleLoader__.load({
             inject: (sessionId) => ({
               text: textOf(),
               sessionId,
-              openConsole: () => { openConsole(sctx); },
-              openPanel: () => { openPanel(sctx); },
+              ctx: sctx,
             }),
           }, DecisionCount)), 'superbot: header decision count');
 

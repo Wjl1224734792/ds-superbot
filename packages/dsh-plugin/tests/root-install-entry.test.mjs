@@ -72,7 +72,7 @@ test('locale meta.detail resolves to repository-root README files', () => {
   assert.equal(/[「」『』]/.test(en.meta.title), false);
 });
 
-test('left-console consoleLabel has no corner quotes', () => {
+test('consoleLabel has no corner quotes', () => {
   const client = readFileSync(join(pluginDir, 'client.js'), 'utf8');
   const labels = [...client.matchAll(/consoleLabel:\s*'([^']*)'/g)].map((m) => m[1]);
   assert.ok(labels.length >= 2, 'expected zh and en consoleLabel entries');
@@ -81,7 +81,7 @@ test('left-console consoleLabel has no corner quotes', () => {
     assert.equal(/[「」『』]/.test(label), false);
   }
   const fallbacks = [...client.matchAll(/text(?:Of\(\))?\.consoleLabel\s*\|\|\s*'([^']*)'/g)].map((m) => m[1]);
-  assert.ok(fallbacks.length >= 2, 'expected consoleLabel fallbacks');
+  assert.ok(fallbacks.length >= 1, 'expected consoleLabel fallbacks');
   for (const label of fallbacks) {
     assert.equal(label, 'ds-superbot');
     assert.equal(/[「」『』]/.test(label), false);

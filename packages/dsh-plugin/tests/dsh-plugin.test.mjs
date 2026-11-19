@@ -1067,7 +1067,7 @@ function sampleFacts(overrides) {
 /**
  * The board is a per-Session right-Sidebar tab: the tab type, its body and chip
  * title, a header button, and a settings section for models. P2 also registers the
- * official additive left console (sidebar.panellist + main) and header corner.
+ * official conversation.view workbench, turnTail cards, settings icon, and header corner.
  * Occupied singleton slots must stay unregistered.
  */
 test('the client registers a right-sidebar board, its title, a header button and the settings section', async () => {
@@ -1084,8 +1084,9 @@ test('the client registers a right-sidebar board, its title, a header button and
   const names = registered.map((entry) => entry.options.name);
   for (const name of [
     'settings.section',
-    'sidebar.panellist',
-    'main',
+    'settings.section.icon',
+    'conversation.view',
+    'conversation.chat.turnTail',
     'sidebar.right.pane.tab',
     'sidebar.right.pane.tab.title',
     'conversation.session.header.utilities',
@@ -1109,10 +1110,11 @@ test('the client registers a right-sidebar board, its title, a header button and
   const headerBtn = byName('conversation.session.header.utilities').find((entry) => entry.options.id === 'superbot-board');
   assert.ok(headerBtn, 'the utilities entry keeps id superbot-board');
   assert.ok(headerBtn.options.order < 0, 'the header button sits left of the overflow menu');
-  assert.equal(byName('sidebar.panellist')[0].options.id, 'ds-superbot-console');
-  assert.equal(byName('main')[0].options.key, 'ds-superbot-console');
-  const panellistLabel = byName('sidebar.panellist')[0].options.label;
-  assert.match(String(typeof panellistLabel === 'function' ? panellistLabel() : panellistLabel), /ds-superbot/);
+  assert.equal(byName('settings.section.icon')[0].options.id, 'superbot');
+  assert.equal(byName('conversation.view')[0].options.id, 'superbot-workbench');
+  const viewLabel = byName('conversation.view')[0].options.label;
+  assert.equal(typeof viewLabel === 'function' ? viewLabel() : viewLabel, '工作台');
+  assert.equal(byName('conversation.chat.turnTail').length, 1);
 
   assert.equal(tabTypes.length, 1);
   assert.equal(tabTypes[0].id, 'ds-superbot');
@@ -2851,6 +2853,8 @@ test('the panel stylesheet stays scoped and uses only host theme tokens', async 
     '#f97316',
     '#fbf4ea',
     '#fff',
+    '#ffffff',
+    '#4d6bfe',
   ]);
   const colors = literals.filter((value) => !artwork.has(value));
   assert.deepEqual(colors, [], `literal colors are artwork-only, found: ${colors.join(', ')}`);

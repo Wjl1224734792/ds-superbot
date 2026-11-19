@@ -1,5 +1,5 @@
 /**
- * P2 additive-slot wiring, left console ordering, stage presence, and quiet chat.
+ * P2 additive-slot wiring, workbench ordering, stage presence, and quiet chat.
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -170,13 +170,15 @@ test('P2 registers official additive slots and keeps 0.1.0 tab ids', async () =>
   const { ctx, registered, tabTypes } = createClientContext();
   instance.apply(ctx);
 
-  const panellist = slot(registered, 'sidebar.panellist');
-  const main = slot(registered, 'main');
-  assert.ok(panellist && main, 'left console slots must exist');
-  assert.equal(panellist.options.id, 'ds-superbot-console');
-  assert.equal(main.options.key, 'ds-superbot-console');
-  const label = typeof panellist.options.label === 'function' ? panellist.options.label() : panellist.options.label;
-  assert.equal(label, 'ds-superbot');
+  assert.equal(slot(registered, 'sidebar.panellist'), undefined, 'left console panellist must be gone');
+  assert.equal(slot(registered, 'main'), undefined, 'left console main must be gone');
+  const view = slot(registered, 'conversation.view');
+  assert.ok(view, 'conversation.view must be registered');
+  assert.equal(view.options.id, 'superbot-workbench');
+  const viewLabel = typeof view.options.label === 'function' ? view.options.label() : view.options.label;
+  assert.equal(viewLabel, '工作台');
+  assert.ok(slot(registered, 'conversation.chat.turnTail'), 'turnTail decision cards');
+  assert.ok(slot(registered, 'settings.section.icon'), 'settings section icon');
 
   assert.ok(slot(registered, 'conversation.session.header.corner'), 'header corner mini-faces');
   assert.ok(slot(registered, 'conversation.session.header.utilities', (entry) => entry.options.id === 'superbot-board'));
@@ -188,13 +190,13 @@ test('P2 registers official additive slots and keeps 0.1.0 tab ids', async () =>
   assert.equal(registered.filter((entry) => forbidden.has(entry.options.name)).length, 0);
 });
 
-test('the left console lists AwaitingApproval work items first under 待你决定', async () => {
+test('the workbench lists AwaitingApproval work items first under 待你决定', async () => {
   const { factory } = await loadClientFactory();
   const harness = createRenderHarness();
   const instance = factory((name) => (name === 'react' ? harness.stub : {}));
   const { ctx, registered } = createClientContext();
   instance.apply(ctx);
-  const entry = slot(registered, 'main');
+  const entry = slot(registered, 'conversation.view');
   const face = typeof entry.options.inject === 'function' ? entry.options.inject() : {};
   const host = await harness.settle(() => entry.component({ ...face, workItems: ITEMS, healthy: true, authority: 'observe' }));
   const text = host.map((node) => harness.textOf(node)).join('\n');

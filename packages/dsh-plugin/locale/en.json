@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "ds-superbot",
-    "description": "A work-item console for DeepSeek Harness. The work item is the only product object; group chat is the only human/AI console; four presence faces — cang / tan / zuo / yan — cover sense, explore, build and verify. Decisions stay with humans, operations with AI, judgment with programs. The left console handles items that need your decision and work-item history; the right Workbench shows presence and evidence; process status stays out of chat. The 0.1.0 seven-role dispatch path (superbot_dispatch) remains as a compatibility implementation, not the product cover. Default authority is observe; auto-merge stays off.",
+    "description": "A work-item console for DeepSeek Harness. The work item is the only product object; group chat is the only human/AI console; four presence faces — cang / tan / zuo / yan — cover sense, explore, build and verify. Decisions stay with humans, operations with AI, judgment with programs. Quiet decision cards in group chat handle items that need your decision; the session Workbench tab and the right Workbench show pending decisions, evidence, presence and history; process status stays out of chat. The 0.1.0 seven-role dispatch path (superbot_dispatch) remains as a compatibility implementation, not the product cover. Default authority is observe; auto-merge stays off.",
     "detail": "README.en.md"
   }
 }

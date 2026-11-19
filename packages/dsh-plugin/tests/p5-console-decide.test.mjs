@@ -1,5 +1,5 @@
 /**
- * P5 left-console wiring: 批准 → onDecide(approve), 否决 confirms then onDecide(reject).
+ * P5 workbench wiring: 批准 → onDecide(approve), 否决 confirms then onDecide(reject).
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -157,13 +157,13 @@ const ITEMS = [
   { id: 'WI-115', state: 'Failed', title: '门禁失败', face: 'cang' },
 ];
 
-test('left console primary button is 批准 and calls onDecide(approve), not openItem', async () => {
+test('workbench primary button is 批准 and calls onDecide(approve), not openItem', async () => {
   const { factory } = await loadClientFactory();
   const harness = createRenderHarness();
   const instance = factory((name) => (name === 'react' ? harness.stub : {}));
   const { ctx, registered } = createClientContext();
   instance.apply(ctx);
-  const entry = slot(registered, 'main');
+  const entry = slot(registered, 'conversation.view');
   const face = typeof entry.options.inject === 'function' ? entry.options.inject() : {};
   const decided = [];
   const opened = [];
@@ -197,7 +197,7 @@ test('reject still requires confirmation and then calls onDecide(reject)', async
   const instance = factory((name) => (name === 'react' ? harness.stub : {}));
   const { ctx, registered } = createClientContext();
   instance.apply(ctx);
-  const entry = slot(registered, 'main');
+  const entry = slot(registered, 'conversation.view');
   const face = typeof entry.options.inject === 'function' ? entry.options.inject() : {};
   const decided = [];
   let asked = 0;
@@ -229,7 +229,7 @@ test('reject still requires confirmation and then calls onDecide(reject)', async
   assert.deepEqual(decided, [['WI-114', 'reject']]);
 });
 
-test('main slot inject wires onDecide to /superbot-decide via ctx.remote.commands', async () => {
+test('workbench view inject wires onDecide to /superbot-decide via ctx.remote.commands', async () => {
   const { factory } = await loadClientFactory();
   const harness = createRenderHarness();
   const instance = factory((name) => (name === 'react' ? harness.stub : {}));
@@ -243,7 +243,7 @@ test('main slot inject wires onDecide to /superbot-decide via ctx.remote.command
     },
   });
   instance.apply(ctx);
-  const entry = slot(registered, 'main');
+  const entry = slot(registered, 'conversation.view');
   const face = typeof entry.options.inject === 'function' ? entry.options.inject() : {};
   assert.equal(typeof face.onDecide, 'function', 'inject must pass onDecide');
   const result = await face.onDecide({ id: 'WI-114' }, 'approve');
