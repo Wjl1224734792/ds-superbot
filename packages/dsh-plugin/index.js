@@ -99,6 +99,19 @@ const ROLES = Array.isArray(ROLE_MANIFEST.roles) ? ROLE_MANIFEST.roles : [];
 const ROLE_IDS = ROLES.map((role) => role.id);
 const ROLE_BY_ID = new Map(ROLES.map((role) => [role.id, role]));
 
+/** Settings rows for non-role capabilities. 仓 / 探 / 作 / 验 remain presence faces. */
+const CAPABILITIES = [
+  { id: 'Discover', name: '探索 Discover' },
+  { id: 'Build', name: '施工 Build' },
+  { id: 'Verify', name: '验收 Verify' },
+  { id: 'Steward', name: '分派 Steward' },
+  { id: 'Explorer', name: '勘探 Explorer' },
+  { id: 'Scout', name: '侦察 Scout' },
+  { id: 'Curator', name: '预排序 Curator' },
+  { id: 'Cartographer', name: '回写 Cartographer' },
+];
+const CAPABILITY_IDS = CAPABILITIES.map((item) => item.id);
+
 /**
  * Resolve schemastery from the installed package (npm install) or, for a
  * linked checkout, from the active profile's hoisted node_modules.
@@ -153,7 +166,8 @@ function routeSchema(label) {
 export const Config = z.object({
   defaults: routeSchema('默认配置'),
   roles: z.object(Object.fromEntries(ROLES.map((role) => [role.id, routeSchema(role.name ?? role.id)]))),
-}).description('Super Bot 面板：每个角色（或默认）的模型与思考强度；项目根 superbot.config.json 的 modelRouting 优先，保存后下一次派发生效');
+  capabilities: z.object(Object.fromEntries(CAPABILITIES.map((item) => [item.id, routeSchema(item.name ?? item.id)]))),
+}).description('Super Bot 面板：每个角色或能力（或默认）的模型与思考强度；空行走默认（兜底），再继承主代理。项目根 superbot.config.json 的 modelRouting 对角色优先，能力态 × 风险路由仍优先于这些设置');
 
 function unwrap(value) {
   if (value !== null && typeof value === 'object' && typeof value.get === 'function') return value.get();
@@ -183,16 +197,24 @@ function normalizeSelection(raw) {
 function readConfig(config) {
   const roles = {};
   for (const id of ROLE_IDS) roles[id] = readSelection(config?.roles?.[id]);
-  return { defaults: readSelection(config?.defaults), roles };
+  const capabilities = {};
+  for (const id of CAPABILITY_IDS) capabilities[id] = readSelection(config?.capabilities?.[id]);
+  return { defaults: readSelection(config?.defaults), roles, capabilities };
 }
 
 function normalizeConfig(raw) {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-    return { defaults: emptySelection(), roles: Object.fromEntries(ROLE_IDS.map((id) => [id, emptySelection()])) };
+    return {
+      defaults: emptySelection(),
+      roles: Object.fromEntries(ROLE_IDS.map((id) => [id, emptySelection()])),
+      capabilities: Object.fromEntries(CAPABILITY_IDS.map((id) => [id, emptySelection()])),
+    };
   }
   const roles = {};
   for (const id of ROLE_IDS) roles[id] = normalizeSelection(raw.roles?.[id]);
-  return { defaults: normalizeSelection(raw.defaults), roles };
+  const capabilities = {};
+  for (const id of CAPABILITY_IDS) capabilities[id] = normalizeSelection(raw.capabilities?.[id]);
+  return { defaults: normalizeSelection(raw.defaults), roles, capabilities };
 }
 
 /** Live config as served by the native settings document, falling back to the config refs. */
@@ -258,6 +280,24 @@ function projectRouteFor(roleId, startDir) {
   } catch {
     return null;
   }
+}
+
+
+/** Panel settings as a routeModel config: capability rows, then 默认（兜底）. */
+function routeConfigFrom(ctx, config, startDir) {
+  const panel = normalizeConfig(currentConfig(ctx, config));
+  let project = {};
+  try {
+    const raw = readJson(path.join(findProjectRoot(startDir), 'superbot.config.json'), null);
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) project = raw;
+  } catch {
+    // project config is optional
+  }
+  return {
+    ...project,
+    capabilities: panel.capabilities,
+    defaults: panel.defaults,
+  };
 }
 
 /** The route a role actually dispatches with: project config, then the panel. */
@@ -833,7 +873,7 @@ function decideIssuerFrom(invocation) {
   return 'human';
 }
 
-async function handleDecideCommand(ctx, invocation) {
+async function handleDecideCommand(ctx, invocation, config) {
   const { handleConsoleDecide, parseDecideInput } = await import('./lib/decide-adapter.mjs');
   const parsed = parseDecideInput(invocation?.rawInput);
   if (!parsed) {
@@ -868,6 +908,7 @@ async function handleDecideCommand(ctx, invocation) {
           parent: invocation?.agent,
           invocation,
           signal: invocation?.signal,
+          config: routeConfigFrom(ctx, config, startDir),
         });
       } catch (error) {
         liveError = errorMessage(error);
@@ -919,7 +960,7 @@ async function handleDecideCommand(ctx, invocation) {
   }
 }
 
-function registerCommands(ctx) {
+function registerCommands(ctx, config) {
   ctx.inject(['commands'], (sctx) => {
     const roster = {
       name: 'superbot-roster',
@@ -937,7 +978,7 @@ function registerCommands(ctx) {
       name: 'superbot-decide',
       description: '批准或否决「待你决定」中的工作项：批准签发 Mandate、派单启动子会话并武装该工作项 Watchdog 循环，否决只记账、不签发、不启动会话或 execute 循环',
       input: { hint: 'approve <id> | reject <id> [reason]' },
-      handler: (invocation) => handleDecideCommand(sctx, invocation),
+      handler: (invocation) => handleDecideCommand(sctx, invocation, config),
     };
     sctx.effect(() => sctx.commands.register(roster), 'superbot: /superbot-roster command');
     sctx.effect(() => sctx.commands.register(decide), 'superbot: /superbot-decide command');
@@ -981,7 +1022,7 @@ export const inject = ['tools'];
 export function apply(ctx, config) {
   registerSkills(ctx);
   defineSuperBotTools(ctx, config);
-  registerCommands(ctx);
+  registerCommands(ctx, config);
   try {
     ctx.logger?.info?.(`superbot: ${SKILL_MANIFEST.skills?.length ?? 0} skills, ${ROLES.length} dispatchable roles (charter-injected, composition ${CHILD_PRESET}); routes: <project>/superbot.config.json > panel (${CONFIG_NS}) > parent`);
   } catch {

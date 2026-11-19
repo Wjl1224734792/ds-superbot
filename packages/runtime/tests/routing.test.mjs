@@ -82,3 +82,48 @@ test('createModelPort default stays rules-only regardless of a route', async () 
   const out = await port.complete('classify-signal', { text: 'CI is red' });
   assert.equal(out.via, 'rules');
 });
+
+test('routeModel uses capability Settings, then 默认（兜底）, then inherit', () => {
+  const filled = runtime.routeModel({
+    capability: 'Discover',
+    risk: 'R0',
+    config: {
+      capabilities: { Discover: { provider: 'acme', model: 'explore-1', effort: 'low' } },
+      defaults: { provider: 'acme', model: 'default-1', effort: 'medium' },
+    },
+  });
+  assert.equal(filled.source, 'capability-settings');
+  assert.equal(filled.model, 'explore-1');
+  assert.equal(filled.provider, 'acme');
+
+  const viaDefaults = runtime.routeModel({
+    capability: 'Build',
+    risk: 'R1',
+    config: {
+      capabilities: { Discover: { provider: 'acme', model: 'explore-1', effort: 'low' } },
+      defaults: { provider: 'acme', model: 'default-1', effort: 'medium' },
+    },
+  });
+  assert.equal(viaDefaults.source, 'defaults');
+  assert.equal(viaDefaults.model, 'default-1');
+
+  const inherited = runtime.routeModel({
+    capability: 'Verify',
+    risk: 'R0',
+    config: {
+      capabilities: { Discover: { provider: 'acme', model: 'explore-1' } },
+      defaults: { provider: '', model: '', effort: '' },
+    },
+  });
+  assert.equal(inherited.source, 'inherit');
+  assert.equal(inherited.model, null);
+
+  const workerAlias = runtime.routeModel({
+    capability: 'Worker',
+    risk: 'R1',
+    config: { capabilities: { Build: { provider: 'acme', model: 'build-1' } } },
+  });
+  assert.equal(workerAlias.source, 'capability-settings');
+  assert.equal(workerAlias.model, 'build-1');
+});
+

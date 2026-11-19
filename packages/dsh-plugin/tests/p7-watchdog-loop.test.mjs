@@ -199,7 +199,7 @@ test('after approve, start is called and a tick runs; later ticks treat the item
   assert.equal(isWatchdogLoopArmed(root), true);
   assert.equal(scheduler.size, 1);
   assert.equal(DEFAULT_AUTHORITY, 'observe');
-  assert.equal(hasExecutableWorkItems(root), true);
+  assert.equal(hasExecutableWorkItems(root, { now: new Date('2026-11-18T12:00:00+08:00') }), true);
 
   // Advance past the idle threshold so the next tick parks the approved item.
   const idleNow = new Date('2026-11-18T13:00:00+08:00');

@@ -10,11 +10,74 @@
 
 ds-superbot is a **work-item console** for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH). The work item is the only product object; group chat is the only human/AI console; four presence faces — cang / tan / zuo / yan — cover sense, explore, build and verify. Decisions stay with humans, operations with AI, judgment with programs.
 
-Documents / norms / gates / evidence are the constitution, and Claim → Evidence → Receipt is the only delivery currency. The left console handles items that need your decision and work-item history; the right stage shows presence and evidence; process status stays out of chat. The goal is not "write the code in one shot" but to keep the project **understandable, verifiable, rollback-able and extendable** after every change.
+Documents / norms / gates / evidence are the constitution, and Claim → Evidence → Receipt is the only delivery currency. The left console handles items that need your decision and work-item history; the right Workbench shows presence and evidence; process status stays out of chat. The goal is not "write the code in one shot" but to keep the project **understandable, verifiable, rollback-able and extendable** after every change.
 
 > **Status**: `0.2.0`. Breaking changes are allowed before 1.0.0 — the DeepSeek Harness install entry is the **repository root**; run `install_bundle` against that directory. DSH itself is at `0.2.x`, so the native extension-point contract moves with the host — read the [CHANGELOG](CHANGELOG.md) before upgrading DSH.
 
 The 0.1.0 seven-role dispatch path (`superbot_dispatch`) remains as a compatibility implementation, not the product cover.
+
+## Architecture
+
+Source synthesis:
+
+```mermaid
+flowchart TB
+  dsbot["DS-Bot: group-chat main console, restrained speech, presence"]
+  superagent["Superagent: runtime skeleton, Watchdog, observe"]
+  steward["Steward: dispatch only; no execution, no judgment"]
+  product["ds-superbot: a standing engineering organization"]
+  dsbot --> product
+  superagent --> product
+  steward --> product
+  product --> inst["Institution layer: work items, Mandate, Receipt, gates"]
+  product --> runtime["Runtime layer: dispatch, Watchdog, capability routing"]
+  product --> ui["Interaction layer: left-rail decisions, center group chat, right Workbench"]
+```
+
+Institution / runtime / interaction:
+
+```mermaid
+flowchart LR
+  subgraph ui [Interaction layer]
+    left["Left rail: needs your decision"]
+    chat["Center: group chat"]
+    workbench["Right Workbench: cang / tan / zuo / yan"]
+  end
+  subgraph runtime [Runtime layer]
+    assign["Steward dispatch"]
+    watchdog["Watchdog"]
+    route["routeModel"]
+  end
+  subgraph inst [Institution layer]
+    workitem["Work item"]
+    mandate["Mandate / Receipt"]
+    policy["Policy gates"]
+  end
+  chat --> assign
+  left -->|"human approves or rejects"| mandate
+  assign --> workitem
+  watchdog --> workitem
+  route --> assign
+  workitem --> policy
+  workitem -.-> workbench
+```
+
+Work-item loop:
+
+```mermaid
+sequenceDiagram
+  participant Person as Person
+  participant Chat as Group chat
+  participant Console as Left rail
+  participant Runtime as Runtime
+  participant Workbench as Workbench
+  Person->>Chat: raises a request
+  Chat->>Console: forms a work item, enters needs-your-decision
+  Person->>Console: approves
+  Console->>Runtime: issues a Mandate and starts Watchdog
+  Runtime->>Workbench: cang / tan / zuo / yan express status
+  Runtime-->>Console: result ready, or another decision is needed
+```
 
 ## What it fixes
 
@@ -36,9 +99,9 @@ Handing a request to one large model usually produces code that runs, but nobody
 |---|---|
 | **7 roles** | Charters injected at dispatch time (`roles/*.md`): `pm`, `architect`, `backend-dev`, `frontend-dev`, `qa-engineer`, `browser-tester`, `reviewer`. **No Agent Preset is registered**, so roles never appear in the session-mode picker |
 | **Dispatch** | `superbot_dispatch(role, description, prompt, cwd?)`: one role per call, the charter is prepended to the task prompt, the child session id comes back and the result returns automatically |
-| **Three-layer model routing** | `modelRouting.<role>` in the project-root `superbot.config.json` (repository wins) > that role's row in Settings > the defaults row > the parent route; routes are validated before dispatch, an unknown model fails loudly |
-| **Right-sidebar team panel** | One per session: layered workflow tree by default, free drag and zoom, graph/list toggle; nodes show role / actual model / task / state / elapsed / tokens; a native task-progress bar on top; a collapsed artifacts area at the bottom |
-| **Settings model table** | "Settings → Super Bot": per-role provider / model / reasoning effort with real validation and a source column |
+| **Model routing** | Work-item dispatch: capability × risk (and modelTiers) > that capability's Settings row > the defaults row > role `modelRouting` > the parent route. 0.1.0 `superbot_dispatch` is unchanged: project-root `modelRouting.<role>` (repository wins) > that role's Settings row > the defaults row > the parent route. Routes are validated before dispatch; an unknown model fails loudly |
+| **Right Workbench** | One per session: layered workflow tree by default, free drag and zoom, graph/list toggle; nodes show role / actual model / task / state / elapsed / tokens; a native task-progress bar on top; a collapsed artifacts area at the bottom |
+| **Settings model table** | "Settings → Super Bot": per-role and per-capability (Discover, Build, Verify, plus Steward / Explorer / Scout / Curator / Cartographer) provider / model / reasoning effort; empty rows use the same defaults, then inherit the parent; real validation and a source column. cang / tan / zuo / yan stay presence faces, not new role seats |
 | **Shared task board** | `superbot_board`: mirrors the plan onto the Agent Teams board as gates plus work items, idempotently |
 | **Documentation pipeline** | Four entry points (`docs-new` / `docs-takeover` / `docs-feature` / `docs-review`) plus the rulebook (`docs-rules`) and a governance layer (`docs-governance`) |
 | **Documentation readiness gate** | With `docTier=3`, `backend-dev` / `frontend-dev` cannot be dispatched until `docs-ready.mjs` has issued a valid receipt |
@@ -119,13 +182,25 @@ Restart DSH afterwards (Host code loads at startup) and open a **new session** �
 
 ## Model routing
 
-Priority (the single source of truth):
+Two paths, neither rewrites the other.
+
+0.1.0 `superbot_dispatch` (role dispatch, original order):
 
 ```text
 1. modelRouting.<role> in the project-root superbot.config.json   ← versioned with the code
 2. that role's provider / model / effort in Settings → Super Bot
 3. the defaults row in Settings → Super Bot
 4. the parent agent's current route
+```
+
+Work-item dispatch (`routeModel` / `dispatchWorkItem`):
+
+```text
+1. explicit capability × risk routes (and modelTiers light / strong)
+2. that capability's provider / model / effort in Settings → Super Bot
+3. the defaults row in Settings → Super Bot
+4. project-root modelRouting.<role> (when the dispatch carries a role)
+5. the parent agent's current route
 ```
 
 ```json
@@ -142,13 +217,13 @@ Priority (the single source of truth):
 - A malformed entry (e.g. `model` without a `provider/` prefix) counts as "not configured" and falls back to the parent route.
 - Structure check: `node <plugin>/scripts/validate-config.mjs <root>/superbot.config.json`.
 
-## Right-sidebar team panel
+## Right Workbench
 
 The panel lives in the session's **right sidebar**, which DSH stores per session — **each session gets its own panel**. Three ways to open it:
 
-1. the **Super Bot icon** in the session header (`conversation.session.header.utilities`);
-2. the "Super Bot team" entry on the **right-sidebar guide** page;
-3. **automatically** on the session's first Super Bot dispatch (once; closing it keeps it closed).
+1. the always-visible **Workbench** button in the session header (`conversation.session.header.utilities`), plus the mini entry in the header corner that stays visible even with no work items;
+2. the "Workbench" entry on the **right-sidebar guide** page;
+3. **automatically** on the session's first Super Bot dispatch (once; closing it keeps it closed). A new session can also open the Workbench from the header entry without waiting for a dispatch.
 
 ![pipeline schematic](docs/assets/pipeline.en.svg)
 

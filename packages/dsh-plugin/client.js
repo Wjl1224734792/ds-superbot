@@ -31,13 +31,26 @@ window.__ModuleLoader__.load({
     ];
     const ROLE_IDS = ROLES.map((role) => role.id);
 
+    /** Non-role capabilities configurable in Settings; 仓/探/作/验 stay presence faces, not new seats. */
+    const CAPABILITIES = [
+      { id: 'Discover', zh: '探索', en: 'Discover', zhDesc: '只读探索与候选工作项', enDesc: 'Read-only discovery and candidate work items' },
+      { id: 'Build', zh: '施工', en: 'Build', zhDesc: '在 Mandate 范围内施工', enDesc: 'Build within the Mandate scope' },
+      { id: 'Verify', zh: '验收', en: 'Verify', zhDesc: '独立验收与证据', enDesc: 'Independent verification and evidence' },
+      { id: 'Steward', zh: '分派', en: 'Steward', zhDesc: '只分派，不执行、不做判定', enDesc: 'Dispatch only; no execution, no judgment' },
+      { id: 'Explorer', zh: '勘探', en: 'Explorer', zhDesc: '按需只读勘探', enDesc: 'On-demand read-only exploration' },
+      { id: 'Scout', zh: '侦察', en: 'Scout', zhDesc: '常驻只读侦察', enDesc: 'Standing read-only scouting' },
+      { id: 'Curator', zh: '预排序', en: 'Curator', zhDesc: '只交 Top-K 候选', enDesc: 'Ranks and hands over Top-K only' },
+      { id: 'Cartographer', zh: '回写', en: 'Cartographer', zhDesc: '把事实写回知识库', enDesc: 'Writes facts back to the knowledge base' },
+    ];
+    const CAPABILITY_IDS = CAPABILITIES.map((item) => item.id);
+
     const STRINGS = {
       zh: {
         nav: 'Super Bot',
-        tabTitle: 'Super Bot 团队',
-        title: 'Super Bot 团队',
+        tabTitle: '工作台',
+        title: '工作台',
         subtitle: '角色 · 模型 · 任务 · 状态',
-        openPanel: '打开 Super Bot 团队面板',
+        openPanel: '打开工作台',
         refresh: '刷新',
         viewGroup: '视图',
         viewGraph: '图',
@@ -141,10 +154,11 @@ window.__ModuleLoader__.load({
         artifactsRun: '运行目录',
         sectionFailed: '这一段渲染失败（其余部分仍然可用）',
         configTitle: '子代理模型与思考强度',
-        configSub: '设置页按角色指定模型；没配的角色用默认，默认也没配就继承主代理。项目根 superbot.config.json 的 modelRouting 对该角色优先。',
+        configSub: '设置页可按角色或能力指定模型；没配的项用默认（兜底），默认也没配就继承主代理。项目根 superbot.config.json 的 modelRouting 对该角色优先。能力态 × 风险路由仍优先于这些设置。',
         defaultsTitle: '默认（兜底）',
-        defaultsSub: '没有单独配置的角色使用这里的模型与档位。',
+        defaultsSub: '没有单独配置的角色或能力使用这里的模型与档位。',
         rolesTitle: '角色',
+        capabilitiesTitle: '能力',
         colRole: '角色',
         colSource: '来源',
         inherit: '继承主代理',
@@ -174,7 +188,7 @@ window.__ModuleLoader__.load({
         unavailableNs: '宿主没有提供 superbot 设置命名空间（请确认 Super Bot 插件行已启用）。',
         readOnly: '本部署的设置为只读。',
         conflict: '设置已在其他位置更新，请撤销后重试。',
-        invalidRoute: '每个角色要么同时选提供方与模型，要么两者都留空（继承主代理）。',
+        invalidRoute: '每个角色或能力要么同时选提供方与模型，要么两者都留空（继承主代理）。',
         
         consoleLabel: 'ds-superbot',
         consoleTitle: 'ds-superbot',
@@ -203,7 +217,7 @@ window.__ModuleLoader__.load({
         historyTitle: '工作项历史',
         historyEmpty: '还没有工作项历史',
         workItemDetail: '工作项详情',
-        stageTitle: '舞台',
+        stageTitle: '工作台',
         dagTitle: '工作流',
         detailMandate: 'Mandate',
         detailGates: '门禁',
@@ -227,10 +241,10 @@ window.__ModuleLoader__.load({
       },
       en: {
         nav: 'Super Bot',
-        tabTitle: 'Super Bot team',
-        title: 'Super Bot team',
+        tabTitle: 'Workbench',
+        title: 'Workbench',
         subtitle: 'Role · model · task · state',
-        openPanel: 'Open the Super Bot team panel',
+        openPanel: 'Open the workbench',
         refresh: 'Refresh',
         viewGroup: 'View',
         viewGraph: 'Graph',
@@ -334,10 +348,11 @@ window.__ModuleLoader__.load({
         artifactsRun: 'Run directory',
         sectionFailed: 'This section failed to render (the rest still works)',
         configTitle: 'Subagent models and reasoning effort',
-        configSub: 'Pick a model per role in Settings; roles without a selection use the defaults, and without defaults they inherit the parent. A modelRouting entry in the project superbot.config.json still wins.',
+        configSub: 'Pick a model per role or capability in Settings; empty rows use the defaults, and without defaults they inherit the parent. A modelRouting entry in the project superbot.config.json takes priority for that role. Capability × risk routing still comes first.',
         defaultsTitle: 'Defaults',
-        defaultsSub: 'Roles without their own selection use this model and effort.',
+        defaultsSub: 'Roles and capabilities without their own selection use this model and effort.',
         rolesTitle: 'Roles',
+        capabilitiesTitle: 'Capabilities',
         colRole: 'Role',
         colSource: 'Source',
         inherit: 'Inherit parent',
@@ -367,7 +382,7 @@ window.__ModuleLoader__.load({
         unavailableNs: 'The host does not serve the superbot settings namespace (check that the Super Bot plugin row is enabled).',
         readOnly: 'This deployment stores settings read-only.',
         conflict: 'Settings changed elsewhere. Discard and try again.',
-        invalidRoute: 'Each role needs both a provider and a model, or neither (inherit the parent).',
+        invalidRoute: 'Each role or capability needs both a provider and a model, or neither (inherit the parent).',
         
         consoleLabel: 'ds-superbot',
         consoleTitle: 'ds-superbot',
@@ -396,7 +411,7 @@ window.__ModuleLoader__.load({
         historyTitle: 'Work-item history',
         historyEmpty: 'No work-item history yet',
         workItemDetail: 'Work-item details',
-        stageTitle: 'Stage',
+        stageTitle: 'Workbench',
         dagTitle: 'Workflow',
         detailMandate: 'Mandate',
         detailGates: 'Gates',
@@ -1703,13 +1718,17 @@ window.__ModuleLoader__.load({
     function draftFromValue(value) {
       const roles = {};
       for (const id of ROLE_IDS) roles[id] = selectionOf(value && value.roles ? value.roles[id] : undefined);
-      return { defaults: selectionOf(value ? value.defaults : undefined), roles };
+      const capabilities = {};
+      for (const id of CAPABILITY_IDS) capabilities[id] = selectionOf(value && value.capabilities ? value.capabilities[id] : undefined);
+      return { defaults: selectionOf(value ? value.defaults : undefined), roles, capabilities };
     }
 
     function sameDraft(left, right) {
       if (!left || !right) return false;
       if (FIELDS.some((field) => left.defaults[field] !== right.defaults[field])) return false;
-      return ROLE_IDS.every((id) => FIELDS.every((field) => (left.roles[id] || emptySelection())[field] === (right.roles[id] || emptySelection())[field]));
+      const sameRoles = ROLE_IDS.every((id) => FIELDS.every((field) => (left.roles[id] || emptySelection())[field] === (right.roles[id] || emptySelection())[field]));
+      const sameCapabilities = CAPABILITY_IDS.every((id) => FIELDS.every((field) => ((left.capabilities || {})[id] || emptySelection())[field] === ((right.capabilities || {})[id] || emptySelection())[field]));
+      return sameRoles && sameCapabilities;
     }
 
     function useSnapshot(scope) {
@@ -1723,6 +1742,13 @@ window.__ModuleLoader__.load({
 
     function selectionSource(draft, roleId) {
       const own = draft.roles[roleId] || emptySelection();
+      if (own.provider !== '' && own.model !== '') return 'role';
+      if (draft.defaults.provider !== '' && draft.defaults.model !== '') return 'defaults';
+      return 'inherit';
+    }
+
+    function capabilitySource(draft, capabilityId) {
+      const own = (draft.capabilities || {})[capabilityId] || emptySelection();
       if (own.provider !== '' && own.model !== '') return 'role';
       if (draft.defaults.provider !== '' && draft.defaults.model !== '') return 'defaults';
       return 'inherit';
@@ -2190,26 +2216,20 @@ window.__ModuleLoader__.load({
       return h('div', { className: 'stwd-skeleton-block' }, items);
     }
 
+    const WHALE_SILHOUETTE = 'M3.50 25.26 C3.49 27.16 3.32 34.54 3.50 36.60 C3.68 38.66 4.43 37.12 4.60 37.64 C4.77 38.16 4.21 39.05 4.54 39.71 C4.88 40.37 6.24 41.03 6.61 41.59 C6.98 42.15 5.64 41.76 6.74 43.08 C7.84 44.40 11.77 48.42 13.22 49.49 C14.67 50.56 14.92 49.16 15.42 49.49 C15.92 49.83 15.66 51.14 16.20 51.50 C16.74 51.86 18.12 51.45 18.66 51.63 C19.20 51.81 17.20 52.44 19.43 52.60 C21.66 52.76 29.83 52.76 32.06 52.60 C34.30 52.44 31.80 52.15 32.84 51.63 C33.88 51.11 37.23 50.02 38.28 49.49 C39.33 48.96 38.81 48.45 39.12 48.45 C39.43 48.45 38.70 49.35 40.16 49.49 C41.62 49.63 46.58 49.74 47.87 49.29 C49.16 48.84 48.09 47.40 47.87 46.77 C47.65 46.15 47.19 45.77 46.57 45.54 C45.95 45.31 44.63 45.71 44.18 45.41 C43.73 45.11 43.58 44.28 43.85 43.72 C44.12 43.16 45.45 42.57 45.80 42.04 C46.15 41.51 45.59 41.07 45.93 40.55 C46.27 40.03 47.52 39.45 47.87 38.93 C48.21 38.41 47.63 38.17 48.00 37.44 C48.37 36.71 49.73 35.53 50.07 34.53 C50.41 33.53 49.84 32.11 50.01 31.42 C50.18 30.73 50.92 31.29 51.11 30.38 C51.30 29.47 50.52 26.95 51.17 25.98 C51.82 25.01 54.22 24.95 54.99 24.55 C55.76 24.15 55.42 23.75 55.77 23.58 C56.12 23.41 56.65 23.73 57.07 23.51 C57.49 23.29 58.08 22.72 58.30 22.28 C58.52 21.84 58.18 21.24 58.36 20.86 C58.54 20.48 59.24 20.51 59.40 20.02 C59.56 19.53 59.16 18.46 59.33 17.94 C59.50 17.42 60.25 17.39 60.44 16.91 C60.62 16.43 60.71 15.44 60.44 15.03 C60.17 14.62 59.56 14.21 58.82 14.45 C58.08 14.69 57.01 16.11 55.97 16.45 C54.93 16.79 53.29 16.35 52.60 16.52 C51.91 16.69 52.32 17.32 51.82 17.49 C51.32 17.66 50.47 18.06 49.62 17.56 C48.77 17.06 47.42 15.04 46.70 14.51 C45.98 13.98 45.74 14.62 45.28 14.38 C44.82 14.14 44.19 13.57 43.92 13.09 C43.65 12.61 43.94 11.76 43.66 11.47 C43.38 11.18 42.70 11.11 42.23 11.34 C41.75 11.57 41.05 11.73 40.81 12.83 C40.57 13.93 40.63 16.92 40.81 17.94 C40.99 18.96 41.71 18.42 41.91 18.98 C42.10 19.54 41.46 20.45 41.98 21.31 C42.50 22.17 44.54 23.30 45.02 24.16 C45.51 25.02 45.16 26.04 44.89 26.49 C44.62 26.94 45.00 28.18 43.40 26.88 C41.80 25.57 36.89 20.05 35.30 18.66 C33.71 17.27 34.53 18.96 33.88 18.53 C33.23 18.10 31.83 16.71 31.42 16.07 C31.01 15.43 31.09 15.22 31.42 14.71 C31.75 14.20 33.31 13.58 33.42 13.02 C33.53 12.46 32.66 11.62 32.06 11.34 C31.46 11.06 30.31 11.18 29.80 11.34 C29.29 11.50 29.54 12.14 29.02 12.31 C28.50 12.48 27.24 12.19 26.69 12.37 C26.14 12.55 27.62 13.24 25.72 13.41 C23.82 13.58 17.16 13.25 15.29 13.41 C13.42 13.57 15.03 14.21 14.51 14.38 C13.99 14.55 12.70 14.28 12.18 14.45 C11.66 14.62 11.77 15.24 11.40 15.42 C11.03 15.60 10.76 14.99 9.98 15.55 C9.20 16.11 7.30 18.00 6.74 18.79 C6.18 19.58 6.96 19.76 6.61 20.28 C6.27 20.80 5.00 21.24 4.67 21.90 C4.33 22.56 4.78 23.68 4.60 24.23 C4.42 24.78 3.74 25.03 3.56 25.20 C3.38 25.37 3.51 23.36 3.50 25.26 Z M7.58 27.27 C7.57 28.16 7.40 31.47 7.58 32.52 C7.76 33.57 8.51 33.03 8.68 33.55 C8.85 34.07 8.46 35.14 8.62 35.63 C8.78 36.12 9.47 36.09 9.65 36.47 C9.83 36.85 9.39 37.38 9.72 37.89 C10.05 38.40 11.32 38.99 11.66 39.51 C12.00 40.03 11.20 40.19 11.79 41.00 C12.38 41.81 14.41 43.79 15.22 44.37 C16.03 44.95 16.10 44.14 16.65 44.50 C17.20 44.86 17.68 46.19 18.53 46.51 C19.38 46.83 21.17 46.88 21.77 46.44 C22.37 46.00 22.26 44.43 22.15 43.85 C22.04 43.27 21.30 43.28 21.12 42.95 C20.94 42.62 20.98 42.12 21.05 41.85 C21.12 41.58 21.12 41.42 21.57 41.33 C22.02 41.24 23.27 41.17 23.77 41.33 C24.27 41.49 24.18 42.12 24.55 42.30 C24.92 42.48 25.46 42.09 25.98 42.43 C26.50 42.77 27.14 44.02 27.66 44.37 C28.18 44.71 28.40 43.98 29.09 44.50 C29.78 45.02 30.73 47.02 31.81 47.48 C32.89 47.94 34.94 47.42 35.56 47.29 C36.19 47.16 36.06 47.23 35.56 46.70 C35.06 46.17 33.10 44.79 32.58 44.11 C32.06 43.43 32.97 43.31 32.45 42.62 C31.93 41.93 29.99 40.66 29.47 39.97 C28.95 39.28 29.70 39.02 29.34 38.48 C28.98 37.94 27.68 37.25 27.34 36.73 C27.00 36.21 28.20 36.50 27.27 35.37 C26.34 34.24 22.90 30.85 21.77 29.93 C20.64 29.01 20.82 30.03 20.47 29.86 C20.12 29.69 20.04 29.06 19.69 28.89 C19.35 28.72 19.12 29.19 18.40 28.83 C17.68 28.47 16.39 27.10 15.35 26.75 C14.31 26.40 12.87 26.92 12.18 26.75 C11.49 26.58 11.74 25.88 11.21 25.72 C10.68 25.56 9.60 25.53 9.01 25.78 C8.42 26.03 7.89 26.96 7.65 27.21 C7.41 27.46 7.59 26.38 7.58 27.27 Z M33.49 28.24 C34.00 28.74 36.26 30.43 36.60 31.16 C36.95 31.89 35.32 32.00 35.56 32.65 C35.80 33.30 37.16 34.70 38.02 35.04 C38.88 35.38 40.46 35.36 40.74 34.72 C41.02 34.08 40.45 32.36 39.71 31.22 C38.97 30.07 37.22 28.43 36.27 27.85 C35.32 27.27 34.46 27.68 34.01 27.73 C33.56 27.79 33.64 28.09 33.55 28.18 C33.46 28.27 32.98 27.74 33.49 28.24 Z';
+
     function SuperBotIcon({ size }) {
       const edge = typeof size === 'number' && size > 0 ? size : 16;
       return h('svg', {
         className: 'stwd-icon',
         width: edge,
         height: edge,
-        viewBox: '0 0 24 24',
+        viewBox: '0 0 64 64',
         fill: 'none',
         'aria-hidden': 'true',
         focusable: 'false',
       },
-        h('path', {
-          d: 'M5 17c0-3.7 3.1-6.6 7-6.6s7 2.9 7 6.6',
-          stroke: 'currentColor',
-          strokeWidth: 2,
-          strokeLinecap: 'round',
-        }),
-        h('circle', { cx: 12, cy: 6.4, r: 2.7, fill: 'currentColor' }),
-        h('path', { d: 'M8.4 19.4h7.2', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' }),
-        h('path', { d: 'M12 12.6v3.2', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' }),
+        h('path', { d: WHALE_SILHOUETTE, fill: 'currentColor', fillRule: 'evenodd' }),
       );
     }
 
@@ -3437,14 +3457,14 @@ window.__ModuleLoader__.load({
 
     function MiniFaces(props) {
       const items = collectWorkItems(props);
-      const hasActivity = items.length > 0;
-      if (!hasActivity) return null;
       const field = stageField(items);
       const reduced = prefersReducedMotion(props.reducedMotion);
-      return h('div', { className: 'stwd-root stwd-mini' },
-        styles(),
-        h('div', { className: 'stwd-mini-row', role: 'group', 'aria-label': (props.text && props.text.stageTitle) || 'ds-superbot' },
-          field.map((presence, index) => h(ResidentFace, {
+      const text = props.text || {};
+      const groupLabel = text.stageTitle || 'ds-superbot';
+      const openLabel = text.openPanel || groupLabel;
+      const open = () => { if (typeof props.openPanel === 'function') props.openPanel(); };
+      const faces = items.length > 0
+        ? field.map((presence, index) => h(ResidentFace, {
             key: presence.face,
             presence,
             size: 32,
@@ -3453,9 +3473,21 @@ window.__ModuleLoader__.load({
             reducedMotion: reduced,
             onSelect: () => {
               if (typeof props.onSelect === 'function') props.onSelect(presence);
-              if (typeof props.openPanel === 'function') props.openPanel();
+              open();
             },
-          })),
+          }))
+        : [h('button', {
+            type: 'button',
+            key: 'workbench-entry',
+            className: 'stwd-mini-entry',
+            title: openLabel,
+            'aria-label': openLabel,
+            onClick: open,
+          }, h(SuperBotIcon, { size: 22 }))];
+      return h('div', { className: 'stwd-root stwd-mini' },
+        styles(),
+        h('div', { className: 'stwd-mini-row', role: 'group', 'aria-label': groupLabel },
+          faces,
         ),
       );
     }
@@ -3878,16 +3910,18 @@ window.__ModuleLoader__.load({
     }
 
     function HeaderButton(props) {
-      const text = props.text;
+      const text = props.text || {};
+      const label = text.stageTitle || text.tabTitle || 'ds-superbot';
+      const openLabel = text.openPanel || label;
       return h('span', { className: 'stwd-headwrap' },
         styles(),
         h('button', {
           type: 'button',
           className: 'stwd-headbtn',
-          title: text.openPanel,
-          'aria-label': text.openPanel,
+          title: openLabel,
+          'aria-label': openLabel,
           onClick: () => { if (typeof props.openPanel === 'function') props.openPanel(); },
-        }, h(SuperBotIcon, { size: 16 })),
+        }, h(SuperBotIcon, { size: 16 }), h('span', { className: 'stwd-headbtn-label' }, label)),
       );
     }
 
@@ -4017,14 +4051,15 @@ window.__ModuleLoader__.load({
       const dirty = draft !== null && snapshot.status === 'ready' && !sameDraft(draft, draftFromValue(snapshot.value));
       const conflicted = dirty && draftRevision !== null && snapshot.revision !== draftRevision;
       const writable = snapshot.writable !== false;
-      const invalid = draft !== null && (partialSelection(draft.defaults) || ROLE_IDS.some((id) => partialSelection(draft.roles[id])));
+      const invalid = draft !== null && (partialSelection(draft.defaults) || ROLE_IDS.some((id) => partialSelection(draft.roles[id])) || CAPABILITY_IDS.some((id) => partialSelection((draft.capabilities || {})[id] || emptySelection())));
 
       const update = useCallback((key, selection) => {
         setLocal((current) => {
           if (current.draft === null) return current;
-          const next = key === 'defaults'
-            ? { ...current.draft, defaults: selection }
-            : { ...current.draft, roles: { ...current.draft.roles, [key]: selection } };
+          let next;
+          if (key === 'defaults') next = { ...current.draft, defaults: selection };
+          else if (CAPABILITY_IDS.indexOf(key) >= 0) next = { ...current.draft, capabilities: { ...(current.draft.capabilities || {}), [key]: selection } };
+          else next = { ...current.draft, roles: { ...current.draft.roles, [key]: selection } };
           return { draft: next, revision: current.revision };
         });
         setNotice('');
@@ -4047,6 +4082,7 @@ window.__ModuleLoader__.load({
         };
         push(['defaults'], draft.defaults);
         for (const id of ROLE_IDS) push(['roles', id], draft.roles[id]);
+        for (const id of CAPABILITY_IDS) push(['capabilities', id], (draft.capabilities || {})[id] || emptySelection());
         setSaving(true);
         setError('');
         setNotice('');
@@ -4128,9 +4164,35 @@ window.__ModuleLoader__.load({
           }),
         ));
       }
+      rows.push(h('div', { className: 'stwd-tr stwd-tr-head', key: '__cap-head', 'aria-hidden': 'true' },
+        h('span', { className: 'stwd-th' }, text.capabilitiesTitle || '能力'),
+        h('span', { className: 'stwd-th' }, text.providerLabel),
+        h('span', { className: 'stwd-th' }, text.modelLabel),
+        h('span', { className: 'stwd-th' }, text.effortLabel),
+        h('span', { className: 'stwd-th stwd-th-last' }, text.colSource),
+      ));
+      for (const cap of CAPABILITIES) {
+        const selection = (draft.capabilities || {})[cap.id] || emptySelection();
+        const source = capabilitySource(draft, cap.id);
+        rows.push(h('div', { className: 'stwd-tr', key: 'cap-' + cap.id },
+          h('span', { className: 'stwd-cell-role' },
+            h('span', { className: 'stwd-role-name', title: lang === 'zh' ? cap.zhDesc : cap.enDesc }, lang === 'zh' ? cap.zh : cap.en),
+            h('span', { className: 'stwd-role-sub stwd-role-id' }, cap.id),
+          ),
+          ...selectionCells({
+            text,
+            catalog,
+            selection,
+            onChange: (next) => update(cap.id, next),
+            onClear: () => update(cap.id, emptySelection()),
+            clearable: selection.provider !== '',
+            source,
+          }),
+        ));
+      }
 
       return h('section', { className: 'stwd-section' },
-        compact ? h('h3', { className: 'stwd-section-title' }, text.configTitle) : h(SectionHead, { title: text.configTitle, count: text.rolesTitle + ' ' + String(ROLES.length) }),
+        compact ? h('h3', { className: 'stwd-section-title' }, text.configTitle) : h(SectionHead, { title: text.configTitle, count: text.rolesTitle + ' ' + String(ROLES.length) + ' · ' + (text.capabilitiesTitle || '能力') + ' ' + String(CAPABILITIES.length) }),
         h('p', { className: 'stwd-note' }, text.configSub),
         error ? h(Alert, { tone: 'error' }, error) : null,
         notice ? h(Alert, { tone: 'ok' }, notice) : null,
@@ -4398,7 +4460,10 @@ window.__ModuleLoader__.load({
       '.stwd-role-sub{font-size:10px;line-height:14px;color:var(--stwd-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.stwd-role-id{font-family:var(--stwd-mono)}',
       '/* --- host header + tab chip --------------------------------------------- */',
-      '.stwd-headbtn{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border:0;border-radius:7px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer}',
+      '.stwd-headbtn{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:26px;height:26px;padding:0 8px;border:0;border-radius:7px;background:var(--stwd-hover);color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;font-weight:600;line-height:1;cursor:pointer}',
+      '.stwd-headbtn-label{white-space:nowrap}',
+      '.stwd-mini-entry{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0;border:0;border-radius:8px;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer}',
+      '.stwd-mini-entry:hover{background:var(--stwd-hover)}',
       '.stwd-headbtn:hover{background:var(--stwd-hover);color:var(--dsw-alias-label-primary)}',
       '.stwd-headwrap{display:inline-flex;align-items:center}',
       '.stwd-headwrap>style,.stwd-tabtitle>style{display:none}',
@@ -4666,6 +4731,8 @@ window.__ModuleLoader__.load({
         AUTO_MERGE_DISABLED,
         CONSOLE_SLOT_ID,
         FACES,
+        CAPABILITIES,
+        CAPABILITY_IDS,
       },
       apply(ctx) {
         const lang = () => pickLang(ctx);

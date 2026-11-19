@@ -22,7 +22,7 @@
 2. **不要引入 TypeScript 构建、bundler 或 workspace 构建步骤。** 根 `package.json` 用简单 scripts 调 `node --test`。
 3. **不注册 Agent Preset**；不自建 HTTP 桥或独立端口控制台。
 4. **工具名、右侧 tab id、配置命名空间、`.stwd-` 前缀一律不改。**
-5. **界面只做加法槽位**：禁止整栏替换 `sidebar` / `rightbar` / `conversation.session.header` / `conversation.header`。P2 已用官方加法槽接上左栏控制台、顶部迷你脸和右侧舞台（槽位对照 DeepSeek Harness 0.2.2-rc.2）。
+5. **界面只做加法槽位**：禁止整栏替换 `sidebar` / `rightbar` / `conversation.session.header` / `conversation.header`。P2 已用官方加法槽接上左栏控制台、顶部迷你脸和右侧工作台（槽位对照 DeepSeek Harness 0.2.2-rc.2）。
 6. **现有门禁脚本的判定逻辑不重写。** Constitution Service 是薄包装：调用同一套脚本、沿用退出码（0 通过 / 1 判定失败 / 2 用法或 IO 错误），再落 Receipt。
 7. **`.superbot/ledger/` 是目标项目运行时账本，不要强制提交。** 执行目录在 `tmp/superbot/<run>/`，二者不得混用。见 `docs/examples/gitignore`。
 

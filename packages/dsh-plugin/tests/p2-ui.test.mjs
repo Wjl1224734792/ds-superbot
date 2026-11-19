@@ -282,25 +282,39 @@ test('prefers-reduced-motion freezes loops to still while status text remains', 
   assert.match(panelText, /待批准|AwaitingApproval|请批 Mandate/);
 });
 
-test('header corner renders nothing when idle, and utilities still open the stage', async () => {
+test('header corner stays visible when idle, and utilities still open the workbench', async () => {
   const { factory } = await loadClientFactory();
   const harness = createRenderHarness();
   const instance = factory((name) => (name === 'react' ? harness.stub : {}));
   const { ctx, registered } = createClientContext();
   instance.apply(ctx);
   const corner = slot(registered, 'conversation.session.header.corner');
-  const empty = await harness.settle(() => corner.component({ workItems: [], text: { stageTitle: '舞台' } }));
-  assert.equal(empty.length, 0, 'an empty corner must render nothing');
-  const live = await harness.settle(() => corner.component({ workItems: ITEMS, text: { stageTitle: '舞台' } }));
+  let opened = 0;
+  const empty = await harness.settle(() => corner.component({
+    workItems: [],
+    text: { stageTitle: '工作台', openPanel: '打开工作台' },
+    openPanel: () => { opened += 1; },
+  }));
+  assert.ok(empty.length > 0, 'an empty corner must keep the workbench entry visible');
+  const entry = harness.collect(empty, harness.byClass('stwd-mini-entry'));
+  assert.equal(entry.length, 1);
+  assert.equal(entry[0].props['aria-label'], '打开工作台');
+  assert.doesNotMatch(String(entry[0].props['aria-label'] || ''), /舞台|Super Bot 团队面板/);
+  entry[0].props.onClick();
+  assert.equal(opened, 1, 'the idle entry opens the workbench');
+  const live = await harness.settle(() => corner.component({ workItems: ITEMS, text: { stageTitle: '工作台' } }));
   assert.ok(harness.collect(live, harness.byClass('stwd-resident-mini')).length >= 4);
+  assert.equal(harness.collect(live, harness.byClass('stwd-mini-entry')).length, 0);
 
   const utilities = slot(registered, 'conversation.session.header.utilities', (entry) => entry.options.id === 'superbot-board');
-  let opened = 0;
-  const buttonHost = harness.expand(utilities.component({ text: { openPanel: '打开 Super Bot 团队面板' }, openPanel: () => { opened += 1; } }));
+  let utilityOpened = 0;
+  const buttonHost = harness.expand(utilities.component({ text: { openPanel: '打开工作台', stageTitle: '工作台' }, openPanel: () => { utilityOpened += 1; } }));
   const buttons = harness.collect(buttonHost, harness.byClass('stwd-headbtn'));
   assert.equal(buttons.length, 1);
+  assert.equal(buttons[0].props['aria-label'], '打开工作台');
+  assert.equal(harness.textOf(harness.collect(buttonHost, harness.byClass('stwd-headbtn-label'))[0]), '工作台');
   buttons[0].props.onClick();
-  assert.equal(opened, 1);
+  assert.equal(utilityOpened, 1);
 });
 
 test('Building and Verifying stay quiet in chat; decision and terminal states may speak', () => {

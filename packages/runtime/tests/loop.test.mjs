@@ -216,7 +216,7 @@ test('canExecute is a per-work-item grant after a human-issued Mandate', (t) => 
   const after = runtime.canExecute(root, seeded.id, { now: new Date('2026-11-18T13:00:00+08:00') });
   assert.equal(after.allowed, true);
   assert.equal(after.authority, 'execute');
-  assert.equal(runtime.assertCanExecute(root, seeded.id).allowed, true);
+  assert.equal(runtime.assertCanExecute(root, seeded.id, { now: new Date('2026-11-18T13:00:00+08:00') }).allowed, true);
 
   // Out-of-scope paths cannot execute, even with an active mandate.
   const wide = runtime.canExecute(root, seeded.id, {
@@ -324,4 +324,41 @@ test('recordMergeIntent records merge / 打回 and never runs git; auto-merge st
   // The important assertion is that recordMergeIntent itself does not throw or leave a git write.
   assert.equal(merge.git, false);
   void git;
+});
+
+test('dispatchWorkItem reads capability Settings and falls back to 默认（兜底）', (t) => {
+  const root = tmpRoot(t);
+  const seeded = seedItem(root, {
+    id: 'WI-2026-209',
+    risk: 'R1',
+    scope: { files: ['lib/a.js'], newFiles: [], owners: ['backend-dev'] },
+  });
+  const viaCap = runtime.dispatchWorkItem(root, {
+    workItem: seeded,
+    capability: 'Build',
+    config: {
+      capabilities: { Build: { provider: 'acme', model: 'build-2', effort: 'low' } },
+      defaults: { provider: 'acme', model: 'default-2', effort: 'medium' },
+    },
+  });
+  assert.equal(viaCap.route.source, 'capability-settings');
+  assert.equal(viaCap.route.model, 'build-2');
+
+  const viaDefaults = runtime.dispatchWorkItem(root, {
+    workItem: seeded,
+    capability: 'Discover',
+    config: {
+      capabilities: { Build: { provider: 'acme', model: 'build-2' } },
+      defaults: { provider: 'acme', model: 'default-2' },
+    },
+  });
+  assert.equal(viaDefaults.route.source, 'defaults');
+  assert.equal(viaDefaults.route.model, 'default-2');
+
+  const inherited = runtime.dispatchWorkItem(root, {
+    workItem: seeded,
+    capability: 'Verify',
+    config: { capabilities: {}, defaults: { provider: '', model: '' } },
+  });
+  assert.equal(inherited.route.source, 'inherit');
 });

@@ -1117,7 +1117,7 @@ test('the client registers a right-sidebar board, its title, a header button and
   assert.equal(tabTypes.length, 1);
   assert.equal(tabTypes[0].id, 'ds-superbot');
   assert.equal(tabTypes[0].kind, 'superbot', 'openTab() names the kind');
-  assert.match(tabTypes[0].title('sidebar://superbot'), /团队/);
+  assert.match(tabTypes[0].title('sidebar://superbot'), /工作台/);
   assert.equal(tabTypes[0].guide.length, 1, 'the guide page offers a way in');
   assert.equal(tabTypes[0].guide[0].id, 'superbot-board');
 
@@ -1125,7 +1125,9 @@ test('the client registers a right-sidebar board, its title, a header button and
   const renderEmpty = panelRender(registered, 'session-empty', {});
   const emptyHost = await harness.settle(renderEmpty);
   const emptyText = emptyHost.map((node) => harness.textOf(node)).join('\n');
-  assert.match(emptyText, /Super Bot 团队/);
+  assert.match(emptyText, /工作台/);
+  assert.doesNotMatch(emptyText, /Super Bot 团队面板/);
+  assert.doesNotMatch(emptyText, /舞台/);
   assert.match(emptyText, /还没有派发智能体/);
   assert.match(emptyText, /原生任务列表为空/);
   assert.match(emptyText, /产物/);
@@ -1133,10 +1135,13 @@ test('the client registers a right-sidebar board, its title, a header button and
   // The header button renders as a real control and calls the injected opener.
   const buttonEntry = registered.find((entry) => entry.options.name === 'conversation.session.header.utilities' && entry.options.id === 'superbot-board');
   let opened = 0;
-  const buttonHost = harness.expand(buttonEntry.component({ text: { openPanel: '打开 Super Bot 团队面板' }, openPanel: () => { opened += 1; } }));
+  const buttonHost = harness.expand(buttonEntry.component({ text: { openPanel: '打开工作台', stageTitle: '工作台' }, openPanel: () => { opened += 1; } }));
   const buttons = harness.collect(buttonHost, harness.byClass('stwd-headbtn'));
   assert.equal(buttons.length, 1);
-  assert.equal(buttons[0].props['aria-label'], '打开 Super Bot 团队面板');
+  assert.equal(buttons[0].props['aria-label'], '打开工作台');
+  const labels = harness.collect(buttonHost, harness.byClass('stwd-headbtn-label'));
+  assert.equal(harness.textOf(labels[0]), '工作台');
+  assert.doesNotMatch(harness.textOf(buttonHost[0] ?? buttons[0]), /Super Bot 团队面板/);
   buttons[0].props.onClick();
   assert.equal(opened, 1);
 
@@ -1147,7 +1152,9 @@ test('the client registers a right-sidebar board, its title, a header button and
   enInstance.apply(en.ctx);
   const enHost = await enHarness.settle(panelRender(en.registered, 'session-empty', {}));
   const enText = enHost.map((node) => enHarness.textOf(node)).join('\n');
-  assert.match(enText, /Super Bot team/);
+  assert.match(enText, /Workbench/);
+  assert.doesNotMatch(enText, /Super Bot team/);
+  assert.doesNotMatch(enText, /Stage/);
   assert.match(enText, /No agent dispatched/);
   assert.match(enText, /native task list is empty/);
 });
@@ -2635,7 +2642,7 @@ test('the panel face opens child sessions, artifacts and asks for child projecti
 /**
  * The configuration surface is the densest part of the panel. Render it against a
  * settled native settings snapshot plus a live model catalog and assert the table
- * shape: column headers, the defaults row, one row per role, three selects each.
+ * shape: column headers, the defaults row, one row per role, one row per capability, three selects each.
  */
 test('the settings section renders the model table with a defaults row and one row per role', async () => {
   const { factory } = await loadClientFactory();
@@ -2671,12 +2678,12 @@ test('the settings section renders the model table with a defaults row and one r
   const { collect, labelOf, textOf, byClass } = harness;
   const host = await harness.settle(() => settingsEntry.component({}));
 
-  assert.deepEqual(collect(host, byClass('stwd-th')).map(labelOf), ['角色', '提供方', '模型', '思考强度', '来源']);
+  assert.deepEqual(collect(host, byClass('stwd-th')).map(labelOf), ['角色', '提供方', '模型', '思考强度', '来源', '能力', '提供方', '模型', '思考强度', '来源']);
 
   const rows = collect(host, byClass('stwd-tr')).filter((node) => node.props.className.indexOf('stwd-tr-head') < 0);
-  assert.equal(rows.length, 8, 'one defaults row plus one row per role');
+  assert.equal(rows.length, 16, 'defaults + 7 roles + 8 capabilities');
   assert.match(rows[0].props.className, /stwd-tr-default/);
-  assert.equal(collect(host, (node) => node.type === 'select').length, 24, 'three route selects per row');
+  assert.equal(collect(host, (node) => node.type === 'select').length, 48, 'three route selects per row');
 
   const selects = collect(host, (node) => node.type === 'select');
   assert.equal(selects[0].props.value, '', 'the defaults provider inherits the parent agent');

@@ -10,11 +10,74 @@
 
 ds-superbot 是给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）用的**工作项控制台**。对外只有一个产品对象——工作项；群聊是唯一人机主控制台；仓 / 探 / 作 / 验四张在场的脸负责感知、探索、施工与验收。决定在人、操作在 AI、判定在程序。
 
-文档 / 规范 / 门禁 / 证据是宪法，Claim → Evidence → Receipt 是唯一交付货币。左侧控制台处理「待你决定」与工作项历史，右侧舞台展示在场与证据，过程状态不走聊天。目标不是「一次把代码写完」，而是让项目在每次变更后仍然**可理解、可验证、可回滚、可继续演进**。
+文档 / 规范 / 门禁 / 证据是宪法，Claim → Evidence → Receipt 是唯一交付货币。左侧控制台处理「待你决定」与工作项历史，右侧工作台展示在场与证据，过程状态不走聊天。目标不是「一次把代码写完」，而是让项目在每次变更后仍然**可理解、可验证、可回滚、可继续演进**。
 
 > **状态**：`0.2.0`。1.0.0 之前允许破坏性变更——DSH 安装入口是**仓库根目录**，对仓库根执行 `install_bundle` 即可。DSH 处于 `0.2.x` 阶段，插件的原生扩展点契约随宿主版本演进——升级 DSH 前请先看 [CHANGELOG](CHANGELOG.md)。
 
 0.1.0 的七角色派单路径（`superbot_dispatch`）仍作为兼容实现保留，不再作为产品封面。
+
+## 架构
+
+来源合成：
+
+```mermaid
+flowchart TB
+  dsbot["DS-Bot：群聊主控制台、克制发言、在场"]
+  superagent["Superagent：运行时骨架、Watchdog、observe"]
+  steward["Steward：只分派、不执行、不做判定"]
+  product["ds-superbot：一支常驻工程组织"]
+  dsbot --> product
+  superagent --> product
+  steward --> product
+  product --> inst["制度层：工作项、Mandate、Receipt、门禁"]
+  product --> runtime["运行时层：派单、Watchdog、能力态路由"]
+  product --> ui["交互层：左栏决定、中栏群聊、右栏工作台"]
+```
+
+制度 / 运行时 / 交互：
+
+```mermaid
+flowchart LR
+  subgraph ui [交互层]
+    left["左栏：待你决定"]
+    chat["中栏：群聊"]
+    workbench["右栏工作台：仓 / 探 / 作 / 验"]
+  end
+  subgraph runtime [运行时层]
+    assign["Steward 分派"]
+    watchdog["Watchdog"]
+    route["routeModel"]
+  end
+  subgraph inst [制度层]
+    workitem["工作项"]
+    mandate["Mandate / Receipt"]
+    policy["Policy 门禁"]
+  end
+  chat --> assign
+  left -->|"人批准或否决"| mandate
+  assign --> workitem
+  watchdog --> workitem
+  route --> assign
+  workitem --> policy
+  workitem -.-> workbench
+```
+
+工作项闭环：
+
+```mermaid
+sequenceDiagram
+  participant Person as 人
+  participant Chat as 群聊
+  participant Console as 左栏
+  participant Runtime as 运行时
+  participant Workbench as 工作台
+  Person->>Chat: 提出需求
+  Chat->>Console: 形成工作项，进入待你决定
+  Person->>Console: 批准
+  Console->>Runtime: 签发 Mandate，启动 Watchdog
+  Runtime->>Workbench: 仓探作验表达状态
+  Runtime-->>Console: 结果就绪或需要再决定
+```
 
 ## 它解决什么问题
 
@@ -36,9 +99,9 @@ ds-superbot 是给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-ha
 |---|---|
 | **7 个角色** | 派单时注入的章程（`roles/*.md`）：`pm`、`architect`、`backend-dev`、`frontend-dev`、`qa-engineer`、`browser-tester`、`reviewer`。**不注册 Agent Preset**，所以角色不会出现在模式选择器里 |
 | **派发** | `superbot_dispatch(role, description, prompt, cwd?)`：一个角色一次调用，章程自动拼进派单正文，返回子会话 id，结果自动回传 |
-| **三层模型路由** | 项目根 `superbot.config.json` 的 `modelRouting.<role>`（仓库优先） > 设置页该角色 > 设置页默认 > 继承主代理；派发前校验模型与思考强度，未知模型直接报错 |
-| **右侧栏团队面板** | 每会话一份：默认分层工作流树、自由拖拽缩放、图 / 列表切换；节点显示角色 / 实际模型 / 任务 / 状态 / 耗时 / tokens；顶部原生任务进度条；底部可折叠产物区 |
-| **设置页模型表格** | 「设置 → Super Bot」逐角色 provider / model / 思考强度，带真实校验与来源列 |
+| **模型路由** | 工作项派单：能力态 × 风险（及 modelTiers）> 设置页该能力 > 设置页默认（兜底）> 角色 `modelRouting` > 继承主代理。0.1.0 `superbot_dispatch` 仍是：项目根 `modelRouting.<role>`（仓库优先）> 设置页该角色 > 设置页默认 > 继承主代理。派发前校验模型与思考强度，未知模型直接报错 |
+| **右侧工作台** | 每会话一份：默认分层工作流树、自由拖拽缩放、图 / 列表切换；节点显示角色 / 实际模型 / 任务 / 状态 / 耗时 / tokens；顶部原生任务进度条；底部可折叠产物区 |
+| **设置页模型表格** | 「设置 → Super Bot」逐角色、逐能力（探索 Discover、施工 Build、验收 Verify，以及 Steward / Explorer / Scout / Curator / Cartographer）配置 provider / model / 思考强度；空行走同一默认（兜底），再继承主代理；带真实校验与来源列。仓 / 探 / 作 / 验是在场的脸，不是新的角色席位 |
 | **共享任务板** | `superbot_board`：把计划幂等同步成 Agent Teams 板上的门禁 + 工作单 |
 | **文档流水线** | 四个入口（`docs-new` / `docs-takeover` / `docs-feature` / `docs-review`）+ 规范总库（`docs-rules`）+ 治理增量层（`docs-governance`） |
 | **文档就绪硬门** | `docTier=3` 时，没有 `docs-ready.mjs` 签发的收据，`backend-dev` / `frontend-dev` 派不出去 |
@@ -119,13 +182,25 @@ plugin_manager(action="install_bundle", target="<克隆下来的绝对路径>")
 
 ## 模型路由
 
-优先级（唯一事实链）：
+优先级分两条路径，互不改写。
+
+0.1.0 `superbot_dispatch`（角色派单，保持原口径）：
 
 ```text
 1. 项目根 superbot.config.json 的 modelRouting.<role>   ← 仓库优先，跟代码进同一个 diff
 2. 设置 → Super Bot 里该角色的 provider / model / effort
-3. 设置 → Super Bot 的默认行
+3. 设置 → Super Bot 的默认（兜底）行
 4. 继承主代理当前路由
+```
+
+工作项派单（`routeModel` / `dispatchWorkItem`）：
+
+```text
+1. 能力态 × 风险的显式路由（及 modelTiers 轻量 / 强档）
+2. 设置 → Super Bot 里该能力的 provider / model / effort
+3. 设置 → Super Bot 的默认（兜底）行
+4. 项目根 modelRouting.<role>（若派单带了角色）
+5. 继承主代理当前路由
 ```
 
 ```json
@@ -142,13 +217,13 @@ plugin_manager(action="install_bundle", target="<克隆下来的绝对路径>")
 - 格式错误（如 `model` 少了 `provider/` 前缀）按「没有配置」处理，落到继承主代理。
 - 结构机检：`node <插件目录>/scripts/validate-config.mjs <项目根>/superbot.config.json`。
 
-## 右侧栏团队面板
+## 右侧工作台
 
 面板在会话的**右侧栏**里。DSH 的右侧栏按会话保存布局，所以**每个会话各开各的面板**。三种打开方式：
 
-1. 会话标题栏的 **Super Bot 图标**（`conversation.session.header.utilities`）；
-2. **右侧栏引导页**里的「Super Bot 团队」入口；
-3. **自动打开**：该会话第一次出现 Super Bot 派发时自动打开一次（用户手动关掉后不再抢回）。
+1. 会话标题栏始终可见的 **工作台** 按钮（`conversation.session.header.utilities`），以及无工作项时仍保留的迷你入口（`conversation.session.header.corner`）；
+2. **右侧栏引导页**里的「工作台」入口；
+3. **自动打开**：该会话第一次出现 Super Bot 派发时自动打开一次（用户手动关掉后不再抢回）。新会话不必等派单，也可以从标题栏入口打开工作台。
 
 ![流程示意](docs/assets/pipeline.svg)
 
@@ -228,7 +303,7 @@ node <插件>/scripts/docs-ready.mjs <root> status                              
 | 字段 | 作用 |
 |---|---|
 | `docTier` | `0/1/2` = 只维护 T0/T1；`3` = 七阶段文档树 + 开发硬门 |
-| `modelRouting.<role>` | 该角色的 provider/model/effort，优先级最高 |
+| `modelRouting.<role>` | 0.1.0 角色派单中优先级最高；工作项派单中排在能力设置与默认（兜底）之后 |
 | `execution.mode` | `subagent`（默认）或 `inline`（主代理自己动手，范围受限） |
 
 ## 仓库结构

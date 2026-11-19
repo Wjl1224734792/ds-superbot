@@ -115,6 +115,58 @@ function lookupExplicit(routes, capability, risk, tier) {
   return null;
 }
 
+
+/**
+ * Panel / settings selections may be a split { provider, model } pair
+ * (Settings → Super Bot) or a `provider/name` model string.
+ */
+export function isUsableSelection(entry) {
+  if (!entry || typeof entry !== 'object') return false;
+  const provider = typeof entry.provider === 'string' ? entry.provider.trim() : '';
+  const model = typeof entry.model === 'string' ? entry.model.trim() : '';
+  if (provider && model) return true;
+  if (model.includes('/')) return true;
+  return false;
+}
+
+function selectionAsRoute(entry) {
+  if (!isUsableSelection(entry)) return null;
+  const provider = typeof entry.provider === 'string' && entry.provider.trim() ? entry.provider.trim() : null;
+  const model = String(entry.model).trim();
+  const effort = typeof entry.effort === 'string' && entry.effort.trim() ? entry.effort.trim() : null;
+  return { provider, model, effort };
+}
+
+const CAPABILITY_SETTING_ALIASES = Object.freeze({
+  worker: 'Build',
+  verifier: 'Verify',
+  capabilitycompiler: 'Compiler',
+});
+
+function lookupCapabilitySettings(config, capability) {
+  const table = config?.capabilities ?? config?.capabilitySettings ?? null;
+  if (!table || typeof table !== 'object' || !capability) return null;
+  const names = [capability];
+  const alias = CAPABILITY_SETTING_ALIASES[capKey(capability)];
+  if (alias) names.push(alias);
+  for (const name of names) {
+    if (Object.prototype.hasOwnProperty.call(table, name)) {
+      const route = selectionAsRoute(table[name]);
+      if (route) return route;
+    }
+    const hitKey = Object.keys(table).find((key) => capKey(key) === capKey(name));
+    if (hitKey) {
+      const route = selectionAsRoute(table[hitKey]);
+      if (route) return route;
+    }
+  }
+  return null;
+}
+
+function lookupDefaults(config) {
+  return selectionAsRoute(config?.defaults);
+}
+
 function lookupTierModel(config, tier) {
   if (!tier || !config) return null;
   const tiers = config.modelTiers ?? config.tierModels ?? null;
@@ -129,7 +181,8 @@ function lookupTierModel(config, tier) {
 
 /**
  * Pure function: pick a model route from capability × risk, then
- * role-level `config.modelRouting[role]` as fallback, then inherit.
+ * that capability's Settings row, then 默认（兜底） `config.defaults`,
+ * then role-level `config.modelRouting[role]`, then inherit.
  *
  * @param {{ capability?: string, risk?: string, role?: string, config?: object }} input
  * @returns {{
@@ -137,7 +190,7 @@ function lookupTierModel(config, tier) {
  *   model: string|null,
  *   effort: string|null,
  *   tier: 'light'|'strong'|null,
- *   source: 'capability-risk'|'tier'|'role-fallback'|'inherit',
+ *   source: 'capability-risk'|'tier'|'capability-settings'|'defaults'|'role-fallback'|'inherit',
  *   capability: string|null,
  *   risk: string|null,
  *   role: string|null,
@@ -171,6 +224,30 @@ export function routeModel(input = {}) {
       ...tierRoute,
       tier,
       source: 'tier',
+      capability,
+      risk,
+      role,
+    };
+  }
+
+  const capSettings = lookupCapabilitySettings(config, capability);
+  if (capSettings) {
+    return {
+      ...capSettings,
+      tier,
+      source: 'capability-settings',
+      capability,
+      risk,
+      role,
+    };
+  }
+
+  const defaults = lookupDefaults(config);
+  if (defaults) {
+    return {
+      ...defaults,
+      tier,
+      source: 'defaults',
       capability,
       risk,
       role,
