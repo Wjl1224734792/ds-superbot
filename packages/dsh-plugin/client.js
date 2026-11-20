@@ -5305,9 +5305,9 @@ window.__ModuleLoader__.load({
           }),
         }, DecisionCards)), 'superbot: group-chat decision cards');
 
-        // The board is a per-Session right-Sidebar tab: the type (what opens), its
-        // body and chip title, the header button, and the rule that opens it when a
-        // Super Bot dispatch starts. All of it needs the Sidebar services, so it is
+        // The canvas is a per-Session right-Sidebar tab: the type (what opens), its
+        // body and chip title, the header button, and the rule that opens it once
+        // when a new Session is mounted. All of it needs the Sidebar services, so it is
         // registered on an injected child context instead of gating the whole plugin.
         const withRightbar = (run) => {
           if (typeof ctx.inject === 'function') {
@@ -5386,55 +5386,40 @@ window.__ModuleLoader__.load({
             }),
           }, InputCaption)), 'superbot: input caption dock');
 
-          // Auto-open: the first Super Bot dispatch in a Session opens the board once,
-          // so the user watches the run live without asking for it. Closing the tab
-          // afterwards keeps it closed for that Session. A dispatch is recognised by
-          // its role-prefixed label; when that is absent (an older host half, or a
-          // plain `subagent` call inside a Super Bot run) the run directory on disk is
-          // the evidence, probed once per Session.
+          // Auto-open: a new Session opens the canvas tab once, so the right
+          // sidebar lands on 画布 without a prior dispatch or header click.
+          // Switching back to 开始, or closing the canvas tab, is respected for
+          // that Session; a later Session still opens the canvas again.
           sctx.effect(() => {
             const opened = new Set();
-            const probed = new Set();
-            const loaders = new Map();
             const list = sctx.sessions ? sctx.sessions.list : undefined;
-            if (!list || typeof list.getSnapshot !== 'function' || typeof list.subscribe !== 'function') return undefined;
             const right = sctx.sidebarRight;
-            const openOnce = (mounted) => {
-              if (opened.has(mounted)) return;
-              opened.add(mounted);
-              if (!openPanel(sctx)) opened.delete(mounted);
-            };
-            const loaderOf = (sessionId) => {
-              if (!loaders.has(sessionId)) loaders.set(sessionId, createRunLoader(sctx, sessionId));
-              return loaders.get(sessionId);
+            const mountedSrc = right && right.mounted;
+            if (!mountedSrc || typeof mountedSrc.getSnapshot !== 'function') return undefined;
+            const openOnce = (sessionId) => {
+              if (!sessionId || opened.has(sessionId)) return;
+              opened.add(sessionId);
+              if (!openPanel(sctx)) opened.delete(sessionId);
             };
             const tick = () => {
               try {
-                const state = list.getSnapshot();
-                const mounted = right && right.mounted && typeof right.mounted.getSnapshot === 'function' ? right.mounted.getSnapshot() : undefined;
+                const mounted = mountedSrc.getSnapshot();
                 if (!mounted || opened.has(mounted)) return;
-                const projection = state && state.projectionsBySession ? state.projectionsBySession[mounted] : undefined;
-                const catalog = projection && projection.values ? projection.values.subagentCatalog : undefined;
-                if (!Array.isArray(catalog) || catalog.length === 0) return;
-                const dispatched = catalog.some((entry) => entry && typeof entry.label === 'string' && ROLE_LABEL.test(entry.label));
-                if (dispatched) {
-                  openOnce(mounted);
-                  return;
-                }
-                if (probed.has(mounted)) return;
-                probed.add(mounted);
-                Promise.resolve()
-                  .then(() => loaderOf(mounted).load())
-                  .then((facts) => { if (facts && facts.dir) openOnce(mounted); })
-                  .catch(() => {});
+                openOnce(mounted);
               } catch {
-                // the board is a convenience; never break the app for it
+                // the canvas default is a convenience; never break the app for it
               }
             };
-            const unsubscribe = list.subscribe(tick);
+            const unsubs = [];
+            if (list && typeof list.subscribe === 'function') unsubs.push(list.subscribe(tick));
+            if (typeof mountedSrc.subscribe === 'function') unsubs.push(mountedSrc.subscribe(tick));
             tick();
-            return typeof unsubscribe === 'function' ? unsubscribe : undefined;
-          }, 'superbot: auto-open the board on a Super Bot dispatch');
+            return () => {
+              for (const unsubscribe of unsubs) {
+                if (typeof unsubscribe === 'function') unsubscribe();
+              }
+            };
+          }, 'superbot: default-open the canvas on a new Session');
         });
       },
     };

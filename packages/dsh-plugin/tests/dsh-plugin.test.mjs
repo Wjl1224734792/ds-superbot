@@ -1166,88 +1166,88 @@ test('the client registers a right-sidebar board, its title, a header button and
 });
 
 /**
- * The first Super Bot dispatch in a Session opens the board once and only once: a
- * plain `subagent` call must not steal the panel, and closing it afterwards has to
- * stick for that Session.
+ * A new Session opens the canvas tab once, with no dispatch and no header click.
+ * Switching back to 开始 (or closing the tab) is respected for that Session; a
+ * later Session still opens the canvas again. openTab kind stays `superbot`.
  */
-test('the panel opens itself once when a Super Bot dispatch appears', async () => {
+test('a new session opens the canvas tab once without a dispatch', async () => {
   const { factory } = await loadClientFactory();
   const harness = createRenderHarness();
   const instance = factory((name) => (name === 'react' ? harness.stub : {}));
 
   const opened = [];
   const listeners = new Set();
-  let snapshot = {
-    projectionsBySession: {
-      'session-a': { values: { subagentCatalog: [{ id: 'child-1', mode: 'one-shot', label: '查一下文档' }] } },
-    },
-  };
+  let mounted = 'session-a';
   const { ctx } = createClientContext({
     sidebarRight: {
-      mounted: { getSnapshot: () => 'session-a', subscribe: () => () => {} },
+      mounted: { getSnapshot: () => mounted, subscribe: (listener) => { listeners.add(listener); return () => listeners.delete(listener); } },
       openTab: (kind) => opened.push(kind),
       openResource: () => {},
     },
     sessions: {
       list: {
-        getSnapshot: () => snapshot,
-        subscribe: (listener) => {
-          listeners.add(listener);
-          return () => listeners.delete(listener);
-        },
+        getSnapshot: () => ({ projectionsBySession: {} }),
+        subscribe: (listener) => { listeners.add(listener); return () => listeners.delete(listener); },
       },
     },
   });
   instance.apply(ctx);
-  assert.deepEqual(opened, [], 'a plain subagent call never opens the board');
-
-  snapshot = {
-    projectionsBySession: {
-      'session-a': { values: { subagentCatalog: [{ id: 'child-2', mode: 'one-shot', label: 'backend-dev · T1 导出接口' }] } },
-    },
-  };
-  for (const listener of listeners) listener();
-  assert.deepEqual(opened, ['superbot'], 'a Super Bot dispatch opens the board');
+  assert.deepEqual(opened, ['superbot'], 'a new session opens the canvas without a dispatch');
 
   for (const listener of listeners) listener();
-  assert.deepEqual(opened, ['superbot'], 'it does not fight the user for the panel afterwards');
+  assert.deepEqual(opened, ['superbot'], 'switching back to 开始 does not reopen the canvas in the same session');
+
+  mounted = 'session-b';
+  for (const listener of listeners) listener();
+  assert.deepEqual(opened, ['superbot', 'superbot'], 'a later session still opens the canvas by default');
+
+  mounted = 'session-a';
+  for (const listener of listeners) listener();
+  assert.deepEqual(opened, ['superbot', 'superbot'], 'returning to a dismissed session does not force the canvas open again');
 });
 
 /**
- * A host half that predates the role-prefixed label, or a plain `subagent` call
- * inside a Super Bot run, still opens the board: the run directory on disk is the
- * evidence, probed once per Session.
+ * The default open waits for a mounted Session, retries if openTab is not ready
+ * yet, and never replaces the built-in 开始 guide tab.
  */
-test('the panel also opens when a run directory exists but the dispatch label carries no role', async () => {
+test('the canvas waits for a mounted session and retries a failed openTab', async () => {
   const { factory } = await loadClientFactory();
   const harness = createRenderHarness();
   const instance = factory((name) => (name === 'react' ? harness.stub : {}));
 
   const opened = [];
-  const workspaceFiles = {
-    list: async (sessionId, path) => (path === 'tmp/superbot'
-      ? { ok: true, value: { path, entries: [{ name: '1113-1518-demo', type: 'directory' }], truncated: false } }
-      : { ok: false, error: { message: 'workspace-file/not-found', code: 'workspace-file/not-found' } }),
-    read: async () => ({ ok: false, error: { message: 'workspace-file/not-found', code: 'workspace-file/not-found' } }),
-  };
-  const snapshot = {
-    projectionsBySession: {
-      'session-probe': { values: { subagentCatalog: [{ id: 'child-1', mode: 'one-shot', label: '查一下文档' }] } },
-    },
-  };
-  const { ctx } = createClientContext({
-    remote: { session: { modelCatalog: async () => ({ ok: true, value: { groups: [] } }) }, workspaceFiles },
+  const listeners = new Set();
+  let mounted;
+  let allowOpen = false;
+  const { ctx, registered, tabTypes } = createClientContext({
     sidebarRight: {
-      mounted: { getSnapshot: () => 'session-probe', subscribe: () => () => {} },
-      openTab: (kind) => opened.push(kind),
+      mounted: { getSnapshot: () => mounted, subscribe: (listener) => { listeners.add(listener); return () => listeners.delete(listener); } },
+      openTab: (kind) => {
+        if (!allowOpen) throw new Error('sidebar not ready');
+        opened.push(kind);
+      },
       openResource: () => {},
     },
-    sessions: { list: { getSnapshot: () => snapshot, subscribe: () => () => {} } },
+    sessions: {
+      list: {
+        getSnapshot: () => ({ projectionsBySession: {} }),
+        subscribe: (listener) => { listeners.add(listener); return () => listeners.delete(listener); },
+      },
+    },
   });
   instance.apply(ctx);
-  assert.deepEqual(opened, [], 'the probe is asynchronous');
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  assert.deepEqual(opened, ['superbot'], 'a run directory opens the board');
+  assert.deepEqual(opened, [], 'no session is mounted yet');
+  assert.ok(tabTypes.some((entry) => entry.kind === 'superbot' && entry.id === 'ds-superbot'), 'the canvas tab type stays registered');
+  assert.ok(tabTypes[0].guide && tabTypes[0].guide.length > 0, '开始 remains available; the canvas is an added tab, not a column replacement');
+  assert.equal(registered.some((entry) => entry.options.name === 'sidebar.right.tab.guide'), false, 'the built-in 开始 guide body is not replaced');
+
+  mounted = 'session-new';
+  for (const listener of listeners) listener();
+  assert.deepEqual(opened, [], 'a failed openTab is retried later');
+
+  allowOpen = true;
+  for (const listener of listeners) listener();
+  assert.deepEqual(opened, ['superbot'], 'the canvas opens once openTab is ready');
 });
 
 /**
