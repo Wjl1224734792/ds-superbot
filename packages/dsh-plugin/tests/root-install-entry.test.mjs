@@ -29,7 +29,7 @@ function collectPackageJsonFiles(dir, acc = []) {
 test('root package.json is the ds-superbot install_bundle entry', () => {
   const root = readJson(join(repoRoot, 'package.json'));
   assert.equal(root.name, 'ds-superbot');
-  assert.equal(root.version, '0.2.0');
+  assert.equal(root.version, '0.2.1');
   assert.ok(root.dsh && root.dsh.bundle && root.dsh.bundle.patch, 'root must declare dsh.bundle.patch');
   const patchPath = join(repoRoot, root.dsh.bundle.patch);
   assert.ok(existsSync(patchPath), `bundle patch must exist: ${root.dsh.bundle.patch}`);

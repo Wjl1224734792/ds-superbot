@@ -107,7 +107,7 @@ node packages/constitution/bin/constitution.mjs <root> workitem create --thread 
 2. 把 `CHANGELOG.md` 的 `[Unreleased]` 条目移入新版本小节。
 3. 面向用户的文案同步中英两份：`README.md`、`README.en.md`、`locale/{zh,en}.json`。
 4. 全绿门禁：`npm run check && npm test`。
-5. 提交并打标签：`git tag -a v0.2.0 -m "v0.2.0"`。
+5. 提交并打标签：`git tag -a v0.2.1 -m "v0.2.1"`。
 6. 装进 profile 复验：`plugin_manager(action="install_bundle", target="<repo>")` → 重启 DSH → 新会话。
 
 ## 9. 排障
