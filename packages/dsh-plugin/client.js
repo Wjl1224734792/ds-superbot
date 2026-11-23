@@ -5139,13 +5139,43 @@ window.__ModuleLoader__.load({
       };
     }
 
-    /** Open this Session's board tab; false when the host offers no right Sidebar. */
+    /**
+     * Official ILayout.openRightbar(track: boolean, fullscreen: boolean).
+     * `track: true` reserves the normal docked grid track, including the
+     * column the occupant later reports; `fullscreen: false` keeps a docked
+     * open rather than covering the frame. Do not invent a track enum.
+     */
+    function openRightbarDocked(ctx) {
+      const layout = ctx ? ctx.layout : undefined;
+      if (!layout || typeof layout.openRightbar !== 'function') return;
+      layout.openRightbar(true, false);
+    }
+
+    /**
+     * Confirm the canvas tab is actually active and the column is showing.
+     * Uses official ISidebarRight.active() and isExpanded(); a silent openTab
+     * no-op must not count as success.
+     */
+    function isCanvasActive(right) {
+      if (!right || typeof right.active !== 'function') return false;
+      try {
+        const tab = right.active();
+        if (!tab || tab.kind !== TAB_KIND) return false;
+        if (typeof right.isExpanded === 'function' && right.isExpanded() !== true) return false;
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    /** Open the right column, then this Session's board tab; true only when the canvas is confirmed active. */
     function openPanel(ctx) {
       const right = ctx ? ctx.sidebarRight : undefined;
       if (!right || typeof right.openTab !== 'function') return false;
       try {
+        openRightbarDocked(ctx);
         right.openTab(TAB_KIND);
-        return true;
+        return isCanvasActive(right);
       } catch {
         return false;
       }
@@ -5311,7 +5341,7 @@ window.__ModuleLoader__.load({
         // registered on an injected child context instead of gating the whole plugin.
         const withRightbar = (run) => {
           if (typeof ctx.inject === 'function') {
-            ctx.inject(['sidebarRight', 'sidebarRightTabs', 'sessions'], run);
+            ctx.inject(['sidebarRight', 'sidebarRightTabs', 'sessions', 'layout'], run);
             return;
           }
           // No deferral available: only run when the services are truly mounted.
@@ -5386,26 +5416,84 @@ window.__ModuleLoader__.load({
             }),
           }, InputCaption)), 'superbot: input caption dock');
 
-          // Auto-open: a new Session opens the canvas tab once, so the right
-          // sidebar lands on 画布 without a prior dispatch or header click.
-          // Switching back to 开始, or closing the canvas tab, is respected for
-          // that Session; a later Session still opens the canvas again.
+          // Auto-open: a new Session first opens the right column with the
+          // official layout.openRightbar(true, false), then openTab('superbot'),
+          // so the sidebar lands on 画布 without a prior dispatch or header click.
+          // openTab not throwing is not success: only a confirmed active canvas
+          // tab is recorded. If the pane stays on 开始, retry a limited number
+          // of times. Switching back to 开始, or closing the canvas tab, is
+          // respected for that Session; a later Session still opens the canvas
+          // again. Exhausted retries stop rather than looping forever.
           sctx.effect(() => {
             const opened = new Set();
+            const exhausted = new Set();
+            const attempts = new Map();
+            const pending = new Map();
+            const timers = new Set();
             const list = sctx.sessions ? sctx.sessions.list : undefined;
             const right = sctx.sidebarRight;
             const mountedSrc = right && right.mounted;
             if (!mountedSrc || typeof mountedSrc.getSnapshot !== 'function') return undefined;
-            const openOnce = (sessionId) => {
-              if (!sessionId || opened.has(sessionId)) return;
-              opened.add(sessionId);
-              if (!openPanel(sctx)) opened.delete(sessionId);
+            const MAX_ATTEMPTS = 8;
+            const RETRY_DELAYS_MS = [0, 16, 50, 100, 200, 400, 800];
+            const cancelPending = (sessionId) => {
+              const timer = pending.get(sessionId);
+              if (timer !== undefined) {
+                clearTimeout(timer);
+                timers.delete(timer);
+                pending.delete(sessionId);
+              }
+            };
+            const tryOpen = (sessionId, fromTimer) => {
+              if (!sessionId || opened.has(sessionId) || exhausted.has(sessionId)) return;
+              let mounted;
+              try { mounted = mountedSrc.getSnapshot(); } catch { return; }
+              if (mounted !== sessionId) return;
+              if (isCanvasActive(right)) {
+                opened.add(sessionId);
+                cancelPending(sessionId);
+                return;
+              }
+              const n = attempts.get(sessionId) || 0;
+              if (n >= MAX_ATTEMPTS) {
+                exhausted.add(sessionId);
+                cancelPending(sessionId);
+                return;
+              }
+              const ok = openPanel(sctx);
+              if (ok) {
+                opened.add(sessionId);
+                cancelPending(sessionId);
+                return;
+              }
+              // Count the first attempt and timer retries toward the cap.
+              // A later session-list or mounted tick may also try (the host may
+              // have just become ready) but must not burn the budget in a burst.
+              if (fromTimer || n === 0) {
+                const next = n + 1;
+                attempts.set(sessionId, next);
+                if (next >= MAX_ATTEMPTS) {
+                  exhausted.add(sessionId);
+                  cancelPending(sessionId);
+                  return;
+                }
+              }
+              if (pending.has(sessionId)) return;
+              const step = attempts.get(sessionId) || 1;
+              const delay = RETRY_DELAYS_MS[Math.min(step, RETRY_DELAYS_MS.length) - 1];
+              const timer = setTimeout(() => {
+                timers.delete(timer);
+                pending.delete(sessionId);
+                tryOpen(sessionId, true);
+              }, delay);
+              pending.set(sessionId, timer);
+              timers.add(timer);
             };
             const tick = () => {
               try {
                 const mounted = mountedSrc.getSnapshot();
-                if (!mounted || opened.has(mounted)) return;
-                openOnce(mounted);
+                if (!mounted || opened.has(mounted) || exhausted.has(mounted)) return;
+                tryOpen(mounted);
               } catch {
                 // the canvas default is a convenience; never break the app for it
               }
@@ -5415,6 +5503,9 @@ window.__ModuleLoader__.load({
             if (typeof mountedSrc.subscribe === 'function') unsubs.push(mountedSrc.subscribe(tick));
             tick();
             return () => {
+              for (const timer of timers) clearTimeout(timer);
+              timers.clear();
+              pending.clear();
               for (const unsubscribe of unsubs) {
                 if (typeof unsubscribe === 'function') unsubscribe();
               }

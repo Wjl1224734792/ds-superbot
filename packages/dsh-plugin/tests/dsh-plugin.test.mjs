@@ -1178,11 +1178,15 @@ test('a new session opens the canvas tab once without a dispatch', async () => {
   const opened = [];
   const listeners = new Set();
   let mounted = 'session-a';
+  let activeKind;
+  let expanded = false;
   const { ctx } = createClientContext({
     sidebarRight: {
       mounted: { getSnapshot: () => mounted, subscribe: (listener) => { listeners.add(listener); return () => listeners.delete(listener); } },
-      openTab: (kind) => opened.push(kind),
+      openTab: (kind) => { opened.push(kind); activeKind = kind; expanded = true; },
       openResource: () => {},
+      active: () => (activeKind ? { kind: activeKind, id: `tab-${activeKind}` } : undefined),
+      isExpanded: () => expanded,
     },
     sessions: {
       list: {
@@ -1194,14 +1198,19 @@ test('a new session opens the canvas tab once without a dispatch', async () => {
   instance.apply(ctx);
   assert.deepEqual(opened, ['superbot'], 'a new session opens the canvas without a dispatch');
 
+  activeKind = 'guide';
   for (const listener of listeners) listener();
   assert.deepEqual(opened, ['superbot'], 'switching back to 开始 does not reopen the canvas in the same session');
 
   mounted = 'session-b';
+  activeKind = 'guide';
+  expanded = false;
   for (const listener of listeners) listener();
   assert.deepEqual(opened, ['superbot', 'superbot'], 'a later session still opens the canvas by default');
 
   mounted = 'session-a';
+  activeKind = 'guide';
+  expanded = true;
   for (const listener of listeners) listener();
   assert.deepEqual(opened, ['superbot', 'superbot'], 'returning to a dismissed session does not force the canvas open again');
 });
@@ -1219,14 +1228,20 @@ test('the canvas waits for a mounted session and retries a failed openTab', asyn
   const listeners = new Set();
   let mounted;
   let allowOpen = false;
+  let activeKind;
+  let expanded = false;
   const { ctx, registered, tabTypes } = createClientContext({
     sidebarRight: {
       mounted: { getSnapshot: () => mounted, subscribe: (listener) => { listeners.add(listener); return () => listeners.delete(listener); } },
       openTab: (kind) => {
         if (!allowOpen) throw new Error('sidebar not ready');
         opened.push(kind);
+        activeKind = kind;
+        expanded = true;
       },
       openResource: () => {},
+      active: () => (activeKind ? { kind: activeKind, id: `tab-${activeKind}` } : undefined),
+      isExpanded: () => expanded,
     },
     sessions: {
       list: {
