@@ -12,7 +12,7 @@ ds-superbot 是给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-ha
 
 文档 / 规范 / 门禁 / 证据是宪法，Claim → Evidence → Receipt 是唯一交付货币。左侧控制台处理「待你决定」与工作项历史，右侧工作台展示在场与证据，过程状态不走聊天。目标不是「一次把代码写完」，而是让项目在每次变更后仍然**可理解、可验证、可回滚、可继续演进**。
 
-> **状态**：`0.2.1`。1.0.0 之前允许破坏性变更——DSH 安装入口是**仓库根目录**，对仓库根执行 `install_bundle` 即可。DSH 处于 `0.2.x` 阶段，插件的原生扩展点契约随宿主版本演进——升级 DSH 前请先看 [CHANGELOG](CHANGELOG.md)。
+> **状态**：`0.2.2`。1.0.0 之前允许破坏性变更——DSH 安装入口是**仓库根目录**，对仓库根执行 `install_bundle` 即可。DSH 处于 `0.2.x` 阶段，插件的原生扩展点契约随宿主版本演进——升级 DSH 前请先看 [CHANGELOG](CHANGELOG.md)。
 
 0.1.0 的七角色派单路径（`superbot_dispatch`）仍作为兼容实现保留，不再作为产品封面。
 
