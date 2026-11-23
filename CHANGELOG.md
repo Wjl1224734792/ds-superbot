@@ -42,6 +42,17 @@
 - 默认授权档位仍是 observe；本版本不打开 auto 自动合并。auto 执行灰度不是合并，且必须先有观察记录。
 - P3 不改 0.1.0 的 `superbot_dispatch` 行为，不在插件里开 HTTP，不新注册 Agent Preset 或第 8 个角色文件。
 
+## [0.2.3] - 2026-11-23
+
+### Fixed
+
+- 右侧栏「画布」入口（`sidebar.right.pane.tab` 正文与 chip 标题、「开始」页卡片、标题栏按钮、迷你脸、待决定计数、输入区字幕、新会话自动打开）在 0.2.1 / 0.2.2 里从未注册成功：整段注册被关在一个要等 4 个客户端服务（`sidebarRight` / `sidebarRightTabs` / `sessions` / `layout`）全部就绪的 `ctx.inject` 里，任一服务缺席就静默不执行，界面只表现为「右栏没有画布」。现在注册只等真正的两个右栏注册表服务 `sidebarRight` / `sidebarRightTabs`，`sessions` / `layout` 改为运行时按需读取，缺了只影响「新会话自动打开画布」这一便利，不影响画布入口本身。
+- 0.1.0 的 `superbot_dispatch` 与 `docTier=3` 硬门未改。默认仍 observe，禁止 auto-merge，插件不开 HTTP。
+
+### Changed
+
+- 右侧栏「开始」页的「画布」卡片改用项目鲸鱼 logo（此前是官方立方体占位图）；画布 chip 与标题栏按钮沿用同一枚 logo。
+
 ## [0.2.2] - 2026-11-23
 
 ### Fixed

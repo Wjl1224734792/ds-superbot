@@ -107,11 +107,11 @@ function kindsOf(calls, name) {
   return calls.filter((entry) => entry[0] === name);
 }
 
-test('version stays 0.2.2 and copy never uses 舞台', async () => {
+test('version stays 0.2.3 and copy never uses 舞台', async () => {
   const root = JSON.parse(readFileSync(ROOT_PKG, 'utf8'));
   const plugin = JSON.parse(readFileSync(PLUGIN_PKG, 'utf8'));
-  assert.equal(root.version, '0.2.2');
-  assert.equal(plugin.version, '0.2.2');
+  assert.equal(root.version, '0.2.3');
+  assert.equal(plugin.version, '0.2.3');
   const source = readFileSync(CLIENT_URL, 'utf8');
   assert.doesNotMatch(source, /舞台/);
   assert.doesNotMatch(source, /['"]Stage['"]/);
@@ -138,6 +138,12 @@ test('right tab kind stays superbot and the workbench plus decision cards stay r
   assert.equal(guide[0].title(), '画布');
   assert.equal(typeof guide[0].description, 'function');
   assert.equal(guide[0].description(), '角色 · 模型 · 任务 · 状态');
+  assert.equal(typeof guide[0].icon, 'function', 'the 开始 card carries an icon instead of the cube placeholder');
+  const guideIcon = guide[0].icon({ size: 26 });
+  assert.equal(guideIcon.type, 'svg');
+  assert.equal(guideIcon.props.width, 26);
+  const iconFills = (guideIcon.children || []).map((child) => child && child.props && child.props.fill);
+  assert.ok(iconFills.includes('#4D6BFE'), 'the 开始 card draws the project logo, not a placeholder');
   const names = registered.map((entry) => entry.options.name);
   assert.ok(names.includes('conversation.view'), 'the workbench tab stays');
   assert.equal(registered.find((entry) => entry.options.name === 'conversation.view').options.id, 'superbot-workbench');
@@ -146,7 +152,15 @@ test('right tab kind stays superbot and the workbench plus decision cards stay r
   assert.equal(names.includes('sidebar.right.tab.guide'), false, '开始 is not replaced');
   assert.equal(names.includes('sidebar'), false);
   assert.equal(names.includes('rightbar'), false);
-  assert.ok(injected.some((names) => names.includes('layout') && names.includes('sidebarRight')), 'default-open injects official layout.openRightbar');
+  assert.ok(
+    injected.some((names) => names.includes('sidebarRight') && names.includes('sidebarRightTabs')),
+    'the canvas registers on the right-Sidebar registry alone',
+  );
+  assert.equal(
+    injected.some((names) => names.includes('layout') || names.includes('sessions')),
+    false,
+    'layout/sessions are read at runtime, so a missing one never blocks the tab',
+  );
 });
 
 test('a fresh session defaults to the canvas; leaving it is respected until the next session', async () => {

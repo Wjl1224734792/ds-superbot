@@ -5337,11 +5337,12 @@ window.__ModuleLoader__.load({
 
         // The canvas is a per-Session right-Sidebar tab: the type (what opens), its
         // body and chip title, the header button, and the rule that opens it once
-        // when a new Session is mounted. All of it needs the Sidebar services, so it is
-        // registered on an injected child context instead of gating the whole plugin.
+        // when a new Session is mounted. Registration waits only for the two
+        // registry services it truly needs; sessions/layout are read at runtime
+        // inside the effects, so a missing one degrades the auto-open only.
         const withRightbar = (run) => {
           if (typeof ctx.inject === 'function') {
-            ctx.inject(['sidebarRight', 'sidebarRightTabs', 'sessions', 'layout'], run);
+            ctx.inject(['sidebarRight', 'sidebarRightTabs'], run);
             return;
           }
           // No deferral available: only run when the services are truly mounted.
@@ -5357,6 +5358,7 @@ window.__ModuleLoader__.load({
             guide: [{
               id: 'superbot-board',
               order: 40,
+              icon: ProjectLogo,
               title: () => textOf().canvasTitle,
               description: () => textOf().canvasSubtitle || textOf().subtitle,
             }],
