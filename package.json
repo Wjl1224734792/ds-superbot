@@ -1,6 +1,6 @@
 {
   "name": "ds-superbot",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "type": "module",
   "description": "Work-item console for DeepSeek Harness: the work item is the only product object, group chat is the main human/AI console, and the four presence faces (cang / tan / zuo / yan) cover sense, explore, build and verify. Decisions stay with humans, operations with AI, judgment with programs. The 0.1.0 seven-role superbot_dispatch path is kept as compatibility implementation, not the product cover.",
   "license": "MIT",

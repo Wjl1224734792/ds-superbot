@@ -1076,7 +1076,11 @@ test('the client registers a right-sidebar board, its title, a header button and
 
   const harness = createRenderHarness();
   const instance = factory((name) => (name === 'react' ? harness.stub : {}));
-  assert.deepEqual(instance.inject, ['slots', 'locale', 'remote', 'remote.session', 'configForms', 'uiWorkspace']);
+  assert.equal(
+    instance.inject,
+    undefined,
+    'no plugin-level inject: the registrations wait through whenReady instead',
+  );
 
   const { ctx, registered, tabTypes } = createClientContext();
   instance.apply(ctx);

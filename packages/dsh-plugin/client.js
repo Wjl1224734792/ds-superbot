@@ -5231,7 +5231,9 @@ window.__ModuleLoader__.load({
     }
 
     return {
-      inject: ['slots', 'locale', 'remote', 'remote.session', 'configForms', 'uiWorkspace'],
+      // No plugin-level `inject`: a deferred start keyed on services left this
+      // client plugin unstarted on some cold boots while the same build ran on a
+      // reload. Every registration below waits explicitly through `whenReady`.
       __test: {
         LEAD_NODE_ID,
         NODE_W,
@@ -5277,6 +5279,49 @@ window.__ModuleLoader__.load({
       apply(ctx) {
         const lang = () => pickLang(ctx);
         const textOf = () => STRINGS[lang()] || STRINGS.zh;
+
+        /**
+         * Run `run` once every named Cordis service exists.
+         *
+         * A plugin-level `inject` (and a deferred `ctx.inject` child) was observed
+         * to leave this client plugin unstarted on some cold boots while the same
+         * build registered correctly on a hot reload, so the wait is explicit
+         * here: run now, else re-check on the service publication event and on a
+         * bounded poll, then stop.
+         * @param names - client service names that must be provided.
+         * @param run - registration body, called once.
+         * @param label - effect label for diagnostics.
+         */
+        const whenReady = (names, run, label) => {
+          const ready = () => names.every((name) => ctx[name] !== undefined);
+          if (ready()) {
+            run(ctx);
+            return;
+          }
+          if (typeof ctx.effect !== 'function') return;
+          ctx.effect(() => {
+            const attempt = () => {
+              if (!ready()) return false;
+              run(ctx);
+              return true;
+            };
+            if (attempt()) return undefined;
+            const off = typeof ctx.on === 'function'
+              ? ctx.on('internal/service', () => { attempt(); })
+              : undefined;
+            const timer = setInterval(() => {
+              if (attempt()) clearInterval(timer);
+            }, 250);
+            const stop = setTimeout(() => { clearInterval(timer); }, 20000);
+            return () => {
+              clearInterval(timer);
+              clearTimeout(stop);
+              if (typeof off === 'function') off();
+            };
+          }, label);
+        };
+
+        const registerCore = () => {
 
         // Settings → Super Bot: models and reasoning effort, nothing else. This half
         // needs only the settings namespace, so it survives a profile without the
@@ -5334,42 +5379,21 @@ window.__ModuleLoader__.load({
             onDecide: createConsoleOnDecide(ctx, textOf(), sessionId),
           }),
         }, DecisionCards)), 'superbot: group-chat decision cards');
+        };
+        whenReady(['slots'], registerCore, 'superbot: core slots');
 
         // The canvas is a per-Session right-Sidebar tab: the type (what opens), its
         // body and chip title, the header button, and the rule that opens it once
         // when a new Session is mounted. Registration waits only for the two
         // registry services it truly needs; sessions/layout are read at runtime
         // inside the effects, so a missing one degrades the auto-open only.
-        // Register as soon as the two right-Sidebar services exist. A plain
-        // `ctx.inject` was tried first and fails silently at a cold start (the
-        // child never ran there while it ran on every reload), so the services are
-        // polled for directly and the service-publication event re-checks them;
-        // both paths are bounded and disposed with the plugin.
+        // The canvas is a per-Session right-Sidebar tab: the type (what opens), its
+        // body and chip title, the header button, and the rule that opens it once
+        // when a new Session is mounted. Registration waits for the slot registry
+        // plus both right-Sidebar services, re-checked by whenReady instead of a
+        // deferred inject child.
         const withRightbar = (run) => {
-          let registered = false;
-          const attempt = () => {
-            if (registered) return true;
-            if (!ctx.sidebarRight || !ctx.sidebarRightTabs) return false;
-            registered = true;
-            run(ctx);
-            return true;
-          };
-          if (attempt()) return;
-          if (typeof ctx.effect !== 'function') return;
-          ctx.effect(() => {
-            const off = typeof ctx.on === 'function'
-              ? ctx.on('internal/service', () => { attempt(); })
-              : undefined;
-            const timer = setInterval(() => {
-              if (attempt()) clearInterval(timer);
-            }, 250);
-            const stop = setTimeout(() => { clearInterval(timer); }, 20000);
-            return () => {
-              clearInterval(timer);
-              clearTimeout(stop);
-              if (typeof off === 'function') off();
-            };
-          }, 'superbot: canvas registration retry');
+          whenReady(['slots', 'sidebarRight', 'sidebarRightTabs'], run, 'superbot: canvas registrations');
         };
 
         withRightbar((sctx) => {

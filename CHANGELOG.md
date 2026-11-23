@@ -42,6 +42,13 @@
 - 默认授权档位仍是 observe；本版本不打开 auto 自动合并。auto 执行灰度不是合并，且必须先有观察记录。
 - P3 不改 0.1.0 的 `superbot_dispatch` 行为，不在插件里开 HTTP，不新注册 Agent Preset 或第 8 个角色文件。
 
+## [0.2.5] - 2026-11-23
+
+### Fixed
+
+- 冷启动后整个插件 UI 全没了（设置里的 Super Bot、顶部「工作台」页签、右栏「画布」一起消失，热重载后又回来）：客户端插件对象的 `inject` 依赖表让 Cordis 在依赖未就绪时把整个插件保持未启动，依赖表里还混着 `remote.session` 这种不是服务名的属性路径。现在**不再使用 plugin-level inject**：设置页 / 工作台页签 / 决定卡等核心注册，以及右栏画布那一段，各自通过 `whenReady(names, run)` 在「现在就绪 → 是」、「`internal/service` 发布事件」、「250ms 有界轮询（20s）」三路里就地检查并只跑一次；缺哪个服务只降级对应那块，不再让整个插件静默罢工。
+- 0.1.0 的 `superbot_dispatch` 与 `docTier=3` 硬门未改。默认仍 observe，禁止 auto-merge，插件不开 HTTP。
+
 ## [0.2.4] - 2026-11-23
 
 ### Fixed
