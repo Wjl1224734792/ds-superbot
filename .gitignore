@@ -10,6 +10,9 @@ tmp/
 .superbot/
 node_modules/
 
+# DSH 运行时状态（会话记忆、插件本地缓存等，属于本机运行产物，不进仓库）
+.dsh/
+
 
 # 编辑器与系统
 .vscode/
@@ -20,3 +23,4 @@ Thumbs.db
 
 # 本地备份
 *.bak
+
