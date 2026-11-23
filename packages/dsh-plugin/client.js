@@ -5340,14 +5340,36 @@ window.__ModuleLoader__.load({
         // when a new Session is mounted. Registration waits only for the two
         // registry services it truly needs; sessions/layout are read at runtime
         // inside the effects, so a missing one degrades the auto-open only.
+        // Register as soon as the two right-Sidebar services exist. A plain
+        // `ctx.inject` was tried first and fails silently at a cold start (the
+        // child never ran there while it ran on every reload), so the services are
+        // polled for directly and the service-publication event re-checks them;
+        // both paths are bounded and disposed with the plugin.
         const withRightbar = (run) => {
-          if (typeof ctx.inject === 'function') {
-            ctx.inject(['sidebarRight', 'sidebarRightTabs'], run);
-            return;
-          }
-          // No deferral available: only run when the services are truly mounted.
-          if (!ctx.sidebarRight || !ctx.sidebarRightTabs) return;
-          run(ctx);
+          let registered = false;
+          const attempt = () => {
+            if (registered) return true;
+            if (!ctx.sidebarRight || !ctx.sidebarRightTabs) return false;
+            registered = true;
+            run(ctx);
+            return true;
+          };
+          if (attempt()) return;
+          if (typeof ctx.effect !== 'function') return;
+          ctx.effect(() => {
+            const off = typeof ctx.on === 'function'
+              ? ctx.on('internal/service', () => { attempt(); })
+              : undefined;
+            const timer = setInterval(() => {
+              if (attempt()) clearInterval(timer);
+            }, 250);
+            const stop = setTimeout(() => { clearInterval(timer); }, 20000);
+            return () => {
+              clearInterval(timer);
+              clearTimeout(stop);
+              if (typeof off === 'function') off();
+            };
+          }, 'superbot: canvas registration retry');
         };
 
         withRightbar((sctx) => {

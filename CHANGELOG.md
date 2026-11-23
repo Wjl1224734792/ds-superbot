@@ -42,6 +42,13 @@
 - 默认授权档位仍是 observe；本版本不打开 auto 自动合并。auto 执行灰度不是合并，且必须先有观察记录。
 - P3 不改 0.1.0 的 `superbot_dispatch` 行为，不在插件里开 HTTP，不新注册 Agent Preset 或第 8 个角色文件。
 
+## [0.2.4] - 2026-11-23
+
+### Fixed
+
+- 冷启动后右栏「画布」又消失：0.2.3 把门槛收窄到 `sidebarRight` / `sidebarRightTabs` 后仍用 `ctx.inject` 建子 fiber 等服务就绪，实测这个子 fiber 在冷启动里不执行（同一份代码热重载后正常），整段注册又一次静默跳过。现在改成「服务在就直接注册」，不在就监听 Cordis 的 `internal/service` 发布事件并配合 250ms 轮询（上限 20s），注册成功即停、随插件卸载清理；新增冷启动回归测试（先启动、后提供两个服务，断言注册完成）。
+- 0.1.0 的 `superbot_dispatch` 与 `docTier=3` 硬门未改。默认仍 observe，禁止 auto-merge，插件不开 HTTP。
+
 ## [0.2.3] - 2026-11-23
 
 ### Fixed
