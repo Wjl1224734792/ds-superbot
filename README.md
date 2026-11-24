@@ -172,7 +172,7 @@ plugin_manager(action="install_bundle", target="<克隆下来的绝对路径>")
 
 面板在会话的**右侧栏**里。DSH 的右侧栏按会话保存布局，所以**每个会话各开各的面板**。三种打开方式：
 
-1. 会话标题栏始终可见的 **工作台** 按钮（`conversation.session.header.utilities`），以及无工作项时仍保留的迷你入口（`conversation.session.header.corner`）；
+1. 会话标题栏始终可见的 **工作台** 按钮，以及无工作项时仍保留的迷你入口（两者都在 `conversation.session.header.utilities` 加法槽里）；
 2. **右侧栏引导页**里的「工作台」入口；
 3. **自动打开**：该会话第一次出现 Super Bot 派发时自动打开一次（用户手动关掉后不再抢回）。新会话不必等派单，也可以从标题栏入口打开工作台。
 

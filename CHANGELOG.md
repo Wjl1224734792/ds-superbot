@@ -42,7 +42,21 @@
 - 默认授权档位仍是 observe；本版本不打开 auto 自动合并。auto 执行灰度不是合并，且必须先有观察记录。
 - P3 不改 0.1.0 的 `superbot_dispatch` 行为，不在插件里开 HTTP，不新注册 Agent Preset 或第 8 个角色文件。
 
+## [0.2.6] - 2026-11-24
+
+### Fixed
+
+- **整个插件 UI 全都不显示（设置里的 Super Bot、标题栏「工作台」按钮、右栏「画布」页签一起消失）**：根因是客户端往 `conversation.session.header.corner` 注册迷你脸，而这是 DSH 的**单占用槽位**，shell（WC）已以 priority 0 占用。DSH 槽位核心直接抛 `single slot "conversation.session.header.corner" already has a registration at priority 0 (registered by WC)`，该异常从 `apply()` 逃出，Cordis 把整个客户端 fiber 判为失败并回滚**全部**注册，于是插件什么都不剩。证据来自插件自己写在页面 `localStorage['ds-superbot:diag']` 的记录。现在迷你脸改注册到加法列表槽 `conversation.session.header.utilities`（`id: superbot-faces`、`order: -7`，紧邻 `superbot-board`），不再触碰任何宿主单占用槽位；README、`docs/DEVELOPMENT.md`、`docs/product/INTERACTION.md` 同步更正。
+- **注册隔离（防复发）**：新增 `ADDITIVE_SLOTS` 冻结白名单与 `registerSlot()` 包装——`slots.inject` 与延迟回调里的 `slots.register` 都 try/catch，单个槽位被拒绝只损失那一条注册并记账，绝不回滚整块插件；白名单外的槽位名一律拒绝。
+- **页面自诊断**：`apply()` 每次向 `localStorage['ds-superbot:diag:v2']` 写一条极小的面包屑（`stage` / `registered` / `failed`），`failed` 记录被拒槽位与原文报错。DSH 把它落在桌面用户目录的 Local Storage leveldb 里，宿主侧可直接读出来定位，不必再靠肉眼猜。
+- **注册改用 Cordis 交回的上下文**：冷启动时插件的 `apply` 在渲染器 / 右栏服务提供之前执行，插件自己的 `ctx` 读不到 `slots`（`ctx.slots === undefined`），所以无论等多久都不会注册。现在 `whenReady(names, run)` 以 `ctx.inject(names, (sctx) => run(sctx))` 的**参数上下文**为准，注册与运行期服务读取（`slots` / `sessions` / `sidebarRight` / `locale` …）都走这个上下文；另保留「本上下文已就绪」的快路径与 40 次 / 500 ms 的有界兜底轮询，`done` 保证只注册一次。上一版只轮询插件自己的 `ctx`，因此在真实页面里永远不就绪。
+- 新增回归测试：`packages/dsh-plugin/tests/client-slot-contract.test.mjs`（只注册加法槽、单槽位被拒时其余注册仍在、面包屑内容正确）与 `client-cold-boot.test.mjs`（服务晚到时仍注册且不重复）。`p2-ui` / `workbench-entry` / `workbench-canvas-split` / `settings-logo-session-ui` / `dsh-plugin` 的槽位断言同步更新。
+- 版本 `0.2.6`。默认仍 observe，禁止 auto-merge，插件不开 HTTP；工具名、右栏 tab id `ds-superbot`、命名空间与 `.stwd-` 前缀未变。
+- **撤回 `v0.2.5`**：该 tag 指向有问题的构建（冷启动后整个插件 UI 不可见），已从本地与 `origin` 删除；`0.2.6` 是当前最新版本，安装/升级请用它。
+
 ## [0.2.5] - 2026-11-23
+
+> **已撤回（yanked）**：该版本没有修掉「冷启动后整个插件 UI 不可见」。它把原因判错成 plugin-level inject；实际根因是往宿主单占用槽位 `conversation.session.header.corner` 注册导致整个客户端 fiber 回滚，并且等待的是永远不就绪的插件自身 `ctx`。`v0.2.5` tag 已从本地与 `origin` 删除，请使用 `0.2.6`。
 
 ### Fixed
 

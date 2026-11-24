@@ -180,7 +180,10 @@ test('P2 registers official additive slots and keeps 0.1.0 tab ids', async () =>
   assert.ok(slot(registered, 'conversation.chat.turnTail'), 'turnTail decision cards');
   assert.ok(slot(registered, 'settings.section.icon'), 'settings section icon');
 
-  assert.ok(slot(registered, 'conversation.session.header.corner'), 'header corner mini-faces');
+  // The mini faces live in the utilities list; the header's `corner` is a single
+  // seat the shell already occupies, so registering there would throw.
+  assert.ok(slot(registered, 'conversation.session.header.utilities', (entry) => entry.options.id === 'superbot-faces'), 'header utilities mini-faces');
+  assert.equal(slot(registered, 'conversation.session.header.corner'), undefined, 'the singleton corner must not be registered');
   assert.ok(slot(registered, 'conversation.session.header.utilities', (entry) => entry.options.id === 'superbot-board'));
   assert.ok(slot(registered, 'sidebar.right.pane.tab', (entry) => entry.options.key === 'ds-superbot'));
   assert.equal(tabTypes[0].id, 'ds-superbot');
@@ -280,13 +283,14 @@ test('prefers-reduced-motion freezes loops to still while status text remains', 
   assert.match(panelText, /待批准|AwaitingApproval|请批 Mandate/);
 });
 
-test('header corner stays visible when idle, opens the workbench, and utilities open the canvas', async () => {
+test('header mini-faces stay visible when idle, open the workbench, and utilities open the canvas', async () => {
   const { factory } = await loadClientFactory();
   const harness = createRenderHarness();
   const instance = factory((name) => (name === 'react' ? harness.stub : {}));
   const { ctx, registered } = createClientContext();
   instance.apply(ctx);
-  const corner = slot(registered, 'conversation.session.header.corner');
+  const corner = slot(registered, 'conversation.session.header.utilities', (entry) => entry.options.id === 'superbot-faces');
+  assert.ok(corner, 'the mini faces must be registered in the header utilities');
   const opened = [];
   const empty = await harness.settle(() => corner.component({
     workItems: [],

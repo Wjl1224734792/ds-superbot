@@ -1,6 +1,6 @@
 {
   "name": "@ds-superbot/constitution",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "private": true,
   "type": "module",
   "description": "Work-item ledger, policy, snapshots, receipts, and gate scripts for ds-superbot.",

@@ -39,8 +39,8 @@ sidebar.panellist + main          utilities / corner / view tab       sidebar.ri
 
 | 槽 | 基数 | 用途 |
 | --- | --- | --- |
-| `conversation.session.header.utilities` | list | 保留现有入口图标，点击打开右侧舞台或左侧控制台 |
-| `conversation.session.header.corner` | single | 优先把四张脸的迷你眼神条放这里（仅在有内容时占位） |
+| `conversation.session.header.utilities` | list | 保留现有入口图标，点击打开右侧舞台或左侧控制台；四张脸的迷你眼神条（`superbot-faces`）也放这里，与工作台按钮同一行 |
+| `conversation.session.header.corner` | single（宿主已占） | **不要注册**：这是宿主的单占用槽位，WC 已以 priority 0 占住；插件再注册会被拒绝并抛错 |
 | `conversation.session.header.actions` | list | 次要动作（例如「待你决定」计数），不要堆工具栏 |
 | `conversation.view` | list | 可增加「舞台」或「控制台」View 标签，作为补充全屏，但默认仍留在 Chat；不要把 Chat 换成唯一入口 |
 

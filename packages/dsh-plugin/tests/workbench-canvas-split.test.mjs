@@ -171,9 +171,9 @@ const NATIVE_AGENT = {
   origin: 'agent-row',
 };
 
-test('package version stays 0.2.5 and client still uses official additive slots', () => {
+test('package version stays 0.2.6 and client still uses official additive slots', () => {
   const pkg = JSON.parse(readFileSync(ROOT_PKG, 'utf8'));
-  assert.equal(pkg.version, '0.2.5');
+  assert.equal(pkg.version, '0.2.6');
   const source = readFileSync(CLIENT_URL, 'utf8');
   assert.match(source, /name:\s*'conversation\.view'/);
   assert.match(source, /superbot-workbench/);
@@ -374,7 +374,8 @@ test('decision cards, 待你决定, and mini faces open the workbench view and l
   button.props.onClick();
   assert.equal(opened[1][1], 'superbot-workbench');
 
-  const corner = slot(registered, 'conversation.session.header.corner');
+  const corner = slot(registered, 'conversation.session.header.utilities', (entry) => entry.options.id === 'superbot-faces');
+  assert.ok(corner, 'the mini faces must be registered in the header utilities');
   let panel = 0;
   const live = await harness.settle(() => corner.component({
     sessionId: 'session-1',

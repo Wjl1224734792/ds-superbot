@@ -312,7 +312,8 @@ test('header 待你决定 and mini-faces open the workbench view, not only the r
   assert.deepEqual(opened, ['superbot-workbench']);
   assert.equal(selected.filter((row) => row[0] === 'selectPanel').length, 0);
 
-  const corner = slot(registered, 'conversation.session.header.corner');
+  const corner = slot(registered, 'conversation.session.header.utilities', (entry) => entry.options.id === 'superbot-faces');
+  assert.ok(corner, 'the mini faces must be registered in the header utilities');
   const facesOpened = [];
   let panel = 0;
   const live = await harness.settle(() => corner.component({

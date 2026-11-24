@@ -183,7 +183,7 @@ test('a new session can open the workbench from mini faces and the canvas from t
   const instance = factory((name) => (name === 'react' ? harness.stub : {}));
   const { ctx, registered } = createClientContext();
   instance.apply(ctx);
-  const corner = registered.find((entry) => entry.options.name === 'conversation.session.header.corner');
+  const corner = registered.find((entry) => entry.options.name === 'conversation.session.header.utilities' && entry.options.id === 'superbot-faces');
   const utilities = registered.find((entry) => entry.options.name === 'conversation.session.header.utilities' && entry.options.id === 'superbot-board');
   assert.ok(corner && utilities);
   const opened = [];

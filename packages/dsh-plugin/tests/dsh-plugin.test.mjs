@@ -1094,13 +1094,12 @@ test('the client registers a right-sidebar board, its title, a header button and
     'sidebar.right.pane.tab',
     'sidebar.right.pane.tab.title',
     'conversation.session.header.utilities',
-    'conversation.session.header.corner',
     'conversation.session.header.actions',
     'conversation.input.dock',
   ]) {
     assert.ok(names.includes(name), 'missing slot ' + name);
   }
-  const forbidden = ['sidebar', 'rightbar', 'conversation.session.header', 'conversation.header'];
+  const forbidden = ['sidebar', 'rightbar', 'conversation.session.header', 'conversation.header', 'conversation.session.header.corner'];
   assert.deepEqual(
     registered.filter((entry) => forbidden.includes(entry.options.name)).map((entry) => entry.options.name),
     [],

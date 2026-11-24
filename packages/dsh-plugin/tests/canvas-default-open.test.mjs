@@ -107,11 +107,11 @@ function kindsOf(calls, name) {
   return calls.filter((entry) => entry[0] === name);
 }
 
-test('version stays 0.2.5 and copy never uses 舞台', async () => {
+test('version stays 0.2.6 and copy never uses 舞台', async () => {
   const root = JSON.parse(readFileSync(ROOT_PKG, 'utf8'));
   const plugin = JSON.parse(readFileSync(PLUGIN_PKG, 'utf8'));
-  assert.equal(root.version, '0.2.5');
-  assert.equal(plugin.version, '0.2.5');
+  assert.equal(root.version, '0.2.6');
+  assert.equal(plugin.version, '0.2.6');
   const source = readFileSync(CLIENT_URL, 'utf8');
   assert.doesNotMatch(source, /舞台/);
   assert.doesNotMatch(source, /['"]Stage['"]/);
@@ -152,10 +152,13 @@ test('right tab kind stays superbot and the workbench plus decision cards stay r
   assert.equal(names.includes('sidebar.right.tab.guide'), false, '开始 is not replaced');
   assert.equal(names.includes('sidebar'), false);
   assert.equal(names.includes('rightbar'), false);
-  assert.equal(
-    injected.length,
-    0,
-    'the canvas registers directly once both Sidebar services exist, without a deferred ctx.inject',
+  assert.ok(
+    injected.length >= 1,
+    'each half goes through ctx.inject so Cordis hands back the context that owns the services',
+  );
+  assert.ok(
+    injected.some((names) => names.includes('sidebarRightTabs')),
+    'the canvas half is gated on both right-Sidebar services',
   );
   assert.equal(
     typeof ctx === 'object' && ctx.inject !== undefined,
@@ -169,27 +172,23 @@ test('the canvas registers when the right-Sidebar services arrive after a cold s
   const harness = createRenderHarness();
   const instance = factory((name) => (name === 'react' ? harness.stub : {}));
   const tabTypes = [];
-  const handlers = [];
-  const cleanups = [];
+  const injections = [];
   const ctx = {
     slots: { inject: (name, callback) => callback(), register: () => () => {} },
     locale: { getLocale: () => ({ id: 'zh-CN' }) },
-    remote: { session: { modelCatalog: async () => ({ ok: true, value: { groups: [] } }) } },
-    configForms: {
-      get: () => ({ getSnapshot: () => ({ status: 'loading' }), subscribe: () => () => {}, mutate: async () => true }),
-    },
     uiWorkspace: { openSession: () => {} },
     effect: (callback) => {
       const cleanup = callback();
-      if (typeof cleanup === 'function') cleanups.push(cleanup);
+      return () => { if (typeof cleanup === 'function') cleanup(); };
     },
-    on: (name, callback) => {
-      handlers.push({ name, callback });
+    inject: (names, run) => {
+      injections.push({ names, run });
       return () => {};
     },
   };
   instance.apply(ctx);
   assert.equal(tabTypes.length, 0, 'nothing registers before the Sidebar services exist');
+  assert.ok(injections.length > 0, 'the plugin waits through ctx.inject');
   ctx.sidebarRight = {
     mounted: { getSnapshot: () => undefined, subscribe: () => () => {} },
     openTab: () => {},
@@ -201,11 +200,12 @@ test('the canvas registers when the right-Sidebar services arrive after a cold s
       return () => {};
     },
   };
-  const serviceHandlers = handlers.filter((entry) => entry.name === 'internal/service');
-  assert.ok(serviceHandlers.length > 0, 'the plugin listens for service publication');
-  for (const handler of serviceHandlers) handler.callback('sidebarRightTabs', ctx.sidebarRightTabs);
-  for (const cleanup of cleanups) cleanup();
-  assert.equal(tabTypes.length, 1, 'the service publication finishes the canvas registration');
+  const canvasInject = injections.find((entry) => entry.names.includes('sidebarRightTabs'));
+  assert.ok(canvasInject, 'the canvas half waits for the Sidebar services');
+  canvasInject.run(ctx);
+  assert.equal(tabTypes.length, 1, 'the service arrival finishes the canvas registration');
+  canvasInject.run(ctx);
+  assert.equal(tabTypes.length, 1, 'a repeated wake-up must not register twice');
   assert.equal(tabTypes[0].id, 'ds-superbot');
   assert.equal(tabTypes[0].kind, 'superbot');
 });

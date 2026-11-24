@@ -5281,92 +5281,233 @@ window.__ModuleLoader__.load({
         const textOf = () => STRINGS[lang()] || STRINGS.zh;
 
         /**
-         * Run `run` once every named Cordis service exists.
+         * Additive slot names this client half may register into.
          *
-         * A plugin-level `inject` (and a deferred `ctx.inject` child) was observed
-         * to leave this client plugin unstarted on some cold boots while the same
-         * build registered correctly on a hot reload, so the wait is explicit
-         * here: run now, else re-check on the service publication event and on a
-         * bounded poll, then stop.
-         * @param names - client service names that must be provided.
-         * @param run - registration body, called once.
-         * @param label - effect label for diagnostics.
+         * DSH marks its single-occupant seats `shadows-shipped-ui`. Registering a
+         * second entry there throws ("single slot … already has a registration at
+         * priority N (registered by …)"), and that throw used to escape apply()
+         * and roll back every registration this plugin makes — the whole UI
+         * disappeared with nothing on screen to explain it. The list is frozen so
+         * a singleton seat can never be targeted by accident again.
          */
-        const whenReady = (names, run, label) => {
-          const ready = () => names.every((name) => ctx[name] !== undefined);
-          if (ready()) {
-            run(ctx);
-            return;
+        const ADDITIVE_SLOTS = Object.freeze([
+          'settings.section',
+          'settings.section.icon',
+          'conversation.view',
+          'conversation.chat.turnTail',
+          'sidebar.right.pane.tab',
+          'sidebar.right.pane.tab.title',
+          'conversation.session.header.utilities',
+          'conversation.session.header.actions',
+          'conversation.input.dock',
+        ]);
+
+        /** Page-local breadcrumb; DSH's Local Storage keeps it readable from the Host. */
+        const DIAG_KEY = 'ds-superbot:diag:v2';
+        const diag = { v: 2, at: Date.now(), stage: 'applying', registered: [], failed: [], gates: [] };
+
+        /** Persist the breadcrumb; a blocked storage area must never break the plugin. */
+        const flushDiag = () => {
+          try {
+            if (typeof localStorage !== 'undefined' && localStorage !== null) {
+              localStorage.setItem(DIAG_KEY, JSON.stringify(diag));
+            }
+          } catch {
+            // quota or a blocked storage area: the in-memory record is enough
           }
-          if (typeof ctx.effect !== 'function') return;
-          ctx.effect(() => {
-            const attempt = () => {
-              if (!ready()) return false;
-              run(ctx);
-              return true;
-            };
-            if (attempt()) return undefined;
-            const off = typeof ctx.on === 'function'
-              ? ctx.on('internal/service', () => { attempt(); })
-              : undefined;
-            const timer = setInterval(() => {
-              if (attempt()) clearInterval(timer);
-            }, 250);
-            const stop = setTimeout(() => { clearInterval(timer); }, 20000);
-            return () => {
-              clearInterval(timer);
-              clearTimeout(stop);
-              if (typeof off === 'function') off();
-            };
-          }, label);
         };
 
-        const registerCore = () => {
+        /** Record one rejected seat or registration body and republish the breadcrumb. */
+        const noteFailure = (slot, error) => {
+          diag.failed.push({
+            slot,
+            message: String(error && error.message ? error.message : error),
+          });
+          flushDiag();
+        };
+
+        /**
+         * Register one additive entry and survive a rejected seat.
+         *
+         * One unusable seat now costs exactly one entry: the rejection lands in
+         * `diag.failed` and every other registration still applies. Both the
+         * synchronous `inject` call and its deferred callback are guarded, because
+         * DSH may reject the seat when the callback runs rather than immediately.
+         * @param sctx - context whose `slots` service owns the registry.
+         * @param slot - additive slot name; must appear in {@link ADDITIVE_SLOTS}.
+         * @param spec - slot registration options (`name`, `id`/`key`, `order`, …).
+         * @param component - React component for the entry.
+         * @returns the disposer from `slots.inject`, or undefined when rejected.
+         */
+        const registerSlot = (sctx, slot, spec, component) => {
+          if (!ADDITIVE_SLOTS.includes(slot)) {
+            noteFailure(slot, new Error('not an additive slot: registering here would replace shipped UI'));
+            return undefined;
+          }
+          const attempt = () => {
+            try {
+              const dispose = sctx.slots.register(spec, component);
+              diag.registered.push(slot + '#' + String(spec.id !== undefined ? spec.id : spec.key));
+              flushDiag();
+              return dispose;
+            } catch (error) {
+              noteFailure(slot, error);
+              return () => {};
+            }
+          };
+          try {
+            return sctx.slots.inject(slot, attempt);
+          } catch (error) {
+            noteFailure(slot, error);
+            return undefined;
+          }
+        };
+
+        /**
+         * Run `run` once with a context in which every named Cordis service exists.
+         *
+         * The plugin's own apply-time context is not that context: on a cold boot
+         * this client plugin is applied before the renderer, locale and
+         * right-Sidebar services are provided, and a one-shot read of `ctx.slots`
+         * is simply undefined — which is why the whole UI used to vanish until a
+         * page reload.
+         *
+         * Cordis' `inject` hands back the context that owns those services, so the
+         * registration body is called with THAT context and every service it reads
+         * at runtime (`slots`, `sessions`, `sidebarRight`, `locale`, …) is resolved
+         * through it. A bounded interval on the plugin's own context stays as a
+         * fallback wake-up for a context that is ready without a child fiber, and
+         * `done` keeps the body single-shot.
+         * @param names - client service names that must be provided.
+         * @param run - registration body, called once with the ready context.
+         * @param label - diagnostics label for the gate and a failing body.
+         */
+        const whenReady = (names, run, label) => {
+          let done = false;
+          let timer;
+          const gate = { label, names, fired: false, ownReady: false, ticks: 0 };
+          diag.gates.push(gate);
+          const stopTimer = () => {
+            if (timer !== undefined) {
+              clearInterval(timer);
+              timer = undefined;
+            }
+          };
+          const start = (sctx) => {
+            if (done) return;
+            done = true;
+            stopTimer();
+            try {
+              run(sctx || ctx);
+              diag.stage = 'applied';
+              flushDiag();
+            } catch (error) {
+              noteFailure(label, error);
+              diag.stage = 'failed:' + label;
+              flushDiag();
+              if (typeof console !== 'undefined' && console.error) console.error('superbot: ' + label + ' failed', error);
+            }
+          };
+          // Primary: the child fiber Cordis starts once every service is provided.
+          // The callback argument is the context that owns them — registering
+          // through the plugin's own context does not see them on a cold boot.
+          if (typeof ctx.inject === 'function') {
+            try {
+              ctx.inject(names, (sctx) => {
+                gate.fired = true;
+                start(sctx);
+              });
+            } catch (error) {
+              noteFailure(label, error);
+            }
+          }
+          // Fallback: this context may already see the services without a child.
+          if (!done && names.every((name) => {
+            try {
+              return ctx[name] !== undefined;
+            } catch {
+              return false;
+            }
+          })) {
+            gate.ownReady = true;
+            start(ctx);
+          }
+          if (!done && typeof setInterval === 'function') {
+            timer = setInterval(() => {
+              gate.ticks += 1;
+              if (done) {
+                stopTimer();
+                return;
+              }
+              const ready = names.every((name) => {
+                try {
+                  return ctx[name] !== undefined;
+                } catch {
+                  return false;
+                }
+              });
+              if (ready) {
+                gate.ownReady = true;
+                start(ctx);
+                return;
+              }
+              if (gate.ticks >= 40) {
+                stopTimer();
+                gate.timedOut = true;
+                flushDiag();
+              }
+            }, 500);
+            setTimeout(() => { if (!done) stopTimer(); }, 60000);
+          }
+          flushDiag();
+        };
+
+        const registerCore = (sctx) => {
 
         // Settings → Super Bot: models and reasoning effort, nothing else. This half
         // needs only the settings namespace, so it survives a profile without the
         // right Sidebar.
-        ctx.effect(() => ctx.slots.inject('settings.section', () => ctx.slots.register({
+        sctx.effect(() => registerSlot(sctx, 'settings.section', {
           name: 'settings.section',
           id: 'superbot',
           order: 50,
           locale: NS,
           label: () => textOf().nav,
-        }, () => h(SettingsSection, { ctx, text: textOf(), lang: lang() }))), 'superbot: settings section');
+        }, () => h(SettingsSection, { ctx: sctx, text: textOf(), lang: lang() })), 'superbot: settings section');
 
         // Official settings nav icon, verified against DSH 0.2.2-rc.5:
         // settings.section.icon must reuse the section id. The icon's label is not shown.
-        ctx.effect(() => ctx.slots.inject('settings.section.icon', () => ctx.slots.register({
+        sctx.effect(() => registerSlot(sctx, 'settings.section.icon', {
           name: 'settings.section.icon',
           id: 'superbot',
           order: 50,
-        }, SettingsSectionIcon)), 'superbot: settings section icon');
+        }, SettingsSectionIcon), 'superbot: settings section icon');
 
         // Official conversation.view (session-scoped list). Default stays Chat;
         // this registration must not activate the workbench on its own.
         // Never register occupied singleton slots sidebar / rightbar /
         // conversation.session.header / conversation.header, and never call
         // layout.selectPanel.
-        ctx.effect(() => ctx.slots.inject('conversation.view', () => ctx.slots.register({
+        sctx.effect(() => registerSlot(sctx, 'conversation.view', {
           name: 'conversation.view',
           id: WORKBENCH_VIEW_ID,
           order: 20,
           locale: NS,
           label: () => textOf().tabTitle,
           inject: (sessionId) => ({
-            ...makePanelFace(ctx, sessionId, textOf(), lang()),
+            ...makePanelFace(sctx, sessionId, textOf(), lang()),
             sessionId,
             text: textOf(),
             lang: lang(),
             authority: DEFAULT_AUTHORITY,
-            ctx,
-            onDecide: createConsoleOnDecide(ctx, textOf(), sessionId),
+            ctx: sctx,
+            onDecide: createConsoleOnDecide(sctx, textOf(), sessionId),
           }),
-        }, WorkbenchView)), 'superbot: session workbench view');
+        }, WorkbenchView), 'superbot: session workbench view');
 
         // Official message-level additive slot: quiet product cards on the latest
         // completed turn. Process states stay out of chat.
-        ctx.effect(() => ctx.slots.inject('conversation.chat.turnTail', () => ctx.slots.register({
+        sctx.effect(() => registerSlot(sctx, 'conversation.chat.turnTail', {
           name: 'conversation.chat.turnTail',
           id: 'ds-superbot-cards',
           order: 20,
@@ -5375,12 +5516,15 @@ window.__ModuleLoader__.load({
             sessionId,
             text: textOf(),
             lang: lang(),
-            ctx,
-            onDecide: createConsoleOnDecide(ctx, textOf(), sessionId),
+            ctx: sctx,
+            onDecide: createConsoleOnDecide(sctx, textOf(), sessionId),
           }),
-        }, DecisionCards)), 'superbot: group-chat decision cards');
+        }, DecisionCards), 'superbot: group-chat decision cards');
         };
         whenReady(['slots'], registerCore, 'superbot: core slots');
+        // Publish the "applying" stage immediately, so a page that never reaches
+        // 'applied' still leaves a readable breadcrumb behind.
+        flushDiag();
 
         // The canvas is a per-Session right-Sidebar tab: the type (what opens), its
         // body and chip title, the header button, and the rule that opens it once
@@ -5410,28 +5554,34 @@ window.__ModuleLoader__.load({
             }],
           }), 'superbot: board tab type');
 
-          sctx.effect(() => sctx.slots.inject('sidebar.right.pane.tab', () => sctx.slots.register({
+          sctx.effect(() => registerSlot(sctx, 'sidebar.right.pane.tab', {
             name: 'sidebar.right.pane.tab',
             key: TAB_ID,
             locale: NS,
             inject: (sessionId) => makePanelFace(sctx, sessionId, textOf(), lang()),
-          }, SuperBotPanel)), 'superbot: board body');
+          }, SuperBotPanel), 'superbot: board body');
 
-          sctx.effect(() => sctx.slots.inject('sidebar.right.pane.tab.title', () => sctx.slots.register({
+          sctx.effect(() => registerSlot(sctx, 'sidebar.right.pane.tab.title', {
             name: 'sidebar.right.pane.tab.title',
             key: TAB_ID,
-          }, (props) => h(TabTitle, { text: textOf() }))), 'superbot: board title');
+          }, (props) => h(TabTitle, { text: textOf() })), 'superbot: board title');
 
-          sctx.effect(() => sctx.slots.inject('conversation.session.header.utilities', () => sctx.slots.register({
+          sctx.effect(() => registerSlot(sctx, 'conversation.session.header.utilities', {
             name: 'conversation.session.header.utilities',
             id: 'superbot-board',
             order: -6,
             locale: NS,
             inject: () => ({ text: textOf(), openPanel: () => { openPanel(sctx); } }),
-          }, HeaderButton)), 'superbot: header button');
+          }, HeaderButton), 'superbot: header button');
 
-          sctx.effect(() => sctx.slots.inject('conversation.session.header.corner', () => sctx.slots.register({
-            name: 'conversation.session.header.corner',
+          // The mini faces live in the utilities list, not in the header's corner:
+          // `conversation.session.header.corner` is a `single` seat that the shell
+          // already occupies, and a second registration there throws and rolls back
+          // this whole client half. Utilities is additive and sits in the same band.
+          sctx.effect(() => registerSlot(sctx, 'conversation.session.header.utilities', {
+            name: 'conversation.session.header.utilities',
+            id: 'superbot-faces',
+            order: -7,
             locale: NS,
             inject: (sessionId) => ({
               text: textOf(),
@@ -5439,9 +5589,9 @@ window.__ModuleLoader__.load({
               ctx: sctx,
               openPanel: () => { openPanel(sctx); },
             }),
-          }, MiniFaces)), 'superbot: header mini faces');
+          }, MiniFaces), 'superbot: header mini faces');
 
-          sctx.effect(() => sctx.slots.inject('conversation.session.header.actions', () => sctx.slots.register({
+          sctx.effect(() => registerSlot(sctx, 'conversation.session.header.actions', {
             name: 'conversation.session.header.actions',
             id: 'ds-superbot-decide',
             order: 20,
@@ -5451,9 +5601,9 @@ window.__ModuleLoader__.load({
               sessionId,
               ctx: sctx,
             }),
-          }, DecisionCount)), 'superbot: header decision count');
+          }, DecisionCount), 'superbot: header decision count');
 
-          sctx.effect(() => sctx.slots.inject('conversation.input.dock', () => sctx.slots.register({
+          sctx.effect(() => registerSlot(sctx, 'conversation.input.dock', {
             name: 'conversation.input.dock',
             id: 'ds-superbot-caption',
             order: 20,
@@ -5462,7 +5612,7 @@ window.__ModuleLoader__.load({
               text: textOf(),
               sessionId,
             }),
-          }, InputCaption)), 'superbot: input caption dock');
+          }, InputCaption), 'superbot: input caption dock');
 
           // Auto-open: a new Session first opens the right column with the
           // official layout.openRightbar(true, false), then openTab('superbot'),

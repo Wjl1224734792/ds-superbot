@@ -1,6 +1,6 @@
 {
   "name": "@ds-superbot/plugin",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "private": true,
   "type": "module",
   "description": "Internal DSH plugin implementation for ds-superbot. The install entry is the repository root package named ds-superbot.",

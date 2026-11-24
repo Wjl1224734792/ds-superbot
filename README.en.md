@@ -172,7 +172,7 @@ Work-item dispatch (`routeModel` / `dispatchWorkItem`):
 
 The panel lives in the session's **right sidebar**, which DSH stores per session — **each session gets its own panel**. Three ways to open it:
 
-1. the always-visible **Workbench** button in the session header (`conversation.session.header.utilities`), plus the mini entry in the header corner that stays visible even with no work items;
+1. the always-visible **Workbench** button in the session header, plus the mini entry that stays visible even with no work items (both in the additive `conversation.session.header.utilities` slot);
 2. the "Workbench" entry on the **right-sidebar guide** page;
 3. **automatically** on the session's first Super Bot dispatch (once; closing it keeps it closed). A new session can also open the Workbench from the header entry without waiting for a dispatch.
 
