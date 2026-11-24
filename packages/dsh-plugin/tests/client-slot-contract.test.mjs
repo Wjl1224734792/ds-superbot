@@ -163,6 +163,8 @@ function createClientContext({ reject } = {}) {
     },
     logger: { info() {}, warn() {}, error() {} },
   };
+  // The plugin resolves services through ctx.get (no inject declaration).
+  ctx.get = (name) => ctx[name];
   return { ctx, registrations, tabTypes };
 }
 

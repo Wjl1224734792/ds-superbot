@@ -42,7 +42,21 @@
 - 默认授权档位仍是 observe；本版本不打开 auto 自动合并。auto 执行灰度不是合并，且必须先有观察记录。
 - P3 不改 0.1.0 的 `superbot_dispatch` 行为，不在插件里开 HTTP，不新注册 Agent Preset 或第 8 个角色文件。
 
+## [0.2.7] - 2026-11-24
+
+### Fixed
+
+- **设置页「Super Bot」空白 + 标题栏「画布」点了没反应**：两者同源。Cordis 4 **直接用 `ctx.<service>` 读服务受 fiber 的 `inject` 声明门禁**（`cannot get property "x" without inject`），只有 `ctx.get(name)` 免声明。0.2.6 改成用 `ctx.inject([...], (sctx) => …)` 交回的上下文注册后，`sctx` 只暴露列表里那几个服务：`ConfigSection` 第一行 `ctx.configForms.get(NS)` 取到 undefined 直接抛错（设置内容区空白，导航项还在），`openPanel` 读 `ctx.layout` 拿不到就静默 no-op（点「画布」没反应）。
+- **改为全部走 `ctx.get()`**：新增 `svc(name)` 与只读服务门面 `apiCtx`（`slots` / `locale` / `configForms` / `remote` / `sessions`（回退 `uiSession`）/ `layout` / `uiWorkspace` / `uiConversation` / `sidebarRight` / `sidebarRightTabs`，getter 实时解析），注册与组件/helper 全部改用门面；**插件不再声明 inject 列表**，避免「少写一个服务名 → 整块永久 park」（0.2.4 的坑）。
+- **缺服务可见降级**：`ConfigSection` 在 `configForms` / `remote` 缺失时渲染明确提示而不是抛错；`openPanel` / `openRightbarDocked` / `openWorkbenchView` 缺服务时把原因写进 `diag.failed`；`diag` 增加 `services` 快照（哪个服务在本页可读），下次这类问题读一次 localStorage 就能定位。
+- **顶部出现两个「画布」**：自动打开原来每次重试都再调一次 `sidebarRight.openTab(kind)`，`openTab` 每次开新 tab 就会堆出第二个「画布」。现在每个会话**最多 `openTab` 一次**：调用返回后只做 2 s 激活确认（不再重复打开）；只有 `openTab` **抛错**（确认没建 tab）才做有限次重试。
+- 新增回归测试 `packages/dsh-plugin/tests/client-service-gate.test.mjs`（用「直接读服务抛错、`ctx.get` 可读」的门禁 ctx 模拟 Cordis）：断言 9 个槽位照常注册、设置页渲染出角色表、缺 `configForms` 时显示提示、点「画布」真的调用 `openRightbar` + `openTab`、缺 `layout` 时面包屑写明原因。`canvas-default-open` / `dsh-plugin` 的冷启动与自动打开断言改成新契约（一次打开 + 激活确认）。
+- 版本 `0.2.7`。默认仍 observe，禁止 auto-merge，插件不开 HTTP；工具名、右栏 tab id `ds-superbot`、命名空间与 `.stwd-` 前缀未变。
+- **撤回 `v0.2.6`**：该版本仍有可见缺陷（设置页空白、按钮无效），tag 已从本地与 `origin` 删除；`0.2.7` 是当前最新版本。
+
 ## [0.2.6] - 2026-11-24
+
+> **已撤回（yanked）**：修好了「整块 UI 消失」，但设置页仍空白、标题栏「画布」点了没反应（客户端只拿到 `ctx.inject` 列表里的服务）。`v0.2.6` tag 已删除，请使用 `0.2.7`。
 
 ### Fixed
 

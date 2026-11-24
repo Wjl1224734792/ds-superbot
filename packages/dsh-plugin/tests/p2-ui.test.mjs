@@ -143,6 +143,9 @@ function createClientContext() {
     effect: (callback) => { callback(); },
   };
   ctx.inject = (names, run) => run(ctx);
+  // Cordis gates a direct ctx.<service> read on the inject declaration; the
+  // plugin resolves everything through ctx.get, so the mock must answer it too.
+  ctx.get = (name) => ctx[name];
   return { ctx, registered, tabTypes };
 }
 

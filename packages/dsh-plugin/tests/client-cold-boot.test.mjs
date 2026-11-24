@@ -91,6 +91,9 @@ function makeColdContext(services, registrations) {
     logger: { info() {}, warn() {}, error() {} },
   };
   for (const name of Object.keys(services)) ctx[name] = undefined;
+  // The plugin resolves services through ctx.get (no inject declaration); the
+  // mock answers it from the same properties, so assigning them later is live.
+  ctx.get = (name) => ctx[name];
   void registrations;
   return ctx;
 }

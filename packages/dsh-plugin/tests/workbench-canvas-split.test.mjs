@@ -147,6 +147,9 @@ function createClientContext(options) {
     effect: (callback) => { callback(); },
   };
   ctx.inject = (names, run) => run(ctx);
+  // Cordis gates a direct ctx.<service> read on the inject declaration; the
+  // plugin resolves everything through ctx.get, so the mock must answer it too.
+  ctx.get = (name) => ctx[name];
   return { ctx, registered, tabTypes, selected };
 }
 
@@ -171,9 +174,9 @@ const NATIVE_AGENT = {
   origin: 'agent-row',
 };
 
-test('package version stays 0.2.6 and client still uses official additive slots', () => {
+test('package version stays 0.2.7 and client still uses official additive slots', () => {
   const pkg = JSON.parse(readFileSync(ROOT_PKG, 'utf8'));
-  assert.equal(pkg.version, '0.2.6');
+  assert.equal(pkg.version, '0.2.7');
   const source = readFileSync(CLIENT_URL, 'utf8');
   assert.match(source, /name:\s*'conversation\.view'/);
   assert.match(source, /superbot-workbench/);

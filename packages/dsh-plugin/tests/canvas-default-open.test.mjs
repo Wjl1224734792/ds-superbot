@@ -96,6 +96,9 @@ function createClientContext(options) {
     injected.push(names);
     run(ctx);
   };
+  // Cordis gates a direct ctx.<service> read on the inject declaration; the
+  // plugin resolves everything through ctx.get, so the mock must answer it too.
+  ctx.get = (name) => ctx[name];
   return { ctx, registered, tabTypes, injected };
 }
 
@@ -107,11 +110,11 @@ function kindsOf(calls, name) {
   return calls.filter((entry) => entry[0] === name);
 }
 
-test('version stays 0.2.6 and copy never uses 舞台', async () => {
+test('version stays 0.2.7 and copy never uses 舞台', async () => {
   const root = JSON.parse(readFileSync(ROOT_PKG, 'utf8'));
   const plugin = JSON.parse(readFileSync(PLUGIN_PKG, 'utf8'));
-  assert.equal(root.version, '0.2.6');
-  assert.equal(plugin.version, '0.2.6');
+  assert.equal(root.version, '0.2.7');
+  assert.equal(plugin.version, '0.2.7');
   const source = readFileSync(CLIENT_URL, 'utf8');
   assert.doesNotMatch(source, /舞台/);
   assert.doesNotMatch(source, /['"]Stage['"]/);
@@ -152,19 +155,12 @@ test('right tab kind stays superbot and the workbench plus decision cards stay r
   assert.equal(names.includes('sidebar.right.tab.guide'), false, '开始 is not replaced');
   assert.equal(names.includes('sidebar'), false);
   assert.equal(names.includes('rightbar'), false);
-  assert.ok(
-    injected.length >= 1,
-    'each half goes through ctx.inject so Cordis hands back the context that owns the services',
-  );
-  assert.ok(
-    injected.some((names) => names.includes('sidebarRightTabs')),
-    'the canvas half is gated on both right-Sidebar services',
-  );
   assert.equal(
-    typeof ctx === 'object' && ctx.inject !== undefined,
-    true,
-    'the harness still answers ctx.inject for the other registrations',
+    injected.length,
+    0,
+    'the plugin must not depend on ctx.inject: Cordis gates direct service reads, so services are resolved through ctx.get',
   );
+  assert.equal(typeof ctx.get, 'function', 'the harness answers ctx.get');
 });
 
 test('the canvas registers when the right-Sidebar services arrive after a cold start', async () => {
@@ -172,7 +168,6 @@ test('the canvas registers when the right-Sidebar services arrive after a cold s
   const harness = createRenderHarness();
   const instance = factory((name) => (name === 'react' ? harness.stub : {}));
   const tabTypes = [];
-  const injections = [];
   const ctx = {
     slots: { inject: (name, callback) => callback(), register: () => () => {} },
     locale: { getLocale: () => ({ id: 'zh-CN' }) },
@@ -181,14 +176,15 @@ test('the canvas registers when the right-Sidebar services arrive after a cold s
       const cleanup = callback();
       return () => { if (typeof cleanup === 'function') cleanup(); };
     },
-    inject: (names, run) => {
-      injections.push({ names, run });
-      return () => {};
-    },
+    on: () => () => {},
   };
+  // Cordis exposes undeclared services only through ctx.get.
+  ctx.get = (name) => ctx[name];
+  ctx.sidebarRight = undefined;
+  ctx.sidebarRightTabs = undefined;
   instance.apply(ctx);
   assert.equal(tabTypes.length, 0, 'nothing registers before the Sidebar services exist');
-  assert.ok(injections.length > 0, 'the plugin waits through ctx.inject');
+
   ctx.sidebarRight = {
     mounted: { getSnapshot: () => undefined, subscribe: () => () => {} },
     openTab: () => {},
@@ -200,14 +196,14 @@ test('the canvas registers when the right-Sidebar services arrive after a cold s
       return () => {};
     },
   };
-  const canvasInject = injections.find((entry) => entry.names.includes('sidebarRightTabs'));
-  assert.ok(canvasInject, 'the canvas half waits for the Sidebar services');
-  canvasInject.run(ctx);
+  for (let attempt = 0; attempt < 40 && tabTypes.length === 0; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
   assert.equal(tabTypes.length, 1, 'the service arrival finishes the canvas registration');
-  canvasInject.run(ctx);
-  assert.equal(tabTypes.length, 1, 'a repeated wake-up must not register twice');
   assert.equal(tabTypes[0].id, 'ds-superbot');
   assert.equal(tabTypes[0].kind, 'superbot');
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  assert.equal(tabTypes.length, 1, 'a repeated wake-up must not register twice');
 });
 
 test('a fresh session defaults to the canvas; leaving it is respected until the next session', async () => {
@@ -271,14 +267,13 @@ test('a fresh session defaults to the canvas; leaving it is respected until the 
   assert.deepEqual(kindsOf(calls, 'openTab'), [['openTab', 'superbot'], ['openTab', 'superbot']], 'the next session still defaults to the canvas');
 });
 
-test('silent openTab is retried and is not recorded until the canvas is confirmed active', async () => {
+test('a silent openTab is attempted once per session instead of stacking tabs', async () => {
   const { factory } = await loadClientFactory();
   const harness = createRenderHarness();
   const instance = factory((name) => (name === 'react' ? harness.stub : {}));
 
   const calls = [];
   const mountedListeners = new Set();
-  const listListeners = new Set();
   let mounted;
   // Host seeds 开始; the rightbar starts hidden; openTab is a silent no-op until armed.
   let activeKind = 'guide';
@@ -305,46 +300,36 @@ test('silent openTab is retried and is not recorded until the canvas is confirme
       active: () => ({ kind: activeKind, id: `tab-${activeKind}` }),
       isExpanded: () => expanded,
     },
-    sessions: {
-      list: {
-        getSnapshot: () => ({ projectionsBySession: {} }),
-        subscribe: (listener) => { listListeners.add(listener); return () => listListeners.delete(listener); },
-      },
-    },
   });
   instance.apply(ctx);
 
   mounted = 'session-race';
   for (const listener of mountedListeners) listener();
   assert.deepEqual(kindsOf(calls, 'openRightbar')[0], ['openRightbar', true, false]);
-  assert.ok(kindsOf(calls, 'openTab').length >= 1, 'openTab is attempted even when the rightbar starts hidden');
+  assert.equal(kindsOf(calls, 'openTab').length, 1, 'openTab is attempted once even when the rightbar starts hidden');
   assert.equal(activeKind, 'guide', 'a silent openTab must not be treated as switching off 开始');
-  assert.equal(expanded, false);
-  const afterSilent = kindsOf(calls, 'openTab').length;
+  assert.equal(kindsOf(calls, 'openTab')[0][1], 'superbot');
 
-  openTabWorks = true;
+  // The tab was not confirmed active: confirm it instead of opening a second one.
   for (const listener of mountedListeners) listener();
-  assert.equal(activeKind, 'superbot', 'a later tick retries and confirms the canvas tab is active');
-  assert.equal(expanded, true);
-  const afterConfirm = kindsOf(calls, 'openTab').length;
-  assert.ok(afterConfirm > afterSilent, 'openTab is retried after a silent failure');
+  await delay(120);
+  assert.equal(
+    kindsOf(calls, 'openTab').length,
+    1,
+    'an unconfirmed openTab is never repeated: repeating it is what stacked two 画布 tabs',
+  );
 
-  activeKind = 'guide';
-  expanded = true;
-  for (const listener of mountedListeners) listener();
-  for (const listener of listListeners) listener();
-  await delay(40);
-  assert.equal(kindsOf(calls, 'openTab').length, afterConfirm, 'after a confirmed open, switching back to 开始 is not forced again');
-
+  // After the confirmation window this session is abandoned, and a later session
+  // still gets exactly one attempt of its own.
+  await delay(2100);
   mounted = 'session-next';
   activeKind = 'guide';
   expanded = false;
   for (const listener of mountedListeners) listener();
-  assert.equal(activeKind, 'superbot');
-  assert.ok(kindsOf(calls, 'openTab').length > afterConfirm, 'a later session still default-opens the canvas');
+  assert.equal(kindsOf(calls, 'openTab').length, 2, 'the next session still default-opens the canvas');
 });
 
-test('exhausted silent retries stop rather than looping forever', async () => {
+test('a session whose canvas never confirms stops after a single attempt', async () => {
   const { factory } = await loadClientFactory();
   const harness = createRenderHarness();
   const instance = factory((name) => (name === 'react' ? harness.stub : {}));
@@ -371,11 +356,11 @@ test('exhausted silent retries stop rather than looping forever', async () => {
   instance.apply(ctx);
   mounted = 'session-exhausted';
   for (const listener of mountedListeners) listener();
-  await delay(2200);
+  await delay(2300);
   const count = kindsOf(calls, 'openTab').length;
-  assert.ok(count >= 2 && count <= 8, `retries must be bounded, got ${count}`);
+  assert.equal(count, 1, `exactly one attempt, got ${count}`);
   for (const listener of mountedListeners) listener();
   await delay(80);
-  assert.equal(kindsOf(calls, 'openTab').length, count, 'exhausted retries must not start a new loop');
+  assert.equal(kindsOf(calls, 'openTab').length, count, 'an unconfirmed canvas must not start another loop');
   assert.equal(kindsOf(calls, 'openTab').every((entry) => entry[1] === 'superbot'), true);
 });

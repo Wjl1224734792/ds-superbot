@@ -1,6 +1,6 @@
 {
   "name": "@ds-superbot/runtime",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "private": true,
   "type": "module",
   "description": "ds-superbot runtime substrate: Steward, Capability Compiler, capability\u00d7risk model routing, filters, curator, assignment, storage/compute separation, Cartographer write-back, file-backed event bus, subscription pass-through, Watchdog, observe / would-accept, auto grayscale gating, and P5 closed-loop approve / execute / dispatch / merge-intent.",

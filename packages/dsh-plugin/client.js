@@ -7,6 +7,8 @@ window.__ModuleLoader__.load({
 
     /** Native DSH settings namespace owned by this plugin (the Loader row id). */
     const NS = 'superbot';
+    /** Diagnostics sink installed by {@link apply}; helpers outside apply report through it. */
+    let reportIssue = () => {};
     /** Right-Sidebar tab type: `id` keys the body/title slots, `kind` is what openTab() names. */
     const TAB_ID = 'ds-superbot';
     const TAB_KIND = 'superbot';
@@ -196,6 +198,7 @@ window.__ModuleLoader__.load({
         missingSelection: '当前记录的模型不在实时目录中，请重新选择',
         saveFailed: '保存失败',
         unavailableNs: '宿主没有提供 superbot 设置命名空间（请确认 Super Bot 插件行已启用）。',
+        unavailableRemote: '宿主没有提供模型目录接口，只能显示已保存的配置。',
         readOnly: '本部署的设置为只读。',
         conflict: '设置已在其他位置更新，请撤销后重试。',
         invalidRoute: '每个角色或能力要么同时选提供方与模型，要么两者都留空（继承主代理）。',
@@ -398,6 +401,7 @@ window.__ModuleLoader__.load({
         missingSelection: 'The recorded model is not in the live catalog; pick it again',
         saveFailed: 'Save failed',
         unavailableNs: 'The host does not serve the superbot settings namespace (check that the Super Bot plugin row is enabled).',
+        unavailableRemote: 'The host serves no model catalog, so only the saved configuration is shown.',
         readOnly: 'This deployment stores settings read-only.',
         conflict: 'Settings changed elsewhere. Discard and try again.',
         invalidRoute: 'Each role or capability needs both a provider and a model, or neither (inherit the parent).',
@@ -2396,6 +2400,9 @@ window.__ModuleLoader__.load({
           return true;
         }
       }
+      reportIssue('openWorkbenchView', new Error(
+        'no view opener and no uiConversation service on this page (sessionId=' + String(sessionId) + ')',
+      ));
       return false;
     }
 
@@ -4447,7 +4454,23 @@ window.__ModuleLoader__.load({
     }
 
     function ConfigSection({ ctx, text, lang, compact }) {
-      const scope = useMemo(() => ctx.configForms.get(NS), [ctx]);
+      // A page without the settings services must show a readable notice instead of
+      // throwing: `ctx.configForms` is only readable when the plugin declares it as
+      // an inject or resolves it through `ctx.get` (see `apiCtx`).
+      const formsReady = Boolean(ctx && ctx.configForms && typeof ctx.configForms.get === 'function');
+      const unavailableScope = useMemo(() => Object.freeze({
+        getSnapshot: () => ({ status: 'unavailable', revision: null, value: undefined, writable: false }),
+        subscribe: () => () => {},
+        mutate: async () => false,
+      }), []);
+      const scope = useMemo(() => {
+        if (!formsReady) return unavailableScope;
+        try {
+          return ctx.configForms.get(NS) || unavailableScope;
+        } catch {
+          return unavailableScope;
+        }
+      }, [ctx, formsReady, unavailableScope]);
       const snapshot = useSnapshot(scope);
       const catalogRef = useRef({ status: 'idle', groups: [], failures: [] });
       const [catalog, setCatalog] = useState(catalogRef.current);
@@ -4462,8 +4485,19 @@ window.__ModuleLoader__.load({
       const loadCatalog = useCallback(async () => {
         catalogRef.current = { status: 'loading', groups: [], failures: [] };
         setCatalog(catalogRef.current);
+        const catalogApi = ctx && ctx.remote ? ctx.remote.session : undefined;
+        if (!catalogApi || typeof catalogApi.modelCatalog !== 'function') {
+          catalogRef.current = {
+            status: 'error',
+            groups: [],
+            failures: [],
+            error: text.unavailableRemote,
+          };
+          setCatalog(catalogRef.current);
+          return;
+        }
         try {
-          const response = await ctx.remote.session.modelCatalog();
+          const response = await catalogApi.modelCatalog();
           if (!response || response.ok !== true) {
             const message = response && response.error && response.error.message ? response.error.message : 'model catalog unavailable';
             catalogRef.current = { status: 'error', groups: [], failures: [], error: message };
@@ -5144,11 +5178,16 @@ window.__ModuleLoader__.load({
      * `track: true` reserves the normal docked grid track, including the
      * column the occupant later reports; `fullscreen: false` keeps a docked
      * open rather than covering the frame. Do not invent a track enum.
+     * @returns false when this page provides no layout service.
      */
     function openRightbarDocked(ctx) {
       const layout = ctx ? ctx.layout : undefined;
-      if (!layout || typeof layout.openRightbar !== 'function') return;
+      if (!layout || typeof layout.openRightbar !== 'function') {
+        reportIssue('openRightbarDocked', new Error('the layout service is not provided by this page'));
+        return false;
+      }
       layout.openRightbar(true, false);
+      return true;
     }
 
     /**
@@ -5168,16 +5207,29 @@ window.__ModuleLoader__.load({
       }
     }
 
-    /** Open the right column, then this Session's board tab; true only when the canvas is confirmed active. */
+    /**
+     * Open the right column, then this Session's board tab.
+     *
+     * The return value tells the caller whether a retry is safe: `'threw'` means
+     * `openTab` rejected, so no tab was created and another attempt cannot stack a
+     * duplicate; `'opened'` means the call completed, so the caller must confirm
+     * `isCanvasActive()` instead of opening again (a silent no-op that is retried
+     * is exactly what stacks two 画布 tabs).
+     * @returns `'opened'`, `'threw'`, or `'unavailable'` when this page has no right Sidebar.
+     */
     function openPanel(ctx) {
       const right = ctx ? ctx.sidebarRight : undefined;
-      if (!right || typeof right.openTab !== 'function') return false;
+      if (!right || typeof right.openTab !== 'function') {
+        reportIssue('openPanel', new Error('the sidebarRight service is not provided by this page'));
+        return 'unavailable';
+      }
       try {
         openRightbarDocked(ctx);
         right.openTab(TAB_KIND);
-        return isCanvasActive(right);
-      } catch {
-        return false;
+        return 'opened';
+      } catch (error) {
+        reportIssue('openPanel', error);
+        return 'threw';
       }
     }
 
@@ -5277,7 +5329,7 @@ window.__ModuleLoader__.load({
         CAPABILITY_IDS,
       },
       apply(ctx) {
-        const lang = () => pickLang(ctx);
+        const lang = () => pickLang(apiCtx);
         const textOf = () => STRINGS[lang()] || STRINGS.zh;
 
         /**
@@ -5302,9 +5354,73 @@ window.__ModuleLoader__.load({
           'conversation.input.dock',
         ]);
 
+        /**
+         * Ungated service lookup.
+         *
+         * Cordis gates a direct `ctx.<service>` read on the fiber's `inject`
+         * declaration (`cannot get property "x" without inject`), and `ctx.get(name)`
+         * is the documented read that skips that gate. This client half declares no
+         * `inject` list on purpose: a single wrong name would park the whole plugin
+         * forever (0.2.4 did exactly that), and a partial list makes the contexts
+         * handed to components see only those names — which is how the settings page
+         * went blank (`ctx.configForms` absent) and the header button went dead
+         * (`ctx.layout` absent).
+         * @param name - client service name.
+         * @returns the service, or undefined when this page has none.
+         */
+        const svc = (name) => {
+          try {
+            // `ctx.get` is the inject-free read; a bare context (tests, older hosts)
+            // falls back to the property read.
+            if (typeof ctx.get === 'function') return ctx.get(name);
+            return ctx[name];
+          } catch {
+            return undefined;
+          }
+        };
+
+        /**
+         * Live service face handed to every component and helper.
+         *
+         * Getters, never snapshots, so a service that appears later resolves on the
+         * next read. Components only read properties; registration keeps using the
+         * plugin's own context for `effect`/`on`.
+         */
+        const apiCtx = {
+          get slots() { return svc('slots'); },
+          get locale() { return svc('locale'); },
+          get configForms() { return svc('configForms'); },
+          get remote() { return svc('remote'); },
+          get sessions() { return svc('sessions') || svc('uiSession'); },
+          get layout() { return svc('layout'); },
+          get uiWorkspace() { return svc('uiWorkspace'); },
+          get uiConversation() { return svc('uiConversation'); },
+          get sidebarRight() { return svc('sidebarRight'); },
+          get sidebarRightTabs() { return svc('sidebarRightTabs'); },
+        };
+
         /** Page-local breadcrumb; DSH's Local Storage keeps it readable from the Host. */
         const DIAG_KEY = 'ds-superbot:diag:v2';
-        const diag = { v: 2, at: Date.now(), stage: 'applying', registered: [], failed: [], gates: [] };
+        const diag = {
+          v: 2,
+          at: Date.now(),
+          stage: 'applying',
+          registered: [],
+          failed: [],
+          gates: [],
+          services: {},
+        };
+
+        /** Snapshot which services this page actually provides; one line answers "why is it empty". */
+        const snapshotServices = () => {
+          for (const name of [
+            'slots', 'locale', 'configForms', 'remote', 'sessions', 'uiSession',
+            'layout', 'uiWorkspace', 'uiConversation', 'sidebarRight', 'sidebarRightTabs',
+          ]) {
+            diag.services[name] = svc(name) !== undefined;
+          }
+          flushDiag();
+        };
 
         /** Persist the breadcrumb; a blocked storage area must never break the plugin. */
         const flushDiag = () => {
@@ -5325,28 +5441,33 @@ window.__ModuleLoader__.load({
           });
           flushDiag();
         };
+        reportIssue = noteFailure;
 
         /**
          * Register one additive entry and survive a rejected seat.
          *
-         * One unusable seat now costs exactly one entry: the rejection lands in
+         * One unusable seat costs exactly one entry: the rejection lands in
          * `diag.failed` and every other registration still applies. Both the
          * synchronous `inject` call and its deferred callback are guarded, because
          * DSH may reject the seat when the callback runs rather than immediately.
-         * @param sctx - context whose `slots` service owns the registry.
          * @param slot - additive slot name; must appear in {@link ADDITIVE_SLOTS}.
          * @param spec - slot registration options (`name`, `id`/`key`, `order`, …).
          * @param component - React component for the entry.
          * @returns the disposer from `slots.inject`, or undefined when rejected.
          */
-        const registerSlot = (sctx, slot, spec, component) => {
+        const registerSlot = (slot, spec, component) => {
           if (!ADDITIVE_SLOTS.includes(slot)) {
             noteFailure(slot, new Error('not an additive slot: registering here would replace shipped UI'));
             return undefined;
           }
+          const slots = apiCtx.slots;
+          if (slots === undefined || slots === null) {
+            noteFailure(slot, new Error('the slots service is not provided by this page'));
+            return undefined;
+          }
           const attempt = () => {
             try {
-              const dispose = sctx.slots.register(spec, component);
+              const dispose = slots.register(spec, component);
               diag.registered.push(slot + '#' + String(spec.id !== undefined ? spec.id : spec.key));
               flushDiag();
               return dispose;
@@ -5356,7 +5477,7 @@ window.__ModuleLoader__.load({
             }
           };
           try {
-            return sctx.slots.inject(slot, attempt);
+            return slots.inject(slot, attempt);
           } catch (error) {
             noteFailure(slot, error);
             return undefined;
@@ -5364,28 +5485,24 @@ window.__ModuleLoader__.load({
         };
 
         /**
-         * Run `run` once with a context in which every named Cordis service exists.
+         * Run `run` once every named client service can actually be read.
          *
-         * The plugin's own apply-time context is not that context: on a cold boot
-         * this client plugin is applied before the renderer, locale and
-         * right-Sidebar services are provided, and a one-shot read of `ctx.slots`
-         * is simply undefined — which is why the whole UI used to vanish until a
-         * page reload.
+         * Readiness is decided by {@link svc} (`ctx.get`), not by a direct property
+         * read: Cordis only exposes a declared `inject` name as `ctx.<name>`, and an
+         * undeclared direct read throws (`cannot get property … without inject`).
+         * Resolving through `ctx.get` means this plugin needs no inject list at all,
+         * so it can never be parked by a single unavailable service.
          *
-         * Cordis' `inject` hands back the context that owns those services, so the
-         * registration body is called with THAT context and every service it reads
-         * at runtime (`slots`, `sessions`, `sidebarRight`, `locale`, …) is resolved
-         * through it. A bounded interval on the plugin's own context stays as a
-         * fallback wake-up for a context that is ready without a child fiber, and
-         * `done` keeps the body single-shot.
-         * @param names - client service names that must be provided.
-         * @param run - registration body, called once with the ready context.
+         * The body receives `apiCtx`: a live service face whose getters resolve the
+         * same way, so components keep working when a service appears later.
+         * @param names - client service names that must be readable.
+         * @param run - registration body, called once with the service face.
          * @param label - diagnostics label for the gate and a failing body.
          */
         const whenReady = (names, run, label) => {
           let done = false;
           let timer;
-          const gate = { label, names, fired: false, ownReady: false, ticks: 0 };
+          const gate = { label, names, fired: false, ticks: 0 };
           diag.gates.push(gate);
           const stopTimer = () => {
             if (timer !== undefined) {
@@ -5393,13 +5510,14 @@ window.__ModuleLoader__.load({
               timer = undefined;
             }
           };
-          const start = (sctx) => {
+          const start = () => {
             if (done) return;
             done = true;
             stopTimer();
             try {
-              run(sctx || ctx);
+              run(apiCtx);
               diag.stage = 'applied';
+              snapshotServices();
               flushDiag();
             } catch (error) {
               noteFailure(label, error);
@@ -5408,29 +5526,30 @@ window.__ModuleLoader__.load({
               if (typeof console !== 'undefined' && console.error) console.error('superbot: ' + label + ' failed', error);
             }
           };
-          // Primary: the child fiber Cordis starts once every service is provided.
-          // The callback argument is the context that owns them — registering
-          // through the plugin's own context does not see them on a cold boot.
-          if (typeof ctx.inject === 'function') {
+          const ready = () => names.every((name) => {
             try {
-              ctx.inject(names, (sctx) => {
-                gate.fired = true;
-                start(sctx);
-              });
-            } catch (error) {
-              noteFailure(label, error);
-            }
-          }
-          // Fallback: this context may already see the services without a child.
-          if (!done && names.every((name) => {
-            try {
-              return ctx[name] !== undefined;
+              return svc(name) !== undefined;
             } catch {
               return false;
             }
-          })) {
-            gate.ownReady = true;
-            start(ctx);
+          });
+          if (ready()) {
+            gate.fired = true;
+            start();
+          }
+          // Wake-up on service publication; the interval below is the backstop for
+          // a page that publishes services without this event.
+          if (!done && typeof ctx.on === 'function') {
+            try {
+              ctx.on('internal/service', () => {
+                if (!done && ready()) {
+                  gate.fired = true;
+                  start();
+                }
+              });
+            } catch {
+              // the interval still covers the same wake-up
+            }
           }
           if (!done && typeof setInterval === 'function') {
             timer = setInterval(() => {
@@ -5439,16 +5558,9 @@ window.__ModuleLoader__.load({
                 stopTimer();
                 return;
               }
-              const ready = names.every((name) => {
-                try {
-                  return ctx[name] !== undefined;
-                } catch {
-                  return false;
-                }
-              });
-              if (ready) {
-                gate.ownReady = true;
-                start(ctx);
+              if (ready()) {
+                gate.fired = true;
+                start();
                 return;
               }
               if (gate.ticks >= 40) {
@@ -5467,7 +5579,7 @@ window.__ModuleLoader__.load({
         // Settings → Super Bot: models and reasoning effort, nothing else. This half
         // needs only the settings namespace, so it survives a profile without the
         // right Sidebar.
-        sctx.effect(() => registerSlot(sctx, 'settings.section', {
+        ctx.effect(() => registerSlot('settings.section', {
           name: 'settings.section',
           id: 'superbot',
           order: 50,
@@ -5477,7 +5589,7 @@ window.__ModuleLoader__.load({
 
         // Official settings nav icon, verified against DSH 0.2.2-rc.5:
         // settings.section.icon must reuse the section id. The icon's label is not shown.
-        sctx.effect(() => registerSlot(sctx, 'settings.section.icon', {
+        ctx.effect(() => registerSlot('settings.section.icon', {
           name: 'settings.section.icon',
           id: 'superbot',
           order: 50,
@@ -5488,7 +5600,7 @@ window.__ModuleLoader__.load({
         // Never register occupied singleton slots sidebar / rightbar /
         // conversation.session.header / conversation.header, and never call
         // layout.selectPanel.
-        sctx.effect(() => registerSlot(sctx, 'conversation.view', {
+        ctx.effect(() => registerSlot('conversation.view', {
           name: 'conversation.view',
           id: WORKBENCH_VIEW_ID,
           order: 20,
@@ -5507,7 +5619,7 @@ window.__ModuleLoader__.load({
 
         // Official message-level additive slot: quiet product cards on the latest
         // completed turn. Process states stay out of chat.
-        sctx.effect(() => registerSlot(sctx, 'conversation.chat.turnTail', {
+        ctx.effect(() => registerSlot('conversation.chat.turnTail', {
           name: 'conversation.chat.turnTail',
           id: 'ds-superbot-cards',
           order: 20,
@@ -5524,6 +5636,7 @@ window.__ModuleLoader__.load({
         whenReady(['slots'], registerCore, 'superbot: core slots');
         // Publish the "applying" stage immediately, so a page that never reaches
         // 'applied' still leaves a readable breadcrumb behind.
+        snapshotServices();
         flushDiag();
 
         // The canvas is a per-Session right-Sidebar tab: the type (what opens), its
@@ -5541,32 +5654,39 @@ window.__ModuleLoader__.load({
         };
 
         withRightbar((sctx) => {
-          sctx.effect(() => sctx.sidebarRightTabs.register({
-            id: TAB_ID,
-            kind: TAB_KIND,
-            title: () => textOf().canvasTitle,
-            guide: [{
-              id: 'superbot-board',
-              order: 40,
-              icon: ProjectLogo,
+          ctx.effect(() => {
+            const tabs = sctx.sidebarRightTabs;
+            if (!tabs || typeof tabs.register !== 'function') {
+              noteFailure('sidebarRightTabs.register', new Error('the sidebarRightTabs service is not provided by this page'));
+              return undefined;
+            }
+            return tabs.register({
+              id: TAB_ID,
+              kind: TAB_KIND,
               title: () => textOf().canvasTitle,
-              description: () => textOf().canvasSubtitle || textOf().subtitle,
-            }],
-          }), 'superbot: board tab type');
+              guide: [{
+                id: 'superbot-board',
+                order: 40,
+                icon: ProjectLogo,
+                title: () => textOf().canvasTitle,
+                description: () => textOf().canvasSubtitle || textOf().subtitle,
+              }],
+            });
+          }, 'superbot: board tab type');
 
-          sctx.effect(() => registerSlot(sctx, 'sidebar.right.pane.tab', {
+          ctx.effect(() => registerSlot('sidebar.right.pane.tab', {
             name: 'sidebar.right.pane.tab',
             key: TAB_ID,
             locale: NS,
             inject: (sessionId) => makePanelFace(sctx, sessionId, textOf(), lang()),
           }, SuperBotPanel), 'superbot: board body');
 
-          sctx.effect(() => registerSlot(sctx, 'sidebar.right.pane.tab.title', {
+          ctx.effect(() => registerSlot('sidebar.right.pane.tab.title', {
             name: 'sidebar.right.pane.tab.title',
             key: TAB_ID,
           }, (props) => h(TabTitle, { text: textOf() })), 'superbot: board title');
 
-          sctx.effect(() => registerSlot(sctx, 'conversation.session.header.utilities', {
+          ctx.effect(() => registerSlot('conversation.session.header.utilities', {
             name: 'conversation.session.header.utilities',
             id: 'superbot-board',
             order: -6,
@@ -5578,7 +5698,7 @@ window.__ModuleLoader__.load({
           // `conversation.session.header.corner` is a `single` seat that the shell
           // already occupies, and a second registration there throws and rolls back
           // this whole client half. Utilities is additive and sits in the same band.
-          sctx.effect(() => registerSlot(sctx, 'conversation.session.header.utilities', {
+          ctx.effect(() => registerSlot('conversation.session.header.utilities', {
             name: 'conversation.session.header.utilities',
             id: 'superbot-faces',
             order: -7,
@@ -5591,7 +5711,7 @@ window.__ModuleLoader__.load({
             }),
           }, MiniFaces), 'superbot: header mini faces');
 
-          sctx.effect(() => registerSlot(sctx, 'conversation.session.header.actions', {
+          ctx.effect(() => registerSlot('conversation.session.header.actions', {
             name: 'conversation.session.header.actions',
             id: 'ds-superbot-decide',
             order: 20,
@@ -5603,7 +5723,7 @@ window.__ModuleLoader__.load({
             }),
           }, DecisionCount), 'superbot: header decision count');
 
-          sctx.effect(() => registerSlot(sctx, 'conversation.input.dock', {
+          ctx.effect(() => registerSlot('conversation.input.dock', {
             name: 'conversation.input.dock',
             id: 'ds-superbot-caption',
             order: 20,
@@ -5614,96 +5734,119 @@ window.__ModuleLoader__.load({
             }),
           }, InputCaption), 'superbot: input caption dock');
 
-          // Auto-open: a new Session first opens the right column with the
-          // official layout.openRightbar(true, false), then openTab('superbot'),
-          // so the sidebar lands on 画布 without a prior dispatch or header click.
-          // openTab not throwing is not success: only a confirmed active canvas
-          // tab is recorded. If the pane stays on 开始, retry a limited number
-          // of times. Switching back to 开始, or closing the canvas tab, is
-          // respected for that Session; a later Session still opens the canvas
-          // again. Exhausted retries stop rather than looping forever.
-          sctx.effect(() => {
-            const opened = new Set();
-            const exhausted = new Set();
+          // Auto-open: a new Session opens the right column with the official
+          // layout.openRightbar(true, false) and then openTab('superbot').
+          //
+          // openTab() at most ONCE per Session: every retry used to call it again,
+          // and each call stacks another tab of the same kind — that is how a
+          // Session ended up with two identical 画布 chips. Now a single attempt is
+          // followed by confirmation polling only; a tab the user closes or a pane
+          // left on 开始 is respected for that Session.
+          ctx.effect(() => {
+            const settled = new Set();
+            const abandoned = new Set();
+            const confirmTimers = new Map();
+            const retryTimers = new Map();
             const attempts = new Map();
-            const pending = new Map();
             const timers = new Set();
-            const list = sctx.sessions ? sctx.sessions.list : undefined;
-            const right = sctx.sidebarRight;
+            const right = apiCtx.sidebarRight;
             const mountedSrc = right && right.mounted;
             if (!mountedSrc || typeof mountedSrc.getSnapshot !== 'function') return undefined;
-            const MAX_ATTEMPTS = 8;
-            const RETRY_DELAYS_MS = [0, 16, 50, 100, 200, 400, 800];
-            const cancelPending = (sessionId) => {
-              const timer = pending.get(sessionId);
-              if (timer !== undefined) {
-                clearTimeout(timer);
-                timers.delete(timer);
-                pending.delete(sessionId);
+            const CONFIRM_MS = 2000;
+            const CONFIRM_STEP_MS = 200;
+            const MAX_THROW_RETRIES = 3;
+            const forget = (sessionId) => {
+              const confirm = confirmTimers.get(sessionId);
+              if (confirm !== undefined) {
+                clearInterval(confirm);
+                timers.delete(confirm);
+                confirmTimers.delete(sessionId);
+              }
+              const retry = retryTimers.get(sessionId);
+              if (retry !== undefined) {
+                clearTimeout(retry);
+                timers.delete(retry);
+                retryTimers.delete(sessionId);
               }
             };
-            const tryOpen = (sessionId, fromTimer) => {
-              if (!sessionId || opened.has(sessionId) || exhausted.has(sessionId)) return;
+            const isActive = () => {
+              try {
+                return isCanvasActive(right);
+              } catch {
+                return false;
+              }
+            };
+            // Confirmation only: `openTab` already returned, so calling it again is
+            // what stacks duplicate tabs.
+            const confirm = (sessionId) => {
+              let waited = 0;
+              const timer = setInterval(() => {
+                waited += CONFIRM_STEP_MS;
+                if (isActive()) {
+                  settled.add(sessionId);
+                  forget(sessionId);
+                  return;
+                }
+                if (waited < CONFIRM_MS) return;
+                forget(sessionId);
+                abandoned.add(sessionId);
+                reportIssue('openPanel', new Error('the right column did not confirm the canvas for ' + sessionId));
+              }, CONFIRM_STEP_MS);
+              confirmTimers.set(sessionId, timer);
+              timers.add(timer);
+            };
+            const ensure = (sessionId) => {
+              if (!sessionId || settled.has(sessionId) || abandoned.has(sessionId)) return;
               let mounted;
               try { mounted = mountedSrc.getSnapshot(); } catch { return; }
               if (mounted !== sessionId) return;
-              if (isCanvasActive(right)) {
-                opened.add(sessionId);
-                cancelPending(sessionId);
+              if (isActive()) {
+                settled.add(sessionId);
+                forget(sessionId);
                 return;
               }
-              const n = attempts.get(sessionId) || 0;
-              if (n >= MAX_ATTEMPTS) {
-                exhausted.add(sessionId);
-                cancelPending(sessionId);
-                return;
-              }
-              const ok = openPanel(sctx);
-              if (ok) {
-                opened.add(sessionId);
-                cancelPending(sessionId);
-                return;
-              }
-              // Count the first attempt and timer retries toward the cap.
-              // A later session-list or mounted tick may also try (the host may
-              // have just become ready) but must not burn the budget in a burst.
-              if (fromTimer || n === 0) {
-                const next = n + 1;
-                attempts.set(sessionId, next);
-                if (next >= MAX_ATTEMPTS) {
-                  exhausted.add(sessionId);
-                  cancelPending(sessionId);
+              if (confirmTimers.has(sessionId) || retryTimers.has(sessionId)) return;
+              const outcome = openPanel(apiCtx);
+              if (outcome === 'threw') {
+                const count = attempts.get(sessionId) || 0;
+                if (count >= MAX_THROW_RETRIES) {
+                  abandoned.add(sessionId);
                   return;
                 }
+                attempts.set(sessionId, count + 1);
+                const timer = setTimeout(() => {
+                  timers.delete(timer);
+                  retryTimers.delete(sessionId);
+                  ensure(sessionId);
+                }, 60 * (count + 1));
+                retryTimers.set(sessionId, timer);
+                timers.add(timer);
+                return;
               }
-              if (pending.has(sessionId)) return;
-              const step = attempts.get(sessionId) || 1;
-              const delay = RETRY_DELAYS_MS[Math.min(step, RETRY_DELAYS_MS.length) - 1];
-              const timer = setTimeout(() => {
-                timers.delete(timer);
-                pending.delete(sessionId);
-                tryOpen(sessionId, true);
-              }, delay);
-              pending.set(sessionId, timer);
-              timers.add(timer);
+              if (outcome === 'unavailable') {
+                abandoned.add(sessionId);
+                return;
+              }
+              confirm(sessionId);
             };
             const tick = () => {
               try {
                 const mounted = mountedSrc.getSnapshot();
-                if (!mounted || opened.has(mounted) || exhausted.has(mounted)) return;
-                tryOpen(mounted);
+                if (mounted) ensure(mounted);
               } catch {
                 // the canvas default is a convenience; never break the app for it
               }
             };
             const unsubs = [];
+            const list = apiCtx.sessions ? apiCtx.sessions.list : undefined;
             if (list && typeof list.subscribe === 'function') unsubs.push(list.subscribe(tick));
             if (typeof mountedSrc.subscribe === 'function') unsubs.push(mountedSrc.subscribe(tick));
             tick();
             return () => {
               for (const timer of timers) clearTimeout(timer);
               timers.clear();
-              pending.clear();
+              confirmTimers.clear();
+              retryTimers.clear();
               for (const unsubscribe of unsubs) {
                 if (typeof unsubscribe === 'function') unsubscribe();
               }

@@ -1035,6 +1035,9 @@ function createClientContext(options) {
     effect: (callback) => { callback(); },
   };
   if (!options || options.useInject !== false) ctx.inject = (names, run) => run(ctx);
+  // Cordis gates a direct ctx.<service> read on the inject declaration; the
+  // plugin resolves everything through ctx.get, so the mock must answer it too.
+  ctx.get = (name) => ctx[name];
   return { ctx, registered, tabTypes };
 }
 
@@ -1222,7 +1225,7 @@ test('a new session opens the canvas tab once without a dispatch', async () => {
  * The default open waits for a mounted Session, retries if openTab is not ready
  * yet, and never replaces the built-in 开始 guide tab.
  */
-test('the canvas waits for a mounted session and retries a failed openTab', async () => {
+test('the canvas waits for a mounted session and retries a rejected openTab', async () => {
   const { factory } = await loadClientFactory();
   const harness = createRenderHarness();
   const instance = factory((name) => (name === 'react' ? harness.stub : {}));
@@ -1261,11 +1264,13 @@ test('the canvas waits for a mounted session and retries a failed openTab', asyn
 
   mounted = 'session-new';
   for (const listener of listeners) listener();
-  assert.deepEqual(opened, [], 'a failed openTab is retried later');
+  assert.deepEqual(opened, [], 'a rejected openTab creates no tab, so retrying it cannot stack duplicates');
 
   allowOpen = true;
-  for (const listener of listeners) listener();
-  assert.deepEqual(opened, ['superbot'], 'the canvas opens once openTab is ready');
+  for (let attempt = 0; attempt < 20 && opened.length === 0; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 60));
+  }
+  assert.deepEqual(opened, ['superbot'], 'the rejected openTab is retried and the canvas opens once');
 });
 
 /**
