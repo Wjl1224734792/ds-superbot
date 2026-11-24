@@ -295,19 +295,14 @@ test('header mini-faces stay visible when idle, open the workbench, and utilitie
   const corner = slot(registered, 'conversation.session.header.utilities', (entry) => entry.options.id === 'superbot-faces');
   assert.ok(corner, 'the mini faces must be registered in the header utilities');
   const opened = [];
-  const empty = await harness.settle(() => corner.component({
+  const empty = corner.component({
     workItems: [],
     text: { tabTitle: '工作台', openWorkbench: '打开工作台', openPanel: '打开工作台', canvasTitle: '画布', openCanvas: '打开画布' },
     openView: (view) => { opened.push(['view', view]); },
     openPanel: () => { opened.push(['panel']); },
-  }));
-  assert.ok(empty.length > 0, 'an empty corner must keep the workbench entry visible');
-  const entry = harness.collect(empty, harness.byClass('stwd-mini-entry'));
-  assert.equal(entry.length, 1);
-  assert.equal(entry[0].props['aria-label'], '打开工作台');
-  assert.doesNotMatch(String(entry[0].props['aria-label'] || ''), /舞台|Super Bot 团队面板/);
-  entry[0].props.onClick();
-  assert.deepEqual(opened, [['view', 'superbot-workbench']], 'the idle entry opens the workbench');
+  });
+  assert.equal(empty, null, 'no running agents means no faces: superbot-board is the single 画布 entry');
+  assert.deepEqual(opened, [], 'the idle entry must not render a second 画布 button');
   const live = await harness.settle(() => corner.component({ workItems: ITEMS, text: { stageTitle: '仓 / 探 / 作 / 验' } }));
   assert.ok(harness.collect(live, harness.byClass('stwd-resident-mini')).length >= 4);
   assert.equal(harness.collect(live, harness.byClass('stwd-mini-entry')).length, 0);

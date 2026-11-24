@@ -174,9 +174,9 @@ const NATIVE_AGENT = {
   origin: 'agent-row',
 };
 
-test('package version stays 0.2.7 and client still uses official additive slots', () => {
+test('package version stays 0.2.8 and client still uses official additive slots', () => {
   const pkg = JSON.parse(readFileSync(ROOT_PKG, 'utf8'));
-  assert.equal(pkg.version, '0.2.7');
+  assert.equal(pkg.version, '0.2.8');
   const source = readFileSync(CLIENT_URL, 'utf8');
   assert.match(source, /name:\s*'conversation\.view'/);
   assert.match(source, /superbot-workbench/);

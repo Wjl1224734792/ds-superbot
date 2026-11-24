@@ -12,7 +12,7 @@ ds-superbot is a **work-item console** for [DeepSeek Harness](https://github.com
 
 Documents / norms / gates / evidence are the constitution, and Claim → Evidence → Receipt is the only delivery currency. The left console handles items that need your decision and work-item history; the right Workbench shows presence and evidence; process status stays out of chat. The goal is not "write the code in one shot" but to keep the project **understandable, verifiable, rollback-able and extendable** after every change.
 
-> **Status**: `0.2.7`. Breaking changes are allowed before 1.0.0 — the DeepSeek Harness install entry is the **repository root**; run `install_bundle` against that directory. DSH itself is at `0.2.x`, so the native extension-point contract moves with the host — read the [CHANGELOG](CHANGELOG.md) before upgrading DSH.
+> **Status**: `0.2.8`. Breaking changes are allowed before 1.0.0 — the DeepSeek Harness install entry is the **repository root**; run `install_bundle` against that directory. DSH itself is at `0.2.x`, so the native extension-point contract moves with the host — read the [CHANGELOG](CHANGELOG.md) before upgrading DSH.
 
 The 0.1.0 seven-role dispatch path (`superbot_dispatch`) remains as a compatibility implementation, not the product cover.
 

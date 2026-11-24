@@ -110,11 +110,11 @@ function kindsOf(calls, name) {
   return calls.filter((entry) => entry[0] === name);
 }
 
-test('version stays 0.2.7 and copy never uses 舞台', async () => {
+test('version stays 0.2.8 and copy never uses 舞台', async () => {
   const root = JSON.parse(readFileSync(ROOT_PKG, 'utf8'));
   const plugin = JSON.parse(readFileSync(PLUGIN_PKG, 'utf8'));
-  assert.equal(root.version, '0.2.7');
-  assert.equal(plugin.version, '0.2.7');
+  assert.equal(root.version, '0.2.8');
+  assert.equal(plugin.version, '0.2.8');
   const source = readFileSync(CLIENT_URL, 'utf8');
   assert.doesNotMatch(source, /舞台/);
   assert.doesNotMatch(source, /['"]Stage['"]/);

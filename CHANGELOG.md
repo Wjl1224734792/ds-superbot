@@ -42,6 +42,14 @@
 - 默认授权档位仍是 observe；本版本不打开 auto 自动合并。auto 执行灰度不是合并，且必须先有观察记录。
 - P3 不改 0.1.0 的 `superbot_dispatch` 行为，不在插件里开 HTTP，不新注册 Agent Preset 或第 8 个角色文件。
 
+## [0.2.8] - 2026-11-24
+
+### Fixed
+
+- **标题栏同一行出现两个「画布」入口**：`superbot-faces`（迷你脸）在没有子代理在跑时会退化成一颗 32×32 的鲸鱼图标按钮，而紧邻的 `superbot-board` 已经是「鲸鱼 + 画布」入口，于是同一行里出现两个画布按钮。现在迷你脸**只在有子代理在跑时渲染那几张脸**，空闲时渲染 `null`；「画布」入口只保留 `superbot-board` 一个（图标 + 文字）。同时删掉不再使用的 `.stwd-mini-entry` 样式。
+- 新增/更新回归测试：`p2-ui` 与 `workbench-entry` 断言空闲态 `MiniFaces` 返回 `null`、标题栏只有一个 `stwd-headbtn` 且点击可打开右栏；`docs/DEVELOPMENT.md` 的槽位表补上这条约束。
+- 版本 `0.2.8`。默认仍 observe，禁止 auto-merge，插件不开 HTTP；工具名、右栏 tab id `ds-superbot`、命名空间与 `.stwd-` 前缀未变。
+
 ## [0.2.7] - 2026-11-24
 
 ### Fixed

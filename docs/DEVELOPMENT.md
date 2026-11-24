@@ -81,7 +81,7 @@ score = 4 * value + 2 * (reversible ? 1 : 0) + 1 * evidenceCount - 3 * attention
 | 位置 | 槽 | 用途 |
 | --- | --- | --- |
 | 左栏控制台 | `sidebar.panellist` + `main`，同一 id `ds-superbot-console` | superagent 式控制台：先「待你决定」（批准走 `/superbot-decide` → `approveDecision` 签发 Mandate，再经 live-loop 适配层 `dispatchWorkItem` + 官方 `startActivation` 启动子会话，并武装该工作项 Watchdog 循环；否决需确认后走 `rejectDecision`、不签发、不启动会话或 execute 循环），再健康 / 授权摘要（默认 observe），再单条历史 |
-| 顶部迷你脸 | `conversation.session.header.utilities`（`id: superbot-faces`，紧邻 `superbot-board` 工作台按钮）；次要计数用 `conversation.session.header.actions` | 四张脸的迷你眼神条，点击打开右侧舞台。**不要注册 `conversation.session.header.corner`**：它是宿主的 single 槽位（WC 已占 priority 0），插件再注册会被拒绝并抛错 |
+| 顶部迷你脸 | `conversation.session.header.utilities`（`id: superbot-faces`，紧邻 `superbot-board` 工作台按钮）；次要计数用 `conversation.session.header.actions` | 有子代理在跑时是四张脸的迷你眼神条，点击打开右侧舞台；**没有子代理在跑时渲染 `null`**——否则会和紧邻的 `superbot-board` 在同一行显示两个「画布」入口。**不要注册 `conversation.session.header.corner`**：它是宿主的 single 槽位（WC 已占 priority 0），插件再注册会被拒绝并抛错 |
 | 补充全屏 | `conversation.view` | 可选「舞台 / 控制台」标签，默认仍留在 Chat |
 | 右侧舞台 | 现有 `sidebar.right.pane.tab`，id 仍是 `ds-superbot` | 大舞台 + 工作项详情；0.1.0 工作流树降为详情里的 DAG |
 | 中栏群聊 | 原生会话 + 三种卡；输入区可用 `conversation.input.dock` 放一行字幕 | 只发结果可用 / 需要决定 / 任务失败 |

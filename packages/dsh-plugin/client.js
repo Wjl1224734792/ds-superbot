@@ -3640,7 +3640,6 @@ window.__ModuleLoader__.load({
       const field = stageField(items);
       const text = props.text || {};
       const groupLabel = text.stageTitle || text.tabTitle || 'ds-superbot';
-      const openLabel = text.openWorkbench || text.openPanel || groupLabel;
       const open = () => {
         openWorkbenchView({ sessionId: props.sessionId, props, ctx: props.ctx });
       };
@@ -3660,14 +3659,11 @@ window.__ModuleLoader__.load({
             reducedMotion: true,
             onSelect: () => selectFace(presence),
           }))
-        : [h('button', {
-            type: 'button',
-            key: 'workbench-entry',
-            className: 'stwd-mini-entry',
-            title: openLabel,
-            'aria-label': openLabel,
-            onClick: open,
-          }, h(SuperBotIcon, { size: 22 }))];
+        : null;
+      // Only running agents produce faces. The `superbot-board` entry sits beside
+      // this one and already is the single 画布 affordance, so an idle fallback
+      // button here would put a second, duplicate 画布 control in the same band.
+      if (!faces) return null;
       return h('div', { className: 'stwd-root stwd-mini' },
         styles(),
         h('div', { className: 'stwd-mini-row', role: 'group', 'aria-label': groupLabel },
@@ -4972,8 +4968,6 @@ window.__ModuleLoader__.load({
       '/* --- host header + tab chip --------------------------------------------- */',
       '.stwd-headbtn{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:26px;height:26px;padding:0 8px;border:0;border-radius:7px;background:var(--stwd-hover);color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;font-weight:600;line-height:1;cursor:pointer}',
       '.stwd-headbtn-label{white-space:nowrap}',
-      '.stwd-mini-entry{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0;border:0;border-radius:8px;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer}',
-      '.stwd-mini-entry:hover{background:var(--stwd-hover)}',
       '.stwd-headbtn:hover{background:var(--stwd-hover);color:var(--dsw-alias-label-primary)}',
       '.stwd-headwrap{display:inline-flex;align-items:center}',
       '.stwd-headwrap>style,.stwd-tabtitle>style{display:none}',

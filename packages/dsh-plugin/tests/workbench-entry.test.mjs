@@ -198,17 +198,14 @@ test('a new session can open the workbench from mini faces and the canvas from t
     canvasTitle: '画布',
     openCanvas: '打开画布',
   };
-  const empty = await harness.settle(() => corner.component({
+  const empty = corner.component({
     workItems: [],
     text,
     openView: (view) => { opened.push(['view', view]); },
     openPanel: () => { opened.push(['panel']); },
-  }));
-  const entry = harness.collect(empty, harness.byClass('stwd-mini-entry'));
-  assert.equal(entry.length, 1, 'MiniFaces stays visible without work items');
-  assert.equal(entry[0].props['aria-label'], '打开工作台');
-  entry[0].props.onClick();
-  assert.deepEqual(opened, [['view', 'superbot-workbench']]);
+  });
+  assert.equal(empty, null, 'MiniFaces renders nothing without work items: superbot-board is the single 画布 entry');
+  assert.deepEqual(opened, [], 'no duplicate 画布 control appears in the header band');
   const buttonHost = harness.expand(utilities.component({
     text,
     openPanel: () => { opened.push(['panel']); },
@@ -218,5 +215,5 @@ test('a new session can open the workbench from mini faces and the canvas from t
   assert.equal(buttons[0].props['aria-label'], '打开画布');
   assert.equal(harness.textOf(harness.collect(buttonHost, harness.byClass('stwd-headbtn-label'))[0]), '画布');
   buttons[0].props.onClick();
-  assert.deepEqual(opened, [['view', 'superbot-workbench'], ['panel']]);
+  assert.deepEqual(opened, [['panel']]);
 });
